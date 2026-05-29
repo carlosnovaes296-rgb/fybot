@@ -41,7 +41,7 @@ export const translations = {
       registerButton: "CREATE ACCOUNT"
     },
     dashboard: {
-      balance: "Progressive Balance",
+      balance: "ACCOUNT BALANCE (REAL / DEMO)",
       dailyTargetLabel: "Daily Target (2% of Bankroll)",
       dailyLossLabel: "Daily Loss Limit (10% of Bankroll)",
       dailyProfitLabel: "Today's Profit",
@@ -213,7 +213,7 @@ export const translations = {
       registerButton: "CRIAR CONTA"
     },
     dashboard: {
-      balance: "Banca Progressiva",
+      balance: "SALDO (CONTA REAL / DEMO)",
       dailyTargetLabel: "Meta Diária (2% da Banca)",
       dailyLossLabel: "Limite de Perda Diária (10% da Banca)",
       dailyProfitLabel: "Lucro de Hoje",
@@ -385,7 +385,7 @@ export const translations = {
       registerButton: "CREAR CUENTA"
     },
     dashboard: {
-      balance: "Banca Progresiva",
+      balance: "SALDO (REAL / DEMO)",
       dailyTargetLabel: "Meta Diaria (2% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",

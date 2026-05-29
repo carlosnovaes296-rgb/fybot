@@ -49,9 +49,10 @@ export function CompactCountdown({ expiryDate, t }: CompactCountdownProps) {
 interface LicenseCountdownProps {
   expiryDate: string;
   t: any;
+  licenseKey?: string;
 }
 
-export function LicenseCountdown({ expiryDate, t }: LicenseCountdownProps) {
+export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdownProps) {
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
 
   useEffect(() => {
@@ -106,7 +107,30 @@ export function LicenseCountdown({ expiryDate, t }: LicenseCountdownProps) {
       </div>
       
       {/* Visual background element */}
-      <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/5 blur-3xl group-hover:bg-white/10 transition-all rounded-full" />
+      <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/5 blur-3xl group-hover:bg-white/10 transition-all rounded-full pointer-events-none" />
+
+      {/* License Key Display & Copy */}
+      {licenseKey && (
+        <div className="mt-4 pt-4 border-t border-white/5 z-10 relative">
+          <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest mb-1.5">
+            MetaTrader 5 License Key
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono tracking-wider overflow-hidden text-ellipsis">
+              {licenseKey}
+            </code>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(licenseKey);
+                alert("Licença copiada para a área de transferência!");
+              }}
+              className="bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
+            >
+              COPIAR
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

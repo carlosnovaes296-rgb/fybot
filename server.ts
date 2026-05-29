@@ -31,31 +31,21 @@ async function startServer() {
       const isPreseeded = id === '1' || id === '3';
       userStates[id] = {
         botRunning: false,
-        balance: 10000,
-        equity: 10000,
+        balance: 0,
+        equity: 0,
+        accountType: 'DISCONNECTED', // 'REAL' | 'DEMO' | 'DISCONNECTED'
         dailyProfit: 0.00,
-        dailyProfitTarget: 200.00,
+        dailyProfitTarget: 0.00,
         dailyResetHour: "11:00",
-        preferredSession: "Brasil 11h/22h",
+        preferredSession: "Brasil 11h/23h",
         timezone: "GMT-3",
         antiOvertrading: true,
         systemBlocked: false,
         currentSessionTag: '',   // e.g. "20260529-MORNING" or "20260529-NIGHT"
-        trades: isPreseeded ? [
-          { id: 'ia4wmeaok', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:58.000Z', status: 'OPEN' },
-          { id: 'g1i4uip2m', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:46.000Z', status: 'CLOSED', profit: 4.69 },
-          { id: '54kny4b0g', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:38.000Z', status: 'CLOSED', profit: -2.54 },
-          { id: 'r4nhjst66', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:26.000Z', status: 'CLOSED', profit: 5.32 },
-          { id: '6szg2pv5l', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:18.000Z', status: 'CLOSED', profit: -6.78 },
-          { id: 'dmgefulz5', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:14.000Z', status: 'CLOSED', profit: -7.97 },
-          { id: 'v3xwxai0t', symbol: 'GBPUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:10.000Z', status: 'CLOSED', profit: -7.49 },
-          { id: 'xky5il5qm', symbol: 'XAUUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: 8.47 },
-          { id: 'r85koly7q', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: -6.29 },
-          { id: '1cw6s1uw2', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:45:54.000Z', status: 'CLOSED', profit: -1.73 }
-        ] : [],
+        trades: [],
         logs: [],
         pnlHistory: [
-          { time: new Date(Date.now() - 3600000).toISOString(), balance: 10000 }
+          { time: new Date(Date.now() - 3600000).toISOString(), balance: 0 }
         ]
       };
     }
@@ -164,6 +154,7 @@ async function startServer() {
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
         systemBlocked: state.systemBlocked,
+        accountType: state.accountType,
         currentSessionTag: state.currentSessionTag || ''
       });
     } catch (error) {
@@ -553,6 +544,122 @@ async function startServer() {
     }
   });
 
+  // Endpoint for MT5 Expert Advisor to authenticate via License Key
+  app.post('/api/mt5/auth', (req, res) => {
+    const { licenseKey } = req.body;
+    if (!licenseKey) {
+      return res.status(400).json({ error: 'License key is required' });
+    }
+
+    const license = licenses.find(l => l.key === licenseKey);
+    if (!license) {
+      return res.status(401).json({ authorized: false, error: 'Invalid license key' });
+    }
+
+    if (license.status !== 'ACTIVE') {
+      return res.status(401).json({ authorized: false, error: 'License is not active' });
+    }
+
+    const user = users.find(u => u.id === license.userId);
+    if (!user) {
+      return res.status(401).json({ authorized: false, error: 'Associated user not found' });
+    }
+
+    // License is valid
+    res.json({
+      authorized: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email
+      },
+      license: {
+        type: license.type,
+        expiryDate: license.expiryDate
+      }
+    });
+  });
+
+  // Endpoint for MT5 Expert Advisor to send real account updates
+  app.post('/api/mt5/update', (req, res) => {
+    const { licenseKey, balance, equity, dailyProfit, trades, accountType } = req.body;
+    
+    if (!licenseKey) {
+      return res.status(400).json({ error: 'License key is required' });
+    }
+
+    const license = licenses.find(l => l.key === licenseKey);
+    if (!license || license.status !== 'ACTIVE') {
+      return res.status(401).json({ error: 'Invalid or inactive license key' });
+    }
+
+    const state = getUserState(license.userId);
+    
+    // Update state with real data from MT5
+    if (typeof balance === 'number') state.balance = balance;
+    if (typeof equity === 'number') state.equity = equity;
+    if (typeof dailyProfit === 'number') state.dailyProfit = dailyProfit;
+    if (typeof accountType === 'string') state.accountType = accountType;
+    
+    if (Array.isArray(trades)) {
+      // Keep only recent trades to prevent memory bloat, or just overwrite open trades
+      state.trades = trades.map(t => ({
+        id: t.id || Math.random().toString(36).substr(2, 9),
+        symbol: t.symbol || 'UNKNOWN',
+        type: t.type || 'BUY',
+        lot: t.lot || 0.01,
+        openPrice: t.openPrice || 0,
+        time: t.time || new Date().toISOString(),
+        status: t.status || 'OPEN',
+        profit: t.profit || 0,
+        closeTime: t.closeTime
+      }));
+    }
+
+    // Record PNL history dynamically if balance changes significantly or periodically
+    const lastPnl = state.pnlHistory[state.pnlHistory.length - 1];
+    if (!lastPnl || lastPnl.balance !== state.balance) {
+      state.pnlHistory.push({ time: new Date().toISOString(), balance: state.balance });
+      if (state.pnlHistory.length > 30) state.pnlHistory.shift();
+    }
+
+    // Optionally check protective logic here if we wanted the server to command the MT5 
+    // to stop, but usually the EA will handle its own stopping if it knows the target.
+
+    res.json({ success: true, received: true });
+  });
+
+  // Endpoint for users to generate a new license for themselves
+  app.post('/api/license/generate', (req, res) => {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Check if user already has an active license
+    const existingLicense = licenses.find(l => l.userId === userId && l.status === 'ACTIVE');
+    if (existingLicense) {
+      return res.status(400).json({ error: 'User already has an active license' });
+    }
+
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+
+    const newLicense = {
+      id: 'L' + Math.random().toString(36).substr(2, 4),
+      userId: userId,
+      key: 'FY-PRO-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+      type: 'PRO',
+      status: 'ACTIVE',
+      hwid: '',
+      expiryDate: expiryDate.toISOString()
+    };
+
+    licenses.push(newLicense);
+    saveDB();
+    res.json({ success: true, license: newLicense });
+  });
+
   app.post('/api/register', (req, res) => {
     const { name, email, password, referredBy } = req.body;
     if (users.find(u => u.email === email)) {
@@ -927,9 +1034,9 @@ async function startServer() {
       const utcM = now.getUTCMinutes();
       const totalMins = utcH * 60 + utcM;
 
-      // Sessions: 14:00-15:59 UTC (11:00-12:59 BRT) / 01:00-02:59 UTC (22:00-23:59 BRT)
+      // Sessions: 14:00-15:59 UTC (11:00-12:59 BRT) / 02:00-03:59 UTC (23:00-00:59 BRT)
       const isMorning = totalMins >= 840 && totalMins <= 959;
-      const isNight = totalMins >= 60 && totalMins <= 179;
+      const isNight = totalMins >= 120 && totalMins <= 239;
       const activeSession = isMorning ? 'MORNING' : (isNight ? 'NIGHT' : null);
 
       Object.keys(userStates).forEach(uId => {

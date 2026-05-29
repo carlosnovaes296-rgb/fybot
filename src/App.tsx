@@ -134,7 +134,7 @@ const _unused_translations = {
       registerButton: "CREAR CUENTA"
     },
     dashboard: {
-      balance: "Banca Progresiva",
+      balance: "SALDO (CONTA REAL / DEMO)",
       dailyTargetLabel: "Meta Diaria (2% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
@@ -1276,7 +1276,7 @@ export default function App() {
                 {/* Top Grid — Enhanced StatCards with sparklines */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <StatCard 
-                    label={t.dashboard.balance} 
+                    label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`} 
                     value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"} 
                     icon={<Wallet className="text-blue-400" />}
@@ -1300,7 +1300,7 @@ export default function App() {
                     trendPositive={(stats.dailyProfit || 0) >= 0}
                   />
                   {stats.activeLicense?.expiryDate ? (
-                    <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} />
+                    <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                   ) : stats.pendingPayment ? (
                     <div 
                       onClick={() => setActiveTab('plans')}
@@ -3087,13 +3087,15 @@ export default function App() {
                   <p className="text-blue-200/60 text-sm">Versão v8 Professional — Compatível para MetaTrader 5</p>
                   <div className="flex flex-col md:flex-row gap-4 justify-center">
                     <a 
-                      href="/downloads/FYBOT_V8_PROFESSIONAL.ex5" 
+                      href="/downloads/FYBOT_V8_INSTITUTIONAL.ex5" 
+                      download="FYBOT_V8_INSTITUTIONAL.ex5"
                       className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-400 to-blue-600 px-8 py-4 rounded-2xl font-bold text-white shadow-lg shadow-blue-500/30 hover:scale-105 transition-all text-center justify-center"
                     >
                       <Download size={20} /> DOWNLOAD .EX5 ONLY
                     </a>
                     <a 
-                      href="/api/download-all" 
+                      href="/downloads/FYBOT_V8_COMPLETO.zip" 
+                      download="FYBOT_V8_COMPLETO.zip"
                       className="inline-flex items-center gap-3 bg-white/10 border border-white/20 px-8 py-4 rounded-2xl font-bold text-white hover:bg-white/20 transition-all text-center justify-center"
                     >
                       <Download size={20} /> DOWNLOAD PASTA COMPLETA (.ZIP)
@@ -3174,11 +3176,31 @@ export default function App() {
                         <tbody className="text-blue-100/60 font-mono">
                           <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
                             <td className="py-3 px-2">LICENSE_KEY</td>
-                            <td className="py-3 px-2 text-white">
+                            <td className="py-3 px-2 text-white flex items-center gap-2">
                               {stats.activeLicense ? (
                                 <span className="text-emerald-400 font-bold tracking-wider">{stats.activeLicense.key}</span>
                               ) : (
-                                <span className="text-white/40 font-semibold text-xs">SEU-CODIGO-DE-LICENCA</span>
+                                <>
+                                  <span className="text-white/40 font-semibold text-xs">SEU-CODIGO-DE-LICENCA</span>
+                                  <button 
+                                    onClick={async () => {
+                                      if (!currentUser?.id) return;
+                                      try {
+                                        const res = await fetch('/api/license/generate', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ userId: currentUser.id })
+                                        });
+                                        if (res.ok) await fetchStatus();
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                    }}
+                                    className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded text-xs font-bold transition-colors ml-2"
+                                  >
+                                    GERAR LICENÇA
+                                  </button>
+                                </>
                               )}
                             </td>
                             <td className="py-3 px-2 italic">Sua chave pessoal</td>
