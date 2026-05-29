@@ -80,18 +80,9 @@ async function startServer() {
   ];
 
   let licenses = [
-    { id: 'L1', userId: '1', key: 'FY-PRO-99', type: 'LIFETIME', status: 'ACTIVE', hwid: 'BFEBFBFF000906E3' },
+    { id: 'L1', userId: '1', key: 'FY-PRO-99', type: 'PRO', status: 'ACTIVE', hwid: 'BFEBFBFF000906E3', expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
     { id: 'L_TEST', userId: '', key: 'FY-PRO-V8', type: 'PRO', status: 'PENDING', hwid: '' }
   ];
-
-  // For demo, let's add an active monthly license for user 1 if they don't have one, or just update L1
-  // Actually, let's just make L1 a monthly one for testing the countdown
-  const demoExpiry = new Date();
-  demoExpiry.setDate(demoExpiry.getDate() + 7); // 7 days from now
-  demoExpiry.setHours(demoExpiry.getHours() + 5);
-  demoExpiry.setMinutes(demoExpiry.getMinutes() + 30);
-
-  licenses[0] = { ...licenses[0], type: 'PRO', expiryDate: demoExpiry.toISOString() } as any;
 
   let payments: any[] = [];
 
@@ -505,23 +496,43 @@ async function startServer() {
 
   app.get('/api/admin/payments', adminAuth, (req, res) => res.json(payments));
   
+
   app.post('/api/license/activate', (req, res) => {
     const { userId, key } = req.body;
-    const license: any = licenses.find(l => l.key === key && l.status !== 'ACTIVE');
-    
-    if (license) {
-      license.userId = userId;
-      license.status = 'ACTIVE';
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + 1);
-      license.expiryDate = expiryDate.toISOString();
-      
-      saveDB();
-      res.json({ success: true, license });
-    } else {
-      res.status(400).json({ error: 'INVALID_KEY_OR_ALREADY_ACTIVE' });
+
+    if (!userId || !key) {
+      return res.status(400).json({ error: 'MISSING_FIELDS' });
     }
+
+    // 1. Find license by key (any status)
+    const license: any = licenses.find(l => l.key === key);
+
+    if (!license) {
+      return res.status(400).json({ error: 'INVALID_KEY' });
+    }
+
+    // 2. Already active on this same account — show as already active
+    if (license.status === 'ACTIVE' && license.userId === userId) {
+      return res.status(400).json({ error: 'ALREADY_ACTIVE_ON_THIS_ACCOUNT' });
+    }
+
+    // 3. Already bound and active on a DIFFERENT account — block
+    if (license.status === 'ACTIVE' && license.userId && license.userId !== userId) {
+      return res.status(403).json({ error: 'LICENSE_BOUND_TO_OTHER_ACCOUNT' });
+    }
+
+    // 4. License is pending/unbound — activate it for this user
+    license.userId = userId;
+    license.status = 'ACTIVE';
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    license.expiryDate = expiryDate.toISOString();
+
+    saveDB();
+    res.json({ success: true, license });
   });
+
+
 
   app.post('/api/login', (req, res) => {
     const { email, password } = req.body;

@@ -52,7 +52,7 @@ import DailyTargetSystem from './components/DailyTargetSystem';
 // @ts-ignore
 import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
 // @ts-ignore
-import fybotLoginBg from './assets/images/fybot_bg_logo_back_1779844454033.png';
+import fybotLoginBg from './assets/images/fybot_robot_bg_v3.jpg';
 import { 
   AreaChart, 
   Area, 
@@ -292,14 +292,7 @@ export default function App() {
     activeTrades: 0,
     winrate: 0,
     pnlHistory: [],
-    activeLicense: {
-      id: 'LIC-001',
-      userId: 'USER-001',
-      key: 'V8-PRO-MOCK-LICENSE',
-      type: 'PRO',
-      status: 'ACTIVE',
-      expiryDate: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000).toISOString()
-    },
+    activeLicense: null,
     pendingPayment: null,
     dailyProfit: 0.00,
     dailyProfitTarget: 200.00, // 2% of initial balance ($10,000)
@@ -337,9 +330,11 @@ export default function App() {
   const [referredByCode, setReferredByCode] = useState('');
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseKeyField, setLicenseKeyField] = useState('');
+  const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
   const [selectedInterval, setSelectedInterval] = useState('5M');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
+  const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
 
   const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
@@ -475,6 +470,7 @@ export default function App() {
 
   const submitActivateLicense = async () => {
     if (!licenseKeyField) return;
+    setLicenseActivationError(null);
     setLoading(true);
     try {
       const res = await fetch('/api/license/activate', {
@@ -486,12 +482,36 @@ export default function App() {
       if (data.success) {
         setShowLicenseModal(false);
         setLicenseKeyField('');
+        setLicenseActivationError(null);
         fetchStatus();
       } else {
-        alert(data.error || 'Invalid Key');
+        const errMap: Record<string, string> = {
+          'LICENSE_BOUND_TO_OTHER_ACCOUNT': language === 'en'
+            ? '🔒 This license is already active on another account. Each license can only be used by one account.'
+            : language === 'es'
+            ? '🔒 Esta licencia ya está activa en otra cuenta. Cada licencia solo puede usarse en una cuenta.'
+            : '🔒 Esta licença já está ativa em outra conta. Cada licença pode ser usada em apenas uma conta.',
+          'ALREADY_ACTIVE_ON_THIS_ACCOUNT': language === 'en'
+            ? '✅ This license is already active on your account.'
+            : language === 'es'
+            ? '✅ Esta licencia ya está activa en tu cuenta.'
+            : '✅ Esta licença já está ativa na sua conta.',
+          'INVALID_KEY': language === 'en'
+            ? '❌ Invalid license key. Check the key and try again.'
+            : language === 'es'
+            ? '❌ Clave de licencia inválida. Verifique la clave e intente de nuevo.'
+            : '❌ Chave de licença inválida. Verifique a chave e tente novamente.',
+          'MISSING_FIELDS': language === 'en'
+            ? '❌ Please enter the license key.'
+            : language === 'es'
+            ? '❌ Por favor ingrese la clave de licencia.'
+            : '❌ Por favor insira a chave de licença.',
+        };
+        setLicenseActivationError(errMap[data.error] || (language === 'en' ? '❌ Invalid or unavailable key.' : '❌ Chave inválida ou indisponível.'));
       }
     } catch (err) {
       console.error(err);
+      setLicenseActivationError(language === 'en' ? '❌ Connection error. Try again.' : '❌ Erro de conexão. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -904,12 +924,11 @@ export default function App() {
         </div>
 
         {/* Background Image with Full Realism and Visibility */}
-        <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 z-0 overflow-hidden">
           <img 
             src={fybotLoginBg} 
             alt="Futuristic Robot Background" 
-            className="w-full h-full object-cover object-[center_5%] md:object-top select-none pointer-events-none scale-100 transition-all duration-1000 ease-out"
-            splitter-id="bg-bot"
+            className="w-full h-full object-cover object-top select-none pointer-events-none transition-all duration-1000 ease-out opacity-80"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -1109,6 +1128,21 @@ export default function App() {
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-6 py-4 text-white font-mono text-center tracking-widest focus:border-blue-500/50 outline-none transition-all"
                     />
                   </div>
+                  
+                  {licenseActivationError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`p-3 rounded-xl text-sm font-medium border ${
+                        licenseActivationError.includes('✅') 
+                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                          : 'bg-red-500/10 border-red-500/20 text-red-400'
+                      }`}
+                    >
+                      {licenseActivationError}
+                    </motion.div>
+                  )}
+
 
                   <button 
                     onClick={submitActivateLicense}
@@ -1245,19 +1279,23 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
-                {/* Top Grid */}
+                {/* Top Grid — Enhanced StatCards with sparklines */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <StatCard 
                     label={t.dashboard.balance} 
                     value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"} 
-                    icon={<Wallet className="text-blue-400" />} 
+                    icon={<Wallet className="text-blue-400" />}
+                    trendPositive={true}
+                    trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000,10100,10080,10250,10400,10350,10580,10720,10690,10850,11000,11200]}
                   />
                   <StatCard 
                     label={t.dashboard.dailyTargetLabel} 
                     value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     delta="2.0%" 
-                    icon={<Target className="text-yellow-400" />} 
+                    icon={<Target className="text-yellow-400" />}
+                    trendPositive={true}
+                    trend={[10,12,11,14,13,15,16,14,17,18,20,19]}
                   />
                   <StatCard 
                     label={t.dashboard.dailyProfitLabel} 
@@ -1265,6 +1303,7 @@ export default function App() {
                     delta={stats.dailyProfit && stats.dailyProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round(((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`} 
                     icon={<TrendingUp className="text-emerald-400" />} 
                     valueClassName={(stats.dailyProfit || 0) >= 0 ? "text-emerald-400" : "text-red-400"}
+                    trendPositive={(stats.dailyProfit || 0) >= 0}
                   />
                   {stats.activeLicense?.expiryDate ? (
                     <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} />
@@ -1303,8 +1342,9 @@ export default function App() {
 
                 <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
 
+                {/* Signal Intel + Live Console */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
-                  {/* Market Stream */}
+                  {/* Market Stream — enhanced chart */}
                   <div className="lg:col-span-2 flex flex-col">
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden p-6 h-full flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-6">
@@ -1319,7 +1359,7 @@ export default function App() {
                               onClick={() => setSelectedInterval(interval)}
                               className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
                                 selectedInterval === interval 
-                                  ? 'bg-blue-500/10 text-blue-400' 
+                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]' 
                                   : 'bg-white/5 text-white/60 hover:bg-white/10'
                               }`}
                             >
@@ -1328,159 +1368,383 @@ export default function App() {
                           ))}
                         </div>
                       </div>
-                      
-                      <div className="flex-1 min-h-[256px] relative bg-[#0a0a0c] rounded-2xl border border-white/5 overflow-hidden group">
+
+                      {/* Live price tickers */}
+                      <div className="flex gap-3 mb-4">
+                        {[
+                          { sym: 'EURUSD', base: 1.08243, color: '#3b82f6' },
+                          { sym: 'GBPUSD', base: 1.27051, color: '#8b5cf6' },
+                          { sym: 'XAUUSD', base: 2335.40, color: '#f59e0b' }
+                        ].map(({ sym, base, color }, i) => {
+                          const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
+                          const price = (base + tickDelta).toFixed(sym === 'XAUUSD' ? 2 : 5);
+                          const isUp = tickDelta >= 0;
+                          return (
+                            <motion.div
+                              key={sym}
+                              className="flex-1 bg-white/[0.03] border border-white/5 rounded-2xl px-4 py-3 relative overflow-hidden"
+                              animate={{ borderColor: isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }}
+                              transition={{ duration: 0.5 }}
+                            >
+                              <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${color}40, transparent)` }} />
+                              <p className="text-[9px] font-black uppercase tracking-widest mb-1" style={{ color }}>{sym}</p>
+                              <p className="text-sm font-mono font-black text-white">{price}</p>
+                              <p className={`text-[10px] font-mono font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {isUp ? '+' : ''}{tickDelta.toFixed(5)}
+                              </p>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Main chart area */}
+                      <div className="flex-1 min-h-[200px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={stats.pnlHistory}>
+                          <AreaChart data={stats.pnlHistory.length > 1 ? stats.pnlHistory : [
+                            { time: '', balance: stats.balance * 0.95 },
+                            { time: '', balance: stats.balance * 0.97 },
+                            { time: '', balance: stats.balance * 0.96 },
+                            { time: '', balance: stats.balance * 0.98 },
+                            { time: '', balance: stats.balance * 0.99 },
+                            { time: '', balance: stats.balance },
+                          ]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                             <defs>
                               <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
                                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
                             <Tooltip 
-                              contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
-                              itemStyle={{ color: '#fff' }}
+                              contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', padding: '8px 12px' }}
+                              itemStyle={{ color: '#60a5fa' }}
+                              labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}
+                              formatter={(v: any) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Balance']}
                             />
-                            <Area type="monotone" dataKey="balance" stroke="#3b82f6" fillOpacity={1} fill="url(#colorPnL)" strokeWidth={2} />
+                            <Area 
+                              type="monotone" 
+                              dataKey="balance" 
+                              stroke="#3b82f6" 
+                              fillOpacity={1} 
+                              fill="url(#colorPnL)" 
+                              strokeWidth={2}
+                              dot={false}
+                            />
                           </AreaChart>
                         </ResponsiveContainer>
 
-                        <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
-                          {["EURUSD", "GBPUSD", "XAUUSD"].map((s, i) => (
-                            <div key={s} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 backdrop-blur-md pointer-events-auto">
-                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{s}</p>
-                              <p className="text-sm font-mono font-bold">{1.08243 + i * 0.1}<span className="text-[10px] text-emerald-400 ml-1">+{0.001 * (tick % 10)}</span></p>
-                            </div>
+                        {/* Volume bars overlay at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 h-8 flex items-end gap-px px-2 opacity-30 pointer-events-none">
+                          {Array.from({ length: 40 }, (_, i) => (
+                            <div
+                              key={i}
+                              className="flex-1 rounded-t-sm"
+                              style={{
+                                height: `${15 + Math.abs(Math.sin(i * 0.8 + tick * 0.05)) * 85}%`,
+                                backgroundColor: i % 3 === 0 ? '#ef4444' : '#10b981',
+                                opacity: 0.5 + Math.abs(Math.sin(i * 0.4)) * 0.5
+                              }}
+                            />
                           ))}
                         </div>
                       </div>
 
+                      {/* Strategy Gauges — circular */}
                       <div className="mt-6 grid grid-cols-3 gap-4">
-                        <StrategyGauge label={t.dashboard.smc} percentage={stats.liveSignals?.smc || 0} color="#3b82f6" />
-                        <StrategyGauge label={t.dashboard.momentum} percentage={stats.liveSignals?.momentum || 0} color="#10b981" />
-                        <StrategyGauge label={t.dashboard.aiBias} percentage={stats.liveSignals?.ai || 0} color="#8b5cf6" />
+                        <StrategyGauge label={t.dashboard.smc} percentage={stats.liveSignals?.smc || 80} color="#3b82f6" />
+                        <StrategyGauge label={t.dashboard.momentum} percentage={stats.liveSignals?.momentum || 70} color="#10b981" />
+                        <StrategyGauge label={t.dashboard.aiBias} percentage={stats.liveSignals?.ai || 90} color="#8b5cf6" />
                       </div>
                     </div>
                   </div>
 
-                  {/* Sidebar Tools */}
+                  {/* Sidebar — Enhanced Live Console */}
                   <div className="flex flex-col">
-                    {/* Terminal Logs */}
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
-                      <div className="bg-white/5 px-6 py-4 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Terminal size={16} className="text-blue-400/80" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">Live Console</span>
+                      {/* Terminal header */}
+                      <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex gap-1.5">
+                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
+                          </div>
+                          <Terminal size={13} className="text-emerald-500/60" />
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                          <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
                         </div>
                       </div>
+
+                      {/* Log entries with categories */}
                       <div 
                         ref={logContainerRef}
-                        className="flex-1 p-6 font-mono text-[11px] leading-relaxed space-y-1.5 overflow-y-auto scrollbar-hide text-white/50"
+                        className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
+                        style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
                       >
-                        {logs.map((log, i) => (
-                          <div key={i} className={`flex gap-2 ${log.includes('SIGNAL') ? 'text-indigo-400' : log.includes('CLOSED') ? 'text-emerald-400' : ''}`}>
-                            <span className="opacity-30">[{i}]</span>
-                            <span className="flex-1 break-words">{log}</span>
+                        {logs.length === 0 && (
+                          <div className="flex items-center gap-2 text-white/20 py-4">
+                            <span className="text-emerald-500/40">$</span>
+                            <span className="animate-pulse">Aguardando eventos do sistema...</span>
                           </div>
-                        ))}
+                        )}
+                        {logs.map((log, i) => {
+                          const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
+                          const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
+                          const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
+                          const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
+                          const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
+                          const isLatest = i === logs.length - 1;
+
+                          let iconEl = <span className="text-white/20 shrink-0">›</span>;
+                          let textColor = 'text-white/40';
+
+                          if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
+                          else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
+                          else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
+                          else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
+                          else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
+
+                          return (
+                            <motion.div 
+                              key={`${i}-${log.slice(0,10)}`}
+                              initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ duration: 0.25 }}
+                              className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
+                            >
+                              <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2,'0')}]</span>
+                              {iconEl}
+                              <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Order Execution Table */}
-                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-xs text-white/60">
-                        <History size={16} /> {t.dashboard.recentExecutions}
-                      </h3>
-                      <button onClick={() => setActiveTab('history')} className="text-[10px] font-bold text-blue-400 tracking-widest border-b border-blue-400 hover:text-blue-300 transition-colors">{t.dashboard.viewFull}</button>
+                {/* Intelligence Status — Enhanced with connection nodes */}
+                <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
+                  {/* Animated grid bg */}
+                  <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-3xl rounded-full pointer-events-none -mr-16 -mt-16" />
+
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between mb-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                            <Zap size={12} className="text-blue-400" />
+                          </div>
+                          <h3 className="text-sm font-bold text-white">{t.dashboard.intelStatus}</h3>
+                        </div>
+                        <p className="text-xs text-white/40 leading-relaxed max-w-lg">{t.dashboard.intelDesc}</p>
+                      </div>
+
+                      {/* Animated connection nodes */}
+                      <div className="hidden lg:flex items-center gap-2">
+                        {['VPS-1', 'MT5', 'API'].map((node, ni) => (
+                          <div key={node} className="flex items-center gap-2">
+                            <div className="flex flex-col items-center gap-2">
+                              <motion.div
+                                animate={{ opacity: [0.6, 1, 0.6], scale: [0.95, 1.05, 0.95] }}
+                                transition={{ duration: 2, repeat: Infinity, delay: ni * 0.6 }}
+                                className="w-16 h-16 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                              >
+                                <Network size={28} className="text-emerald-400" />
+                              </motion.div>
+                              <span className="text-[10px] font-mono font-black text-emerald-400">{node}</span>
+                            </div>
+                            {ni < 2 && (
+                              <div className="flex gap-1.5 mx-2">
+                                {[0,1,2].map(dot => (
+                                  <motion.div
+                                    key={dot}
+                                    animate={{ opacity: [0.1, 1, 0.1] }}
+                                    transition={{ duration: 1.2, repeat: Infinity, delay: ni * 0.4 + dot * 0.15 }}
+                                    className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    
-                    <div className="overflow-x-auto scrollbar-hide">
-                      <table className="w-full text-left border-collapse min-w-[700px]">
-                        <thead>
-                          <tr className="border-b border-white/5 text-[10px] uppercase tracking-wider text-white/40 font-bold">
-                            <th className="pb-3 font-medium">ID de Execução</th>
-                            <th className="pb-3 font-medium">Ativo</th>
-                            <th className="pb-3 font-medium">Tipo</th>
-                            <th className="pb-3 font-medium">Lote</th>
-                            <th className="pb-3 font-medium">Preço</th>
-                            <th className="pb-3 font-medium">Hora</th>
-                            <th className="pb-3 font-medium">Resultado</th>
-                            <th className="pb-3 font-medium text-right">Lucro/Prejuízo</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/[0.02]">
-                          {trades.length === 0 ? (
+
+                    {/* Metrics strip */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                      {[
+                        { label: language === 'en' ? 'VPS Latency' : 'Latência VPS', value: `${(0.8 + (tick % 10) * 0.04).toFixed(1)}ms`, color: 'text-emerald-400', good: true },
+                        { label: language === 'en' ? 'Signals Analyzed' : 'Sinais Analisados', value: `${1240 + (tick % 30) * 3}`, color: 'text-blue-400', good: true },
+                        { label: language === 'en' ? 'Consensus Score' : 'Score Consenso', value: '87%', color: 'text-purple-400', good: true },
+                        { label: language === 'en' ? 'Uptime' : 'Uptime VPS', value: '99.9%', color: 'text-yellow-400', good: true },
+                      ].map(({ label, value, color, good }) => (
+                        <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2.5 flex flex-col gap-0.5">
+                          <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider">{label}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-base font-mono font-black ${color}`}>{value}</span>
+                            {good && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {currentUser?.role === 'ADMIN' && (
+                      <button 
+                        onClick={() => setActiveTab('settings')} 
+                        className="w-full py-3 bg-white/5 hover:bg-indigo-500/10 border border-white/5 hover:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-white/60 hover:text-white"
+                      >
+                        <Settings size={14} />
+                        {t.dashboard.adjustWeights}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Order Execution Table — Enhanced with filter + highlight */}
+                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col">
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-xs text-white/60">
+                      <History size={16} /> {t.dashboard.recentExecutions}
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      {/* Filter tabs */}
+                      <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
+                        {(['ALL', 'OPEN', 'CLOSED'] as const).map(f => (
+                          <button
+                            key={f}
+                            onClick={() => setTradeFilter(f)}
+                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                              tradeFilter === f 
+                                ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
+                                  : f === 'CLOSED' ? 'bg-white/10 text-white' 
+                                  : 'bg-white/10 text-white'
+                                : 'text-white/30 hover:text-white/60'
+                            }`}
+                          >
+                            {f === 'ALL' ? (language === 'en' ? 'All' : 'Todos') 
+                              : f === 'OPEN' ? (language === 'en' ? 'Open' : 'Abertas') 
+                              : (language === 'en' ? 'Closed' : 'Fechadas')}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => setActiveTab('history')} className="text-[10px] font-bold text-blue-400 tracking-widest border-b border-blue-400/50 hover:text-blue-300 transition-colors">
+                        {t.dashboard.viewFull}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <table className="w-full text-left border-collapse min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-white/5 text-[10px] uppercase tracking-wider text-white/30 font-bold">
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Exec ID' : 'ID Exec.'}</th>
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Asset' : 'Ativo'}</th>
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Type' : 'Tipo'}</th>
+                          <th className="pb-3 font-bold">Lot</th>
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Price' : 'Preço'}</th>
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Time' : 'Hora'}</th>
+                          <th className="pb-3 font-bold">{language === 'en' ? 'Status' : 'Status'}</th>
+                          <th className="pb-3 font-bold text-right">P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.03]">
+                        {(() => {
+                          const filtered = trades.filter(tr => 
+                            tradeFilter === 'ALL' ? true : tr.status === tradeFilter
+                          );
+                          if (filtered.length === 0) return (
                             <tr>
                               <td colSpan={8} className="py-10 text-center text-sm text-white/20 italic">
                                 {t.dashboard.noTrades}
                               </td>
                             </tr>
-                          ) : (
-                            trades.map((trade) => (
-                              <tr key={trade.id} className="text-xs text-white/80 hover:bg-white/[0.01] transition-colors">
-                                <td className="py-3.5 font-mono text-white/40">{trade.id}</td>
-                                <td className="py-3.5 font-bold text-white">{trade.symbol}</td>
+                          );
+                          const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(t.profit!)), 1);
+                          return filtered.map((trade, idx) => {
+                            const isLatestTrade = idx === 0;
+                            const profitPct = trade.profit ? (Math.abs(trade.profit) / maxAbsProfit) * 100 : 0;
+                            const isProfit = (trade.profit ?? 0) >= 0;
+                            return (
+                              <motion.tr 
+                                key={trade.id}
+                                initial={isLatestTrade ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}}
+                                animate={{ backgroundColor: 'rgba(255,255,255,0)' }}
+                                transition={{ duration: 2 }}
+                                className="text-xs text-white/80 hover:bg-white/[0.02] transition-colors group"
+                              >
+                                <td className="py-3.5 font-mono text-white/30 text-[10px]">
+                                  {isLatestTrade && (
+                                    <span className="inline-block w-1 h-1 rounded-full bg-blue-400 mr-1.5 animate-pulse" />
+                                  )}
+                                  {trade.id}
+                                </td>
+                                <td className="py-3.5 font-black text-white">{trade.symbol}</td>
                                 <td className="py-3.5">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    trade.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${
+                                    trade.type === 'BUY' 
+                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
                                   }`}>
                                     {trade.type}
                                   </span>
                                 </td>
-                                <td className="py-3.5 font-mono text-white/60">{trade.lot}</td>
-                                <td className="py-3.5 font-mono">{trade.openPrice.toFixed(5)}</td>
-                                <td className="py-3.5 text-white/40 text-[11px]">
-                                  {new Date(trade.time).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US')}
+                                <td className="py-3.5 font-mono text-white/50">{trade.lot}</td>
+                                <td className="py-3.5 font-mono text-white/70">{trade.openPrice.toFixed(5)}</td>
+                                <td className="py-3.5 text-white/30 text-[10px] font-mono">
+                                  {new Date(trade.time).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                 </td>
                                 <td className="py-3.5">
                                   {trade.status === 'CLOSED' ? (
-                                    <span className="text-white/40 text-[10px] uppercase font-bold">CLOSED</span>
+                                    <span className="text-white/30 text-[9px] uppercase font-bold tracking-wider">● Closed</span>
                                   ) : (
-                                    <span className="flex items-center gap-1.5 text-emerald-400 text-[10px] uppercase font-bold">
-                                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                      OPEN
+                                    <span className="flex items-center gap-1.5 text-emerald-400 text-[9px] uppercase font-black tracking-wider">
+                                      <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                      </span>
+                                      Live
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-3.5 text-right font-mono font-bold">
-                                  {trade.status === 'CLOSED' ? (
-                                    <span className={trade.profit! >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                                      {trade.profit! >= 0 ? '+' : ''}${trade.profit?.toFixed(2)}
-                                    </span>
+                                <td className="py-3.5 text-right">
+                                  {trade.status === 'CLOSED' && trade.profit != null ? (
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className={`font-mono font-black text-xs ${
+                                        isProfit ? 'text-emerald-400' : 'text-red-400'
+                                      }`}>
+                                        {isProfit ? '+' : ''}${trade.profit.toFixed(2)}
+                                      </span>
+                                      {/* Mini P&L bar */}
+                                      <div className="w-16 h-0.5 bg-white/5 rounded-full overflow-hidden">
+                                        <motion.div 
+                                          initial={{ width: 0 }}
+                                          animate={{ width: `${profitPct}%` }}
+                                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                                          className={`h-full rounded-full ${isProfit ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                        />
+                                      </div>
+                                    </div>
                                   ) : (
-                                    <span className="text-white/30">---</span>
+                                    <span className="text-white/20 font-mono">—</span>
                                   )}
                                 </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                              </motion.tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
                 {/* Market Trading Sessions */}
                 <MarketSessions language={language} />
 
-                {/* Intelligence Status component */}
-                <div className="bg-gradient-to-br from-indigo-600/20 to-blue-600/20 border border-white/10 rounded-3xl p-6 relative overflow-hidden group w-full">
-                  <h3 className="text-sm font-bold mb-4 flex items-center gap-2">
-                    <Zap size={16} className="text-blue-400" /> {t.dashboard.intelStatus}
-                  </h3>
-                  <p className="text-xs text-white/60 mb-6 leading-relaxed">
-                    {t.dashboard.intelDesc}
-                  </p>
-                  <button onClick={() => setActiveTab('settings')} className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold transition-all">
-                    {t.dashboard.adjustWeights}
-                  </button>
-                </div>
               </motion.div>
             )}
 

@@ -708,33 +708,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
               </button>
             </div>
 
-            {/* RISK TESTING & VPS SIMULATION PANEL */}
-            <div className="border-t border-white/5 pt-5 mt-5 space-y-3">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40">{t.simulations}</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateGain(50)}
-                  disabled={simulating || isBlocked}
-                  className="py-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[10px] font-bold hover:bg-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Cpu size={12} className={simulating ? 'animate-spin' : ''} />
-                  <span>+$50 Profit</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSimulateGain(-500)}
-                  disabled={simulating || isBlocked}
-                  className="py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-[10px] font-bold hover:bg-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <AlertTriangle size={12} className={simulating ? 'animate-spin' : ''} />
-                  <span>-$500 Loss</span>
-                </button>
-              </div>
-              <p className="text-[9px] text-white/30 leading-snug">
-                Simule transações no servidor para testar o gatilho de proteção: Meta Diária de Lucro (+2%) ou Limite Diário de Perda (-10%).
-              </p>
-            </div>
+
 
           </div>
         )}
