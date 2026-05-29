@@ -35,22 +35,23 @@ async function startServer() {
         equity: 10000,
         dailyProfit: 0.00,
         dailyProfitTarget: 200.00,
-        dailyResetHour: "08:00",
-        preferredSession: "London/NY",
-        timezone: "UTC",
+        dailyResetHour: "11:00",
+        preferredSession: "Brasil 11h/22h",
+        timezone: "GMT-3",
         antiOvertrading: true,
         systemBlocked: false,
+        currentSessionTag: '',   // e.g. "20260529-MORNING" or "20260529-NIGHT"
         trades: isPreseeded ? [
           { id: 'ia4wmeaok', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:58.000Z', status: 'OPEN' },
-          { id: 'g1i4uip2m', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:46.000Z', status: 'CLOSED', profit: 74.69 },
-          { id: '54kny4b0g', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:38.000Z', status: 'CLOSED', profit: -62.54 },
-          { id: 'r4nhjst66', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:26.000Z', status: 'CLOSED', profit: 95.32 },
-          { id: '6szg2pv5l', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:18.000Z', status: 'CLOSED', profit: -76.78 },
-          { id: 'dmgefulz5', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:14.000Z', status: 'CLOSED', profit: -17.97 },
-          { id: 'v3xwxai0t', symbol: 'GBPUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:10.000Z', status: 'CLOSED', profit: -77.49 },
-          { id: 'xky5il5qm', symbol: 'XAUUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: 88.47 },
-          { id: 'r85koly7q', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: -16.29 },
-          { id: '1cw6s1uw2', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:45:54.000Z', status: 'CLOSED', profit: -41.73 }
+          { id: 'g1i4uip2m', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:46.000Z', status: 'CLOSED', profit: 4.69 },
+          { id: '54kny4b0g', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:38.000Z', status: 'CLOSED', profit: -2.54 },
+          { id: 'r4nhjst66', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:26.000Z', status: 'CLOSED', profit: 5.32 },
+          { id: '6szg2pv5l', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:18.000Z', status: 'CLOSED', profit: -6.78 },
+          { id: 'dmgefulz5', symbol: 'EURUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:14.000Z', status: 'CLOSED', profit: -7.97 },
+          { id: 'v3xwxai0t', symbol: 'GBPUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:10.000Z', status: 'CLOSED', profit: -7.49 },
+          { id: 'xky5il5qm', symbol: 'XAUUSD', type: 'BUY', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: 8.47 },
+          { id: 'r85koly7q', symbol: 'EURUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:46:06.000Z', status: 'CLOSED', profit: -6.29 },
+          { id: '1cw6s1uw2', symbol: 'XAUUSD', type: 'SELL', lot: 0.0001, openPrice: 1.1, time: '2026-05-19T20:45:54.000Z', status: 'CLOSED', profit: -1.73 }
         ] : [],
         logs: [],
         pnlHistory: [
@@ -93,12 +94,12 @@ async function startServer() {
   let config = {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.0001,
-    minScore: 60,
+    minScore: 55,
     symbols: ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"],
     strategyWeights: {
       smc: 0.4,
       momentum: 0.4,
-      ai: 20
+      ai: 0.20
     },
     paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585'
   };
@@ -146,8 +147,8 @@ async function startServer() {
         balance: Number(state.balance.toFixed(2)),
         equity: Number(state.equity.toFixed(2)),
         activeTrades: state.trades.filter((t: any) => t.status === 'OPEN').length,
-        winrate: state.trades.filter((t: any) => t.status === 'CLOSED').length > 0 
-          ? (state.trades.filter((t: any) => t.status === 'CLOSED' && t.profit > 0).length / state.trades.filter((t: any) => t.status === 'CLOSED').length * 100).toFixed(1) 
+        winrate: state.trades.filter((t: any) => t.status === 'CLOSED').length > 0
+          ? (state.trades.filter((t: any) => t.status === 'CLOSED' && t.profit > 0).length / state.trades.filter((t: any) => t.status === 'CLOSED').length * 100).toFixed(1)
           : 0,
         pnlHistory: state.pnlHistory,
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
@@ -162,7 +163,8 @@ async function startServer() {
         preferredSession: state.preferredSession,
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
-        systemBlocked: state.systemBlocked
+        systemBlocked: state.systemBlocked,
+        currentSessionTag: state.currentSessionTag || ''
       });
     } catch (error) {
       res.status(500).json({ error: "Internal Server Error" });
@@ -206,7 +208,7 @@ async function startServer() {
       const { profit, userId } = req.body;
       const state = getUserState(userId);
       const profitAmount = typeof profit === 'number' ? profit : 50;
-      
+
       const id = Math.random().toString(36).substr(2, 9);
       // Create a mock winning/losing trade to match simulated profit
       const mockTrade = {
@@ -220,19 +222,19 @@ async function startServer() {
         profit: profitAmount,
         closeTime: new Date().toISOString()
       };
-      
+
       state.trades.push(mockTrade);
       state.balance += profitAmount;
       state.equity = state.balance;
       state.pnlHistory.push({ time: new Date().toISOString(), balance: Number(state.balance.toFixed(2)) });
       if (state.pnlHistory.length > 30) state.pnlHistory.shift();
-      
+
       // Dynamically calculate daily profit target as 2% of updated balance
       state.dailyProfitTarget = Number((state.balance * 0.02).toFixed(2));
-      
+
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
       addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [SIMULAÇÃO DE RESULTADO]`);
-      
+
       if (!state.systemBlocked) {
         state.dailyProfit += profitAmount;
         const startingDailyBalance = state.balance - state.dailyProfit;
@@ -272,7 +274,7 @@ async function startServer() {
       } else {
         addUserLog(userId, `🛡️ Lucro/risco protegido com sucesso. Sistema já bloqueado.`);
       }
-      
+
       res.json({ success: true, dailyProfit: state.dailyProfit, systemBlocked: state.systemBlocked, balance: state.balance, equity: state.equity });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -331,7 +333,7 @@ async function startServer() {
       });
 
       // Combine and show in chronological order
-      const combined = [...stored, ...dynamicEntries].sort((a, b) => 
+      const combined = [...stored, ...dynamicEntries].sort((a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
@@ -389,7 +391,7 @@ async function startServer() {
   app.post('/api/control', (req, res) => {
     const { action, userId } = req.body;
     const state = getUserState(userId);
-    
+
     if (action === 'start') {
       if (state.systemBlocked) {
         return res.status(400).json({ success: false, error: 'SYSTEM_BLOCKED_DAILY_TARGET' });
@@ -431,7 +433,7 @@ async function startServer() {
   };
 
   app.get('/api/admin/users', adminAuth, (req, res) => res.json(users));
-  
+
   app.post('/api/admin/users/:id/toggle', adminAuth, (req, res) => {
     const user = users.find(u => u.id === req.params.id);
     if (user) {
@@ -445,11 +447,11 @@ async function startServer() {
     const user = users.find(u => u.id === req.params.id);
     if (user) {
       user.status = 'ACTIVE';
-      
+
       // Create license if none exists or renewal
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + 1);
-      
+
       const newLicense: any = {
         id: 'L' + Math.random().toString(36).substr(2, 4),
         userId: user.id,
@@ -458,7 +460,7 @@ async function startServer() {
         status: 'ACTIVE',
         expiryDate: expiryDate.toISOString()
       };
-      
+
       licenses.push(newLicense);
       saveDB();
       res.json({ success: true, user, license: newLicense });
@@ -495,7 +497,7 @@ async function startServer() {
   });
 
   app.get('/api/admin/payments', adminAuth, (req, res) => res.json(payments));
-  
+
 
   app.post('/api/license/activate', (req, res) => {
     const { userId, key } = req.body;
@@ -536,9 +538,9 @@ async function startServer() {
 
   app.post('/api/login', (req, res) => {
     const { email, password } = req.body;
-    // Simple mock authentication
+    // Find user by email first
     const user = users.find(u => u.email === email);
-    if (user) {
+    if (user && user.password === password) {
       // Backfill referral code if missing
       if (!user.referralCode) {
         const pfx = user.name.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase() || 'REF';
@@ -573,12 +575,12 @@ async function startServer() {
       const referrer = users.find(u => u.referralCode?.toUpperCase() === referredBy.trim().toUpperCase());
       if (referrer) {
         referrerId = referrer.id;
-        
+
         let currentReferrerId = referrer.id;
         for (let level = 1; level <= 5; level++) {
           const uRef = users.find(u => u.id === currentReferrerId);
           if (!uRef) break;
-          
+
           referralEarnings.push({
             id: 're_' + Math.random().toString(36).substring(2, 11),
             referrerId: uRef.id,
@@ -589,9 +591,9 @@ async function startServer() {
             type: `Cadastro na Rede (Nível ${level})`,
             timestamp: new Date().toISOString()
           });
-          
+
           addUserLog(uRef.id, `👤 NOVO INDICADO: ${name} se cadastrou no seu Nível ${level}!`);
-          
+
           if (!uRef.referredBy) {
             break;
           }
@@ -601,13 +603,13 @@ async function startServer() {
     }
 
     const isAdminEmail = email.toLowerCase() === 'carlosnovaes296@gmail.com' || email.toLowerCase() === 'carlosnovaecs296@gmail.com';
-    const newUser = { 
-      id: Math.random().toString(36).substr(2, 9), 
-      name, 
-      email, 
+    const newUser = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      email,
       password,
-      status: 'ACTIVE', 
-      role: isAdminEmail ? 'ADMIN' : 'USER', 
+      status: 'ACTIVE',
+      role: isAdminEmail ? 'ADMIN' : 'USER',
       wallet: '',
       paymentWallet: '',
       referralCode: codeCandidate,
@@ -621,14 +623,14 @@ async function startServer() {
   app.post('/api/payments', (req, res) => {
     const { amount, method, hash, userId } = req.body;
     const targetUserId = userId || '1';
-    
-    const newPayment = { 
-      id: 'P' + Math.random().toString(36).substr(2, 4), 
-      userId: targetUserId, 
-      amount, 
-      method, 
-      status: 'PENDING', 
-      hash 
+
+    const newPayment = {
+      id: 'P' + Math.random().toString(36).substr(2, 4),
+      userId: targetUserId,
+      amount,
+      method,
+      status: 'PENDING',
+      hash
     };
     payments.push(newPayment);
 
@@ -640,7 +642,7 @@ async function startServer() {
     const payment = payments.find(p => p.id === req.params.id);
     if (payment) {
       payment.status = 'APPROVED';
-      
+
       // Liberar acesso: Create license
       const expiryDate = new Date();
       const amount = parseFloat(payment.amount) || 0;
@@ -651,7 +653,7 @@ async function startServer() {
       } else {
         expiryDate.setDate(expiryDate.getDate() + 30); // 30 dias para $10 (ou padrão)
       }
-      
+
       const newLicense: any = {
         id: 'L' + Math.random().toString(36).substr(2, 4),
         userId: payment.userId,
@@ -660,48 +662,48 @@ async function startServer() {
         status: 'ACTIVE',
         expiryDate: expiryDate.toISOString()
       };
-      
+
       licenses.push(newLicense);
-      
+
       // Also ensure user is active
       const user = users.find(u => u.id === payment.userId);
       if (user) {
         user.status = 'ACTIVE';
-        
+
         // Multi-level network commission distribution
         // level 1: 20%, level 2: 15%, level 3: 10%, level 4: 3%, level 5: 2%
         const rates = [0.20, 0.15, 0.10, 0.03, 0.02];
         let currentUserId = user.id;
         const purchaseAmount = parseFloat(payment.amount) || 0;
-        
+
         if (purchaseAmount > 0) {
           for (let level = 1; level <= 5; level++) {
-             const currUser = users.find(u => u.id === currentUserId);
-             if (!currUser || !currUser.referredBy) {
-               break;
-             }
-             const referrer = users.find(u => u.id === currUser.referredBy);
-             if (!referrer) {
-               break;
-             }
-             
-             const rate = rates[level - 1];
-             const commissionAmount = Number((purchaseAmount * rate).toFixed(2));
-             
-             referralEarnings.push({
-               id: 're_' + Math.random().toString(36).substring(2, 11),
-               referrerId: referrer.id,
-               referredName: user.name,
-               referredEmail: user.email,
-               level: level,
-               amount: commissionAmount,
-               type: `Comissão Rede Nível ${level}`,
-               timestamp: new Date().toISOString()
-             });
-             
-             addUserLog(referrer.id, `💸 COMISSÃO: ${referrer.name} recebeu $${commissionAmount} (Nível ${level}) por ativação de ${user.name}`);
-             
-             currentUserId = referrer.id;
+            const currUser = users.find(u => u.id === currentUserId);
+            if (!currUser || !currUser.referredBy) {
+              break;
+            }
+            const referrer = users.find(u => u.id === currUser.referredBy);
+            if (!referrer) {
+              break;
+            }
+
+            const rate = rates[level - 1];
+            const commissionAmount = Number((purchaseAmount * rate).toFixed(2));
+
+            referralEarnings.push({
+              id: 're_' + Math.random().toString(36).substring(2, 11),
+              referrerId: referrer.id,
+              referredName: user.name,
+              referredEmail: user.email,
+              level: level,
+              amount: commissionAmount,
+              type: `Comissão Rede Nível ${level}`,
+              timestamp: new Date().toISOString()
+            });
+
+            addUserLog(referrer.id, `💸 COMISSÃO: ${referrer.name} recebeu $${commissionAmount} (Nível ${level}) por ativação de ${user.name}`);
+
+            currentUserId = referrer.id;
           }
         }
       }
@@ -784,8 +786,8 @@ async function startServer() {
       const withdrawable = totalCommissions - activeWithdrawalsSum;
 
       if (requestedAmount > withdrawable) {
-        return res.status(400).json({ 
-          error: `Saldo insuficiente para retirada. Disponível: $${withdrawable.toFixed(2)}` 
+        return res.status(400).json({
+          error: `Saldo insuficiente para retirada. Disponível: $${withdrawable.toFixed(2)}`
         });
       }
 
@@ -853,7 +855,7 @@ async function startServer() {
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       // Look for referrer (direct upline)
       if (user.referredBy) {
         const referrer = users.find(u => u.id === user.referredBy);
@@ -864,7 +866,7 @@ async function startServer() {
           }
         }
       }
-      
+
       // Fallback: Global platform payment wallet
       return res.json({ wallet: config.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585' });
     } catch (e: any) {
@@ -894,7 +896,7 @@ async function startServer() {
     console.error("Server Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
   });
-  
+
   // Explicitly serve downloads folder
   app.use('/downloads', express.static(path.join(process.cwd(), 'public/downloads')));
 
@@ -920,23 +922,37 @@ async function startServer() {
   // Simulated Trading Loop
   setInterval(() => {
     try {
-      // Run simulation for all users that have states initialized
+      const now = new Date();
+      const utcH = now.getUTCHours();
+      const utcM = now.getUTCMinutes();
+      const totalMins = utcH * 60 + utcM;
+
+      // Sessions: 14:00-15:59 UTC (11:00-12:59 BRT) / 01:00-02:59 UTC (22:00-23:59 BRT)
+      const isMorning = totalMins >= 840 && totalMins <= 959;
+      const isNight = totalMins >= 60 && totalMins <= 179;
+      const activeSession = isMorning ? 'MORNING' : (isNight ? 'NIGHT' : null);
+
       Object.keys(userStates).forEach(uId => {
         const state = userStates[uId];
-        if (!state.botRunning || state.systemBlocked) return;
+        
+        // Auto-reset when session switches
+        if (state.currentSessionTag !== activeSession) {
+          state.currentSessionTag = activeSession;
+          state.dailyProfit = 0;
+          state.systemBlocked = false;
+          state.botRunning = true;
+        }
+
+        if (!state.botRunning || state.systemBlocked || !activeSession) return;
 
         config.symbols.forEach(symbol => {
-          // If systemBlocked was triggered concurrently, don't execute
-          if (state.systemBlocked) return;
-
-          // Simulate Strategy Signals
           const smcScore = Math.floor(Math.random() * 100);
           const momScore = Math.floor(Math.random() * 100);
           const smcDir = Math.random() > 0.5 ? "BUY" : "SELL";
           const momDir = Math.random() > 0.5 ? "BUY" : "SELL";
-          
+
           const aiBias = Math.random() > 0.7 ? (Math.random() > 0.5 ? "BULLISH" : "BEARISH") : "NEUTRAL";
-          
+
           let score = (smcScore * config.strategyWeights.smc) + (momScore * config.strategyWeights.momentum);
           if (aiBias !== "NEUTRAL") score += config.strategyWeights.ai;
 
@@ -944,7 +960,7 @@ async function startServer() {
 
           if (score >= config.minScore && direction) {
             const lot = 0.0001;
-            
+
             const id = Math.random().toString(36).substr(2, 9);
             const trade = {
               id,
@@ -955,10 +971,10 @@ async function startServer() {
               time: new Date().toISOString(),
               status: 'OPEN'
             };
-            
+
             state.trades.push(trade);
             addUserLog(uId, `🎯 SIGNAL: ${symbol} | Score: ${score.toFixed(1)} | ${direction}`);
-            
+
             setTimeout(() => {
               const finishedTrade = state.trades.find((t: any) => t.id === id);
               if (finishedTrade) {
@@ -977,10 +993,10 @@ async function startServer() {
                 state.equity = state.balance;
                 state.pnlHistory.push({ time: new Date().toISOString(), balance: Number(state.balance.toFixed(2)) });
                 if (state.pnlHistory.length > 30) state.pnlHistory.shift();
-                
+
                 // Dynamically calculate daily profit target as 2% of updated balance
                 state.dailyProfitTarget = Number((state.balance * 0.02).toFixed(2));
-                
+
                 addUserLog(uId, `${profit >= 0 ? '✅' : '❌'} CLOSED ${symbol}: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
 
                 if (!state.systemBlocked) {

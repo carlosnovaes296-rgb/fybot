@@ -271,12 +271,6 @@ const _unused_translations = {
 
 
 
-function _unused_MarketSessions({ language }: { language: Language }) {
-  return null;
-}
-
-
-
 
 
 export default function App() {
@@ -1472,11 +1466,26 @@ export default function App() {
                           <Terminal size={13} className="text-emerald-500/60" />
                           <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                          <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                            <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
+                          </div>
+                          {logs.length > 0 && (
+                            <button
+                              onClick={() => setLogs([])}
+                              title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
+                            >
+                              <Trash2 size={10} className="group-hover:scale-110 transition-transform" />
+                              <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
+                                {language === 'en' ? 'Clear' : language === 'es' ? 'Limpiar' : 'Limpar'}
+                              </span>
+                            </button>
+                          )}
                         </div>
                       </div>
+
 
                       {/* Log entries with categories */}
                       <div 
@@ -1525,6 +1534,9 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Market Sessions — Brazil Trading Windows */}
+                <MarketSessions language={language} />
 
                 {/* Intelligence Status — Enhanced with connection nodes */}
                 <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
@@ -1742,8 +1754,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Market Trading Sessions */}
-                <MarketSessions language={language} />
 
               </motion.div>
             )}
