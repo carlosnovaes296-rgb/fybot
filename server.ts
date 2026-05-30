@@ -22,6 +22,15 @@ async function startServer() {
   const DB_PATH = path.join(DB_DIR, 'db.json');
   */
 
+  // Generate standard UUID v4
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   // Initial State partitioned by user
   const userStates: Record<string, any> = {};
 
@@ -446,7 +455,7 @@ async function startServer() {
       const newLicense: any = {
         id: 'L' + Math.random().toString(36).substr(2, 4),
         userId: user.id,
-        key: 'FY-PRO-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+        key: generateUUID(),
         type: 'PRO',
         status: 'ACTIVE',
         expiryDate: expiryDate.toISOString()
@@ -648,7 +657,7 @@ async function startServer() {
     const newLicense = {
       id: 'L' + Math.random().toString(36).substr(2, 4),
       userId: userId,
-      key: 'FY-PRO-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+      key: generateUUID(),
       type: 'PRO',
       status: 'ACTIVE',
       hwid: '',
@@ -723,6 +732,21 @@ async function startServer() {
       referredBy: referrerId
     };
     users.push(newUser);
+
+    // Auto-generate license for the new user
+    const expiryDate = new Date();
+    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    const newLicense = {
+      id: 'L' + Math.random().toString(36).substr(2, 4),
+      userId: newUser.id,
+      key: generateUUID(),
+      type: 'PRO',
+      status: 'ACTIVE',
+      hwid: '',
+      expiryDate: expiryDate.toISOString()
+    };
+    licenses.push(newLicense);
+
     saveDB();
     res.json({ success: true, user: newUser });
   });

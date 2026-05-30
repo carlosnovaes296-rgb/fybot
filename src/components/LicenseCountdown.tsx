@@ -116,7 +116,7 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
             MetaTrader 5 License Key
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono tracking-wider overflow-hidden text-ellipsis">
+            <code className="flex-1 bg-black/40 border border-green-500/30 rounded-lg px-3 py-2 text-xs text-[#00ff9d] font-mono tracking-wider overflow-hidden text-ellipsis shadow-[0_0_10px_rgba(0,255,157,0.1)]">
               {licenseKey}
             </code>
             <button 

@@ -313,6 +313,7 @@ export default function App() {
   const [withdrawalMessage, setWithdrawalMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [filterActiveNetworkOnly, setFilterActiveNetworkOnly] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [licenseCopied, setLicenseCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState<any>(null);
   const [paymentHash, setPaymentHash] = useState('');
@@ -922,7 +923,7 @@ export default function App() {
           <img 
             src={fybotLoginBg} 
             alt="Futuristic Robot Background" 
-            className="w-full h-full object-cover object-top select-none pointer-events-none transition-all duration-1000 ease-out opacity-80"
+            className="w-full h-full object-cover object-top select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -3085,17 +3086,36 @@ export default function App() {
                 <div className="bg-gradient-to-b from-blue-900/20 to-blue-900/5 border-2 border-dashed border-blue-500/40 rounded-3xl p-10 text-center space-y-6">
                   <h2 className="text-3xl font-black text-white font-['Orbitron']">🚀 Passo Inicial: Baixar seu Robô</h2>
                   <p className="text-blue-200/60 text-sm">Versão v8 Professional — Compatível para MetaTrader 5</p>
-                  <div className="flex flex-col md:flex-row gap-4 justify-center">
+                  <div className="flex flex-col md:flex-row gap-4 justify-center relative">
+                    {licenseCopied && (
+                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg animate-bounce whitespace-nowrap">
+                        ✓ Licença copiada para a área de transferência!
+                      </div>
+                    )}
                     <a 
-                      href="/downloads/FYBOT_V8_INSTITUTIONAL.ex5" 
-                      download="FYBOT_V8_INSTITUTIONAL.ex5"
+                      href="/downloads/FYBOT_V8_INSTITUTIONAL.mq5" 
+                      download="FYBOT_V8_INSTITUTIONAL.mq5"
+                      onClick={() => {
+                        if (stats?.activeLicense?.key) {
+                          navigator.clipboard.writeText(stats.activeLicense.key);
+                          setLicenseCopied(true);
+                          setTimeout(() => setLicenseCopied(false), 3000);
+                        }
+                      }}
                       className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-400 to-blue-600 px-8 py-4 rounded-2xl font-bold text-white shadow-lg shadow-blue-500/30 hover:scale-105 transition-all text-center justify-center"
                     >
-                      <Download size={20} /> DOWNLOAD .EX5 ONLY
+                      <Download size={20} /> DOWNLOAD .MQ5 (CÓDIGO FONTE)
                     </a>
                     <a 
                       href="/downloads/FYBOT_V8_COMPLETO.zip" 
                       download="FYBOT_V8_COMPLETO.zip"
+                      onClick={() => {
+                        if (stats?.activeLicense?.key) {
+                          navigator.clipboard.writeText(stats.activeLicense.key);
+                          setLicenseCopied(true);
+                          setTimeout(() => setLicenseCopied(false), 3000);
+                        }
+                      }}
                       className="inline-flex items-center gap-3 bg-white/10 border border-white/20 px-8 py-4 rounded-2xl font-bold text-white hover:bg-white/20 transition-all text-center justify-center"
                     >
                       <Download size={20} /> DOWNLOAD PASTA COMPLETA (.ZIP)
@@ -3109,12 +3129,20 @@ export default function App() {
                       <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">1</div>
                       <h3 className="text-lg font-bold text-blue-400">Copiar o EA para o MetaTrader 5</h3>
                     </div>
-                    <ol className="list-decimal list-inside space-y-3 text-sm text-blue-100/70 ml-4">
-                      <li>No MT5 clique em <span className="font-bold text-white">Arquivo → Abrir pasta de dados</span></li>
-                      <li>Navegue até <span className="font-bold text-white">MQL5 → Experts</span></li>
-                      <li>Cole o arquivo <span className="font-bold text-white">FYBOT_V8_INSTITUTIONAL.ex5</span></li>
-                      <li>Reinicie o MetaTrader 5</li>
-                    </ol>
+                    <ul className="space-y-4 text-blue-100/70 text-sm">
+                      <li className="flex items-start gap-3">
+                        <span className="text-blue-500 font-bold mt-0.5">1.</span>
+                        <span>Dê dois cliques no arquivo <strong>FYBOT_V8_INSTITUTIONAL.mq5</strong> que você baixou. Ele abrirá no MetaEditor.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-blue-500 font-bold mt-0.5">2.</span>
+                        <span>No MetaEditor, clique no botão <strong>Compilar</strong> (ou aperte F7). Isso criará o arquivo .ex5 no seu MetaTrader.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <span className="text-blue-500 font-bold mt-0.5">3.</span>
+                        <span>Reinicie o MetaTrader 5 (se necessário).</span>
+                      </li>
+                    </ul>
                   </div>
 
                   <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
@@ -3213,12 +3241,12 @@ export default function App() {
                           <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
                             <td className="py-3 px-2">RiskPercent</td>
                             <td className="py-3 px-2 text-white">1.0</td>
-                            <td className="py-3 px-2 italic">% de risco por trade</td>
+                            <td className="py-3 px-2 italic">% do saldo por trade</td>
                           </tr>
                           <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
                             <td className="py-3 px-2">TP_RR</td>
-                            <td className="py-3 px-2 text-white">3.0</td>
-                            <td className="py-3 px-2 italic">Take Profit = 3x SL</td>
+                            <td className="py-3 px-2 text-white">2.0</td>
+                            <td className="py-3 px-2 italic">Take Profit = 2x o SL</td>
                           </tr>
                         </tbody>
                       </table>
