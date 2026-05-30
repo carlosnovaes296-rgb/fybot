@@ -152,7 +152,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   // Form states local fallback
   const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
-  const [session, setSession] = useState(stats.preferredSession || "Brasil 11h/23h");
+  const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
   const [overtrading, setOvertrading] = useState(stats.antiOvertrading !== false);
 
@@ -639,7 +639,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                     onChange={(e) => setSession(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors cursor-pointer"
                   >
-                    <option value="Brasil 11h/23h" className="bg-[#0f0f12]">Brasil — 11:00 e 23:00 BRT ⚡</option>
+                    <option value="Brasil 10h/21h" className="bg-[#0f0f12]">Brasil — 10:00 e 21:00 BRT ⚡</option>
                     <option value="London/NY" className="bg-[#0f0f12]">Londres / Nova York (Standard)</option>
                     <option value="New York" className="bg-[#0f0f12]">Nova York (Operações NY)</option>
                     <option value="London" className="bg-[#0f0f12]">Londres (London Session)</option>

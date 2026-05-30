@@ -35,31 +35,31 @@ export function MarketSessions({ language }: MarketSessionsProps) {
   const brtHour = (now.getUTCHours() - 3 + 24) % 24;
   const brtMin  = now.getUTCMinutes();
   const brtTotal = brtHour * 60 + brtMin;
-  // Morning: 11:00–12:59 BRT | Night: 23:00–00:59 BRT
-  const inMorning = brtTotal >= 11 * 60 && brtTotal < 13 * 60;
-  const inNight   = brtTotal >= 23 * 60 || brtTotal < 60; // 23:00-00:59
+  // Morning: 10:00–11:59 BRT | Night: 21:00–22:59 BRT
+  const inMorning = brtTotal >= 10 * 60 && brtTotal < 12 * 60;
+  const inNight   = brtTotal >= 21 * 60 && brtTotal < 23 * 60; // 21:00-22:59
   const isActive  = inMorning || inNight;
 
   const sessions = [
     {
-      labelBrt: '11:00 BRT',
-      labelUTC: '14:00 UTC',
+      labelBrt: '10:00 BRT',
+      labelUTC: '13:00 UTC',
       icon: '☀️',
       active: inMorning,
       descPt: 'Sessão da Manhã — Abertura Europa/NY',
       descEn: 'Morning Session — Europe/NY Open',
       descEs: 'Sesión Matutina — Apertura Europa/NY',
-      globalTimes: 'Portugal 15:00 | Espanha 16:00 | Nova York 10:00'
+      globalTimes: 'Portugal 14:00 | Espanha 15:00 | Nova York 09:00'
     },
     {
-      labelBrt: '23:00 BRT',
-      labelUTC: '02:00 UTC',
+      labelBrt: '21:00 BRT',
+      labelUTC: '00:00 UTC',
       icon: '🌙',
       active: inNight,
       descPt: 'Sessão Noturna — Abertura Ásia/Tóquio',
       descEn: 'Night Session — Asia/Tokyo Open',
       descEs: 'Sesión Nocturna — Apertura Asia/Tokio',
-      globalTimes: 'Portugal 02:00 | Espanha 03:00 | Nova York 21:00'
+      globalTimes: 'Portugal 00:00 | Espanha 01:00 | Nova York 19:00'
     },
   ];
 
@@ -127,10 +127,10 @@ export function MarketSessions({ language }: MarketSessionsProps) {
       {/* Footer note */}
       <p className="text-[14px] text-emerald-400 font-medium leading-relaxed mt-4 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
         {isEn
-          ? '⚡ FYBOT V8 operates only during the two configured Brazil sessions (11:00 BRT and 23:00 BRT). Outside these windows the engine remains on standby.'
+          ? '⚡ FYBOT V8 operates only during the two configured Brazil sessions (10:00 BRT and 21:00 BRT). Outside these windows the engine remains on standby.'
           : isEs
-          ? '⚡ FYBOT V8 opera solo durante las dos sesiones configuradas de Brasil (11:00 BRT y 23:00 BRT). Fuera de estas ventanas el motor permanece en espera.'
-          : '⚡ O FYBOT V8 opera exclusivamente nas duas janelas configuradas para o Brasil (11:00 BRT e 23:00 BRT). Fora desses horários o motor permanece em standby.'}
+          ? '⚡ FYBOT V8 opera solo durante las dos sesiones configuradas de Brasil (10:00 BRT y 21:00 BRT). Fuera de estas ventanas el motor permanece en espera.'
+          : '⚡ O FYBOT V8 opera exclusivamente nas duas janelas configuradas para o Brasil (10:00 BRT e 21:00 BRT). Fora desses horários o motor permanece em standby.'}
       </p>
     </div>
   );

@@ -45,8 +45,8 @@ async function startServer() {
         accountType: 'DISCONNECTED', // 'REAL' | 'DEMO' | 'DISCONNECTED'
         dailyProfit: 0.00,
         dailyProfitTarget: 0.00,
-        dailyResetHour: "11:00",
-        preferredSession: "Brasil 11h/23h",
+        dailyResetHour: "10:00",
+        preferredSession: "Brasil 10h/21h",
         timezone: "GMT-3",
         antiOvertrading: true,
         systemBlocked: false,
@@ -1058,9 +1058,9 @@ async function startServer() {
       const utcM = now.getUTCMinutes();
       const totalMins = utcH * 60 + utcM;
 
-      // Sessions: 14:00-15:59 UTC (11:00-12:59 BRT) / 02:00-03:59 UTC (23:00-00:59 BRT)
-      const isMorning = totalMins >= 840 && totalMins <= 959;
-      const isNight = totalMins >= 120 && totalMins <= 239;
+      // Sessions: 13:00-14:59 UTC (10:00-11:59 BRT) / 00:00-01:59 UTC (21:00-22:59 BRT)
+      const isMorning = totalMins >= 780 && totalMins <= 899;
+      const isNight = totalMins >= 0 && totalMins <= 119;
       const activeSession = isMorning ? 'MORNING' : (isNight ? 'NIGHT' : null);
 
       Object.keys(userStates).forEach(uId => {
