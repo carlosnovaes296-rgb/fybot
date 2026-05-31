@@ -14,6 +14,7 @@ input string LICENSE_KEY = "SEU-UUID-AQUI"; // Sua chave pessoal
 input string API_URL = "http://localhost:3000/api/mt5/update"; // Endereço do servidor
 input double RiskPercent = 1.0; // % do saldo por trade
 input double TP_RR = 2.0; // Take Profit = 2x o SL
+input int    StopLossPoints = 100; // Stop Loss em pontos
 input bool   EnableDemoTrade = true; // Habilitar trade automático de validação?
 
 double initialBalance = 0.0;
@@ -134,11 +135,18 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void OnTick()
   {
-   // LÓGICA DE VALIDAÇÃO: Se o robô não tiver nenhuma operação, abre uma de 0.01 lot BUY
+   // LÓGICA DE ENTRADA: Se o robô não tiver nenhuma operação, abre uma operação configurada
    if (EnableDemoTrade && PositionsTotal() == 0) {
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      trade.Buy(0.01, _Symbol, ask, 0, 0, "FyBot Test Trade");
-      Print("Abrindo operação de teste na conexão MT5...");
+      double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+      int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      
+      // Cálculo do SL e TP baseado em pontos e no Risco Retorno (TP_RR)
+      double slPrice = NormalizeDouble(ask - (StopLossPoints * point), digits);
+      double tpPrice = NormalizeDouble(ask + (StopLossPoints * TP_RR * point), digits);
+      
+      trade.Buy(0.01, _Symbol, ask, slPrice, tpPrice, "FyBot Real Trade");
+      PrintFormat("Abrindo operação BUY em %s. Ask: %.*f | SL: %.*f | TP: %.*f", _Symbol, digits, ask, digits, slPrice, digits, tpPrice);
    }
   }
 //+------------------------------------------------------------------+
