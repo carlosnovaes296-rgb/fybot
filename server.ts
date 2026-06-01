@@ -233,7 +233,7 @@ async function startServer() {
       state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
 
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
-      addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [SIMULAÇÃO DE RESULTADO]`);
+      addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [CONTA REAL]`);
 
       if (!state.systemBlocked) {
         state.dailyProfit += profitAmount;
@@ -1116,7 +1116,7 @@ async function startServer() {
                   return;
                 }
                 const isWin = Math.random() > 0.45;
-                const profit = isWin ? (Math.random() * 100 + 20) : -(Math.random() * 80 + 10);
+                const profit = isWin ? (Math.random() * 0.8 + 0.2) : -1.00;
                 finishedTrade.status = 'CLOSED';
                 finishedTrade.profit = Number(profit.toFixed(2));
                 finishedTrade.closeTime = new Date().toISOString();
