@@ -900,6 +900,10 @@ async function startServer() {
         return res.status(400).json({ error: 'Invalid withdrawal amount' });
       }
 
+      if (requestedAmount < 30) {
+        return res.status(400).json({ error: 'O saque mínimo permitido é de $30.00 USD' });
+      }
+
       if (!wallet || wallet.trim() === '') {
         return res.status(400).json({ error: 'Wallet address is required' });
       }
@@ -930,12 +934,12 @@ async function startServer() {
         userId,
         amount: requestedAmount,
         wallet,
-        status: 'PENDING',
+        status: 'APPROVED',
         timestamp: new Date().toISOString()
       };
 
       withdrawals.push(newWithdrawal);
-      addUserLog(userId, `📥 SAQUE SOLICITADO: Solicitou um saque de $${requestedAmount.toFixed(2)} para carteira ${wallet}`);
+      addUserLog(userId, `✅ SAQUE AUTOMÁTICO: Seu saque de $${requestedAmount.toFixed(2)} para carteira ${wallet} foi aprovado e processado automaticamente.`);
       saveDB();
 
       res.json({ success: true, withdrawal: newWithdrawal });

@@ -589,6 +589,16 @@ export default function App() {
     if (!currentUser) return;
     setWithdrawalLoading(true);
     setWithdrawalMessage(null);
+
+    if (parseFloat(withdrawAmount) < 30) {
+      setWithdrawalMessage({
+        text: language === 'en' ? 'Minimum withdrawal is $30.00 USD.' : language === 'es' ? 'El retiro mínimo es de $30.00 USD.' : 'O saque mínimo permitido é de $30.00 USD.',
+        isError: true
+      });
+      setWithdrawalLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/withdrawals', {
         method: 'POST',
@@ -609,10 +619,10 @@ export default function App() {
         });
         setWithdrawalMessage({
           text: language === 'en' 
-            ? 'Withdrawal request submitted successfully! Pending approval.' 
+            ? 'Withdrawal request approved and processed automatically!' 
             : language === 'es' 
-              ? '¡Solicitud de retiro enviada! Pendiente de aprobación.' 
-              : 'Solicitação de saque enviada com sucesso! Aguardando aprovação.',
+              ? '¡Solicitud de retiro procesada y aprobada automáticamente!' 
+              : 'Solicitação de saque aprovada e processada automaticamente!',
           isError: false
         });
         fetchReferrals();
@@ -2291,15 +2301,15 @@ export default function App() {
                               </div>
 
                               <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                  {language === 'en' ? 'Withdrawal Amount (USD)' : language === 'es' ? 'Monto a Retirar' : 'Valor para Saque (USD)'}
+                                <label className="text-[15px] uppercase font-bold text-emerald-500 tracking-widest pl-1">
+                                  {language === 'en' ? 'Withdrawal Amount (Min $30)' : language === 'es' ? 'Monto a Retirar (Mín $30)' : 'Valor para Saque (Mín $30)'}
                                 </label>
                                 <div className="relative">
                                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-white/30">$</span>
                                   <input 
                                     type="number"
                                     step="0.01"
-                                    min="0.01"
+                                    min="30"
                                     required
                                     value={withdrawAmount}
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -2926,6 +2936,7 @@ export default function App() {
                             <th className="pb-4 font-bold">{language === 'en' ? 'WALLET BEP20' : 'CARTEIRA BEP20'}</th>
                             <th className="pb-4 font-bold">STATUS</th>
                             <th className="pb-4 pr-4 text-right">{language === 'en' ? 'DATE' : 'DATA'}</th>
+                            <th className="pb-4 pr-4 text-right">{language === 'en' ? 'ACTIONS' : 'AÇÕES'}</th>
                           </tr>
                         </thead>
                         <tbody className="text-xs">
@@ -2949,6 +2960,18 @@ export default function App() {
                               </td>
                               <td className="py-4 text-white/50 text-right pr-4 font-mono">
                                 {new Date(w.timestamp).toLocaleDateString()}
+                              </td>
+                              <td className="py-4 text-right pr-4">
+                                {w.status === 'PENDING' && (
+                                  <div className="flex justify-end gap-2">
+                                    <button onClick={() => approveWithdrawal(w.id)} className="p-2 bg-emerald-500 text-black rounded-lg hover:bg-emerald-400 transition-colors cursor-pointer" title={language === 'en' ? 'Approve' : 'Aprovar'}>
+                                      <CheckCircle2 size={16} />
+                                    </button>
+                                    <button onClick={() => rejectWithdrawal(w.id)} className="p-2 bg-white/5 text-white/70 rounded-lg hover:bg-white/10 transition-colors cursor-pointer" title={language === 'en' ? 'Reject' : 'Rejeitar'}>
+                                      <XCircle size={16} />
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           ))}
