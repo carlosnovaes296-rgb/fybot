@@ -137,7 +137,7 @@ async function startServer() {
       const pendingPayment = userId ? payments.find(p => p.userId === userId && p.status === 'PENDING') : null;
 
       // Dynamically calculate daily profit target as 2% of current balance
-      state.dailyProfitTarget = Number((state.balance * 0.015).toFixed(2));
+      state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
       const startingDailyBalance = state.balance - state.dailyProfit;
       const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
 
@@ -230,7 +230,7 @@ async function startServer() {
       if (state.pnlHistory.length > 30) state.pnlHistory.shift();
 
       // Dynamically calculate daily profit target as 2% of updated balance
-      state.dailyProfitTarget = Number((state.balance * 0.015).toFixed(2));
+      state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
 
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
       addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [SIMULAÇÃO DE RESULTADO]`);
@@ -1126,7 +1126,7 @@ async function startServer() {
                 if (state.pnlHistory.length > 30) state.pnlHistory.shift();
 
                 // Dynamically calculate daily profit target as 2% of updated balance
-                state.dailyProfitTarget = Number((state.balance * 0.015).toFixed(2));
+                state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
 
                 addUserLog(uId, `${profit >= 0 ? '✅' : '❌'} CLOSED ${symbol}: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
 

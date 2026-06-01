@@ -150,7 +150,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.015) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.01) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -311,7 +311,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     }
   };
 
-  const pct = Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.015) || 200)) * 100));
+  const pct = Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.01) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -532,7 +532,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.015) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyProfitTarget || (stats.balance * 0.01) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
@@ -608,7 +608,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       onChange={(e) => setTargetVal(parseInt(e.target.value) || 0)}
                       min="10"
                       max="100000"
-                      placeholder={String(Math.round(stats.balance * 0.015))}
+                      placeholder={String(Math.round(stats.balance * 0.01))}
                       className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
                     />
                   </div>
