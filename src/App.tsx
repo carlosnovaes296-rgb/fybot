@@ -3278,14 +3278,19 @@ export default function App() {
                             <td className="py-3 px-2 italic">Endereço do servidor</td>
                           </tr>
                           <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">RiskPercent</td>
+                            <td className="py-3 px-2">Daily_Target</td>
                             <td className="py-3 px-2 text-white">1.0</td>
-                            <td className="py-3 px-2 italic">% do saldo por trade</td>
+                            <td className="py-3 px-2 italic">% da banca ao dia</td>
                           </tr>
                           <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">TP_RR</td>
-                            <td className="py-3 px-2 text-white">2.0</td>
-                            <td className="py-3 px-2 italic">Take Profit = 2x o SL</td>
+                            <td className="py-3 px-2">Fixed_Loss_Trade</td>
+                            <td className="py-3 px-2 text-white">1.00</td>
+                            <td className="py-3 px-2 italic">Risco travado em -$1.00</td>
+                          </tr>
+                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="py-3 px-2">Dynamic_TP_Range</td>
+                            <td className="py-3 px-2 text-white">0.20-1.00</td>
+                            <td className="py-3 px-2 italic">Lucro por ordem ($)</td>
                           </tr>
                         </tbody>
                       </table>
