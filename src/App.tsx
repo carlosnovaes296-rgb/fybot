@@ -46,6 +46,7 @@ import {
   Globe,
   Key,
   Copy,
+  Menu,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
@@ -330,6 +331,7 @@ export default function App() {
   const [selectedInterval, setSelectedInterval] = useState('5M');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
@@ -1021,8 +1023,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0c] text-white font-sans selection:bg-blue-500/30">
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" 
+          onClick={() => setIsMobileMenuOpen(false)} 
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-20 md:w-64 bg-[#0f0f12] border-r border-white/5 flex flex-col items-center md:items-stretch z-50">
+      <div className={`fixed left-0 top-0 h-full w-64 bg-[#0f0f12] border-r border-white/5 flex flex-col items-stretch z-50 transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-6 flex items-center justify-center gap-3 border-b border-white/5 h-20">
           {/* Expanded (Desktop): Brand Neon Logo Centered & 30% Larger */}
           <div className="hidden md:flex items-center justify-center select-none font-['Orbitron']">
@@ -1046,23 +1056,23 @@ export default function App() {
             </div>
           </div>
           
-          <NavItem icon={<LayoutDashboard size={20} />} label={t.sidebar.dashboard} active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <NavItem icon={<LayoutDashboard size={20} />} label={t.sidebar.dashboard} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
           {currentUser?.role === 'ADMIN' && (
             <>
-              <NavItem icon={<Activity size={20} />} label={t.sidebar.strategies} active={activeTab === 'strategies'} onClick={() => setActiveTab('strategies')} />
-              <NavItem icon={<BarChart3 size={20} />} label={t.sidebar.analytics} active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
+              <NavItem icon={<Activity size={20} />} label={t.sidebar.strategies} active={activeTab === 'strategies'} onClick={() => { setActiveTab('strategies'); setIsMobileMenuOpen(false); }} />
+              <NavItem icon={<BarChart3 size={20} />} label={t.sidebar.analytics} active={activeTab === 'analytics'} onClick={() => { setActiveTab('analytics'); setIsMobileMenuOpen(false); }} />
             </>
           )}
-          <NavItem icon={<History size={20} />} label={t.sidebar.history} active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
-          <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => setActiveTab('plans')} />
-          <NavItem icon={<Download size={20} />} label={t.sidebar.installation} active={activeTab === 'installation'} onClick={() => setActiveTab('installation')} />
-          <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => setActiveTab('affiliates')} />
+          <NavItem icon={<History size={20} />} label={t.sidebar.history} active={activeTab === 'history'} onClick={() => { setActiveTab('history'); setIsMobileMenuOpen(false); }} />
+          <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
+          <NavItem icon={<Download size={20} />} label={t.sidebar.installation} active={activeTab === 'installation'} onClick={() => { setActiveTab('installation'); setIsMobileMenuOpen(false); }} />
+          <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
           {currentUser?.role === 'ADMIN' && (
-            <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); }} />
+            <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
           )}
-          <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+          <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
           <div className="pt-4 mt-4 border-t border-white/5">
-            <NavItem icon={<LogOut size={20} />} label={t.sidebar.logout} onClick={() => { setIsLoggedIn(false); setCurrentUser(null); }} />
+            <NavItem icon={<LogOut size={20} />} label={t.sidebar.logout} onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); }} />
           </div>
         </nav>
 
@@ -1080,7 +1090,7 @@ export default function App() {
       </div>
 
       {/* Main Content */}
-      <main className="pl-20 md:pl-64 min-h-screen">
+      <main className="pl-0 md:pl-64 min-h-screen w-full overflow-x-hidden">
         {/* Modal: Activate License */}
         <AnimatePresence>
           {showLicenseModal && (
@@ -1218,14 +1228,20 @@ export default function App() {
           )}
         </AnimatePresence>
         {/* Header */}
-        <header className="h-20 border-b border-white/5 px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+        <header className="h-20 border-b border-white/5 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
+          <div className="flex items-center gap-3 md:gap-4">
+            <button 
+              className="md:hidden p-2 text-white/70 hover:text-white"
+              onClick={() => setIsMobileMenuOpen(true)}
+            >
+              <Menu size={24} />
+            </button>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
               <div className={`w-2 h-2 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
               <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
-            <span className="text-white/20">|</span>
-            <div className="flex items-center gap-2">
+            <span className="hidden md:block text-white/20">|</span>
+            <div className="hidden md:flex items-center gap-2">
               <ShieldCheck size={16} className="text-blue-400/60" />
               <span className="text-xs font-medium text-white/40">{t.header.broker}</span>
             </div>
@@ -1240,7 +1256,7 @@ export default function App() {
             <button 
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-xl ${
+              className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-xl ${
                 stats.systemBlocked
                   ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
                   : stats.botRunning 
@@ -1253,12 +1269,12 @@ export default function App() {
               ) : stats.systemBlocked ? (
                 <>
                   <Lock size={18} className="text-yellow-500 animate-pulse" />
-                  {t.header.locked}
+                  <span className="hidden sm:inline">{t.header.locked}</span>
                 </>
               ) : stats.botRunning ? (
-                <><Pause size={18} fill="currentColor" /> {t.header.stop}</>
+                <><Pause size={18} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
               ) : (
-                <><Play size={18} fill="currentColor" /> {t.header.start}</>
+                <><Play size={18} fill="currentColor" /> <span className="hidden sm:inline">{t.header.start}</span></>
               )}
             </button>
           </div>
@@ -1286,7 +1302,7 @@ export default function App() {
                   />
                   <StatCard 
                     label={t.dashboard.dailyTargetLabel} 
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.015)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     delta="2.0%" 
                     icon={<Target className="text-yellow-400" />}
                     trendPositive={true}
@@ -1295,7 +1311,7 @@ export default function App() {
                   <StatCard 
                     label={t.dashboard.dailyProfitLabel} 
                     value={`$${(stats.dailyProfit || 0.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    delta={stats.dailyProfit && stats.dailyProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round(((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`} 
+                    delta={stats.dailyProfit && stats.dailyProfit >= (stats.dailyProfitTarget || (stats.balance * 0.015)) ? "100%" : `${Math.round(((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.015) || 200)) * 100)}%`} 
                     icon={<TrendingUp className="text-emerald-400" />} 
                     valueClassName={(stats.dailyProfit || 0) >= 0 ? "text-emerald-400" : "text-red-400"}
                     trendPositive={(stats.dailyProfit || 0) >= 0}

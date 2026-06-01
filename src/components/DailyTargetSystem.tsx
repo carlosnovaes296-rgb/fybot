@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ShieldCheck, 
-  AlertTriangle, 
-  Timer, 
-  Settings, 
-  TrendingUp, 
-  RefreshCw, 
-  Zap, 
-  Cpu, 
-  Flame, 
-  Sliders, 
-  Check, 
-  Lock 
+import {
+  ShieldCheck,
+  AlertTriangle,
+  Timer,
+  Settings,
+  TrendingUp,
+  RefreshCw,
+  Zap,
+  Cpu,
+  Flame,
+  Sliders,
+  Check,
+  Lock
 } from 'lucide-react';
 
 interface Stats {
@@ -45,7 +45,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (2% da Banca)",
+    targetValue: "Meta Diária (1.5% da Banca)",
     lossValue: "Limite de Perda (10% da Banca)",
     currentProfit: "Lucro de Hoje",
     resetManual: "Reset Operacional",
@@ -79,7 +79,7 @@ const targetTranslations = {
   en: {
     title: "SMART DAILY TARGET",
     subtitle: "V8 PRO SAFETY GATE - Advanced Capital Protection",
-    targetValue: "Daily Target (2% of Bankroll)",
+    targetValue: "Daily Target (1.5% of Bankroll)",
     lossValue: "Loss Limit (10% of Bankroll)",
     currentProfit: "Today's Profit",
     resetManual: "Operational Reset",
@@ -113,7 +113,7 @@ const targetTranslations = {
   es: {
     title: "META DIARIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Protección de Capital Avanzada",
-    targetValue: "Meta Diaria (2% de la Banca)",
+    targetValue: "Meta Diaria (1.5% de la Banca)",
     lossValue: "Límite de Pérdida (10% de la Banca)",
     currentProfit: "Ganancia de Hoy",
     resetManual: "Reajuste Operativo",
@@ -150,7 +150,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.015) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -185,7 +185,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     let firedReset = false;
     const calculateCountdown = async () => {
       const now = new Date();
-      
+
       // Parse timezone offset
       let offset = 0;
       if (tz === "GMT-3") offset = -3;
@@ -214,7 +214,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
       }
 
       const diffMs = targetUTC.getTime() - now.getTime();
-      
+
       // If blocked and timer hits 0, auto reset on server/client
       if (stats.systemBlocked && diffMs <= 1000 && !firedReset) {
         firedReset = true;
@@ -311,14 +311,14 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     }
   };
 
-  const pct = Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
+  const pct = Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.015) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
     <div id="v8-daily-target-module" className="relative w-full space-y-6">
       <AnimatePresence>
         {notification && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
@@ -338,16 +338,15 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
           </div>
           <p className="text-xs text-white/40">{t.subtitle}</p>
         </div>
-        
+
         {/* Core Quick Status Lights */}
         <div className="flex items-center gap-3">
           <div className="bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[10px] font-bold text-white/60">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
             {t.vpsStatus}
           </div>
-          <div className={`bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[10px] font-bold ${
-            isBlocked ? 'text-yellow-500' : 'text-emerald-400'
-          }`}>
+          <div className={`bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[10px] font-bold ${isBlocked ? 'text-yellow-500' : 'text-emerald-400'
+            }`}>
             <div className={`w-2 h-2 rounded-full ${isBlocked ? 'bg-yellow-500 animate-pulse shadow-[0_0_6px_rgba(234,179,8,0.5)]' : 'bg-emerald-400 animate-pulse'}`} />
             {isBlocked ? t.offline : t.active}
           </div>
@@ -355,18 +354,18 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
       </div>
 
       <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-8 items-stretch`}>
-        
+
         {/* MAIN VISUAL CARD - NEON GREEN OR SECURED BLOCKED CONTAINER */}
         <div className={`${isAdmin ? 'lg:col-span-2' : ''} flex flex-col justify-between`}>
           <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 relative overflow-hidden h-full flex flex-col justify-between">
-            
+
             {/* Grid neon highlights */}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
 
             <AnimatePresence mode="wait">
               {isBlocked ? (
                 // META DIÁRIA BATIDA NEON GREEN GLOW WINNER LOCK STATE OR DRAWDOWN RED LOCK STATE
-                <motion.div 
+                <motion.div
                   key="blocked-card"
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -388,7 +387,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                             {t.blocked}
                           </h3>
                         </div>
-                        
+
                         <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 animate-bounce">
                           <Lock size={20} />
                         </div>
@@ -438,7 +437,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                             {t.blocked}
                           </h3>
                         </div>
-                        
+
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 animate-pulse">
                           <Lock size={20} />
                         </div>
@@ -487,7 +486,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <p className="text-xs text-yellow-500/80 font-bold">{session} ({tz})</p>
                       </div>
                     </div>
-                    
+
                     <div className="text-center md:text-right">
                       <span className="text-3xl font-mono font-black tracking-wider text-yellow-500 bg-yellow-500/5 border border-yellow-500/10 px-5 py-1.5 rounded-xl block shadow-[0_0_12px_rgba(234,179,8,0.1)]">
                         {countdown}
@@ -497,7 +496,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                 </motion.div>
               ) : (
                 // ACTIVE OPERATIONAL MODE WITH TARGET TARGET MOCK / ACTIVE PROGRESS
-                <motion.div 
+                <motion.div
                   key="active-card"
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -518,13 +517,12 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                     </div>
                   </div>
 
-                   {/* Standard Values read-out */}
+                  {/* Standard Values read-out */}
                   <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
                     <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.currentProfit}</p>
-                      <span className={`text-2xl font-mono font-black ${
-                        (stats.dailyProfit || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}>
+                      <span className={`text-2xl font-mono font-black ${(stats.dailyProfit || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
                         {(stats.dailyProfit || 0) >= 0 ? '+' : ''}${stats.dailyProfit?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || "$0.00"}
                       </span>
                     </div>
@@ -534,7 +532,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyProfitTarget || (stats.balance * 0.015) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
@@ -554,7 +552,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       <span className="text-yellow-500">FASE PROTETIVA V8</span>
                     </div>
                     <div className="w-full h-3 bg-white/5 border border-white/10 rounded-full overflow-hidden p-0.5">
-                      <motion.div 
+                      <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
                         transition={{ duration: 0.5 }}
@@ -604,13 +602,13 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-xs text-white/30">$</span>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       value={targetVal}
                       onChange={(e) => setTargetVal(parseInt(e.target.value) || 0)}
                       min="10"
                       max="100000"
-                      placeholder={String(Math.round(stats.balance * 0.02))}
+                      placeholder={String(Math.round(stats.balance * 0.015))}
                       className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
                     />
                   </div>
@@ -621,8 +619,8 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">
                     {t.resetHourLabel}
                   </label>
-                  <input 
-                    type="time" 
+                  <input
+                    type="time"
                     value={resetHour}
                     onChange={(e) => setResetHour(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-sm font-mono font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
@@ -634,7 +632,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">
                     {t.preferredSessionLabel}
                   </label>
-                  <select 
+                  <select
                     value={session}
                     onChange={(e) => setSession(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors cursor-pointer"
@@ -652,7 +650,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">
                     {t.timezoneLabel}
                   </label>
-                  <select 
+                  <select
                     value={tz}
                     onChange={(e) => setTz(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-xl py-2 px-3 text-xs font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors cursor-pointer"
@@ -673,17 +671,15 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   <button
                     type="button"
                     onClick={() => setOvertrading(!overtrading)}
-                    className={`w-10 h-6 rounded-full flex items-center p-0.5 transition-all ${
-                      overtrading ? 'bg-emerald-500' : 'bg-white/10'
-                    }`}
+                    className={`w-10 h-6 rounded-full flex items-center p-0.5 transition-all ${overtrading ? 'bg-emerald-500' : 'bg-white/10'
+                      }`}
                   >
-                    <div className={`w-5 h-5 bg-black rounded-full transition-all ${
-                      overtrading ? 'transform translate-x-4' : 'transform translate-x-0'
-                    }`} />
+                    <div className={`w-5 h-5 bg-black rounded-full transition-all ${overtrading ? 'transform translate-x-4' : 'transform translate-x-0'
+                      }`} />
                   </button>
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   disabled={saving}
                   className="w-full py-2.5 bg-yellow-500 text-black font-bold text-xs rounded-xl hover:bg-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-500/10 cursor-pointer"
@@ -696,7 +692,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
 
             {/* OPERATIONAL RESET CONTROL */}
             <div className="border-t border-white/5 pt-5 mt-5">
-              <button 
+              <button
                 onClick={handleResetManual}
                 disabled={resetting}
                 className="w-full py-2.5 bg-white/5 border border-white/5 text-white/70 rounded-xl text-xs font-bold hover:bg-yellow-500/10 hover:text-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
