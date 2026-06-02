@@ -2141,37 +2141,7 @@ export default function App() {
                     <p className="text-lg text-white/50 leading-relaxed max-w-lg mb-10">
                       {language === 'en' ? 'Earn recurring commissions up to 5 levels of your network. Turn your influence into a steady capital stream.' : language === 'es' ? 'Gane comisiones recurrentes en hasta 5 niveles de su red. Transforme su influencia en un flujo constante de capital.' : 'Ganhe comissões recorrentes em até 5 níveis da sua rede. Transforme sua influência em um fluxo constante de capital.'}
                     </p>
-                    <div className="mt-8 bg-white/[0.02] border border-white/5 rounded-3xl p-6 md:p-8 backdrop-blur-xl max-w-xl">
-                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3">
-                        {language === 'en' ? 'YOUR UNIQUE REFERRAL DETAILS' : language === 'es' ? 'TUS DETALLES DE REFERIDO ÚNICOS' : 'SEUS DETALHES DE INDICAÇÃO ÚNICOS'}
-                      </p>
-                      
-                      <div className="max-w-xs">
-                        {/* Reference Code Box */}
-                        <div className="bg-black/30 border border-white/5 rounded-2xl p-5 flex flex-col justify-between">
-                          <div>
-                            <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider block mb-1.5">
-                              {language === 'en' ? 'REVENUE CODE' : language === 'es' ? 'CÓDIGO DE INGRESOS' : 'CÓDIGO DE ENTRADA'}
-                            </span>
-                            <code className="text-xl font-mono font-black text-amber-400 tracking-wider">
-                              {currentUser?.referralCode || 'CARLOS296'}
-                            </code>
-                          </div>
-                          
-                          <button 
-                            onClick={() => {
-                              const code = currentUser?.referralCode || 'CARLOS296';
-                              navigator.clipboard.writeText(code);
-                              alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
-                            }}
-                            className="mt-5 px-3 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
-                          >
-                            <Copy size={12} className="text-white/60" />
-                            {language === 'en' ? 'Copy Code' : language === 'es' ? 'Copiar Código' : 'Copiar Código'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+
                   </div>
 
                   {/* Decorative Tree Element */}
@@ -2203,7 +2173,29 @@ export default function App() {
                     </div>
 
                     {/* Stats Summary Bubble */}
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-4">
+                      <div className="bg-black/30 border border-white/5 rounded-2xl p-3.5 flex items-center gap-4">
+                        <div>
+                          <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider block mb-0.5">
+                            {language === 'en' ? 'REVENUE CODE' : language === 'es' ? 'CÓDIGO DE INGRESOS' : 'CÓDIGO DE ENTRADA'}
+                          </span>
+                          <code className="text-sm font-mono font-black text-amber-400 tracking-wider">
+                            {currentUser?.referralCode || 'CARLOS296'}
+                          </code>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            const code = currentUser?.referralCode || 'CARLOS296';
+                            navigator.clipboard.writeText(code);
+                            alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                          }}
+                          className="px-3 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                        >
+                          <Copy size={12} className="text-white/60" />
+                          <span className="hidden sm:inline">{language === 'en' ? 'Copy' : language === 'es' ? 'Copiar' : 'Copiar'}</span>
+                        </button>
+                      </div>
+
                       <div className="bg-white/[0.02] border border-white/5 rounded-2xl px-5 py-3.5 flex flex-col justify-center min-w-[125px]">
                         <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider block mb-1">
                           {language === 'en' ? 'NETWORK COMMISSIONS' : language === 'es' ? 'COMISIONES DE RED' : 'COMISSÕES DE REDE'}
