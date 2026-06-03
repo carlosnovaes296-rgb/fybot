@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Clock, Zap } from 'lucide-react';
 import { Language } from '../types';
 
@@ -14,13 +15,12 @@ function BrazilFlag() {
   );
 }
 
-
-
 interface MarketSessionsProps {
   language: Language;
+  stats?: any;
 }
 
-export function MarketSessions({ language }: MarketSessionsProps) {
+export function MarketSessions({ language, stats }: MarketSessionsProps) {
   const isEn = language === 'en';
   const isEs = language === 'es';
 
@@ -30,32 +30,65 @@ export function MarketSessions({ language }: MarketSessionsProps) {
       ? 'Sesiones de Operación de Mercado'
       : 'Horários de Sessões de Mercado';
 
+  // Manual session toggles
+  const [inMorning, setInMorning] = useState(false);
+  const [inNight, setInNight] = useState(false);
+  const isActive = inMorning || inNight;
+
   // Detect active Brazil trading window in real-time (BRT = UTC-3)
-  const now = new Date();
-  const brtHour = (now.getUTCHours() - 3 + 24) % 24;
-  const brtMin  = now.getUTCMinutes();
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  const brtHour = (currentTime.getUTCHours() - 3 + 24) % 24;
+  const brtMin = currentTime.getUTCMinutes();
   const brtTotal = brtHour * 60 + brtMin;
+  
   // Morning: 10:00–11:59 BRT | Night: 21:00–22:59 BRT
-  const inMorning = brtTotal >= 10 * 60 && brtTotal < 12 * 60;
-  const inNight   = brtTotal >= 21 * 60 && brtTotal < 23 * 60; // 21:00-22:59
-  const isActive  = inMorning || inNight;
+  const isMorningTime = brtTotal >= 10 * 60 && brtTotal < 12 * 60;
+  const isNightTime = brtTotal >= 21 * 60 && brtTotal < 23 * 60; // 21:00-22:59
+
+  // Auto-activate and auto-deactivate logic
+  useEffect(() => {
+    // Check if daily target is reached (systemBlocked or profit >= target)
+    const targetReached = stats?.systemBlocked || 
+      (stats?.dailyProfit !== undefined && stats?.dailyProfitTarget !== undefined && stats.dailyProfit >= stats.dailyProfitTarget);
+
+    if (targetReached) {
+      setInMorning(false);
+      setInNight(false);
+    } else {
+      // Auto-activate when entering the window
+      if (isMorningTime) setInMorning(true);
+      if (isNightTime) setInNight(true);
+    }
+  }, [isMorningTime, isNightTime, stats?.systemBlocked, stats?.dailyProfit, stats?.dailyProfitTarget]);
 
   const sessions = [
     {
+      id: 'morning',
       labelBrt: '10:00 BRT',
       labelUTC: '13:00 UTC',
       icon: '☀️',
       active: inMorning,
+      isCurrentTime: isMorningTime,
+      toggle: () => setInMorning(!inMorning),
       descPt: 'Sessão da Manhã — Abertura Europa/NY',
       descEn: 'Morning Session — Europe/NY Open',
       descEs: 'Sesión Matutina — Apertura Europa/NY',
       globalTimes: 'Portugal 14:00 | Espanha 15:00 | Nova York 09:00'
     },
     {
+      id: 'night',
       labelBrt: '21:00 BRT',
       labelUTC: '00:00 UTC',
       icon: '🌙',
       active: inNight,
+      isCurrentTime: isNightTime,
+      toggle: () => setInNight(!inNight),
       descPt: 'Sessão Noturna — Abertura Ásia/Tóquio',
       descEn: 'Night Session — Asia/Tokyo Open',
       descEs: 'Sesión Nocturna — Apertura Asia/Tokio',
@@ -81,22 +114,25 @@ export function MarketSessions({ language }: MarketSessionsProps) {
       <div className="space-y-3">
         <p className="text-[9px] uppercase tracking-widest font-bold text-white/30 flex items-center gap-1.5">
           <Zap size={10} className="text-yellow-500" />
-          {isEn ? 'FYBOT Operation Windows' : isEs ? 'Ventanas de Operación FYBOT' : 'Janelas de Operação FYBOT'}
+          {isEn ? 'FYBOT Operation Windows (Smart Mode)' : isEs ? 'Ventanas de Operación FYBOT (Modo Inteligente)' : 'Janelas de Operação FYBOT (Modo Inteligente)'}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {sessions.map((s) => (
-            <div
+            <button
               key={s.labelBrt}
-              className={`relative rounded-2xl border p-4 flex flex-col justify-center gap-3 transition-all ${
+              onClick={s.toggle}
+              className={`relative rounded-2xl border p-4 flex flex-col justify-center gap-3 transition-all text-left w-full hover:scale-[1.01] active:scale-[0.99] ${
                 s.active
                   ? 'bg-emerald-500/5 border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.06)]'
-                  : 'bg-white/[0.02] border-white/5'
+                  : s.isCurrentTime 
+                    ? 'bg-white/[0.04] border-white/20 shadow-[0_0_15px_rgba(255,255,255,0.05)]' 
+                    : 'bg-white/[0.02] border-white/5 hover:border-white/10'
               }`}
             >
               {s.active && (
                 <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
               )}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 w-full">
                 <div className="text-2xl shrink-0">{s.icon}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 flex-wrap">
@@ -104,6 +140,11 @@ export function MarketSessions({ language }: MarketSessionsProps) {
                       {s.labelBrt}
                     </span>
                     <span className="text-[14px] font-mono text-emerald-500 font-bold">/ {s.labelUTC}</span>
+                    {s.isCurrentTime && (
+                       <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded-md bg-white/10 text-white/70 uppercase tracking-widest font-bold">
+                         {isEn ? 'Current Time' : isEs ? 'Hora Actual' : 'Horário Atual'}
+                       </span>
+                    )}
                   </div>
                   <p className="text-[15px] text-emerald-400/90 leading-tight mt-1">
                     {isEn ? s.descEn : isEs ? s.descEs : s.descPt}
@@ -119,7 +160,7 @@ export function MarketSessions({ language }: MarketSessionsProps) {
                 {s.globalTimes}
               </div>
 
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -127,10 +168,10 @@ export function MarketSessions({ language }: MarketSessionsProps) {
       {/* Footer note */}
       <p className="text-[14px] text-emerald-400 font-medium leading-relaxed mt-4 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
         {isEn
-          ? '⚡ FYBOT V8 operates only during the two configured Brazil sessions (10:00 BRT and 21:00 BRT). Outside these windows the engine remains on standby.'
+          ? '⚡ FYBOT V8 automatically opens sessions at 10:00 BRT and 21:00 BRT, and will auto-close as soon as the daily target is reached. You can still manually click to toggle.'
           : isEs
-          ? '⚡ FYBOT V8 opera solo durante las dos sesiones configuradas de Brasil (10:00 BRT y 21:00 BRT). Fuera de estas ventanas el motor permanece en espera.'
-          : '⚡ O FYBOT V8 opera exclusivamente nas duas janelas configuradas para o Brasil (10:00 BRT e 21:00 BRT). Fora desses horários o motor permanece em standby.'}
+          ? '⚡ FYBOT V8 abre automáticamente las sesiones a las 10:00 BRT y 21:00 BRT, y se cerrará en cuanto se alcance la meta diaria. Aún puedes activarlas o desactivarlas manualmente.'
+          : '⚡ O FYBOT V8 ativa as janelas automaticamente às 10:00 BRT e 21:00 BRT, e desativa assim que a meta do dia for concluída. Você ainda pode clicar nos painéis para controle manual.'}
       </p>
     </div>
   );

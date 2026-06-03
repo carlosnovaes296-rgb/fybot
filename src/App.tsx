@@ -1563,7 +1563,7 @@ export default function App() {
                 </div>
 
                 {/* Market Sessions — Brazil Trading Windows */}
-                <MarketSessions language={language} />
+                <MarketSessions language={language} stats={stats} />
 
                 {/* Intelligence Status — Enhanced with connection nodes */}
                 <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
