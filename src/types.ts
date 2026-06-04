@@ -73,6 +73,7 @@ export interface Stats {
   timezone?: string;
   antiOvertrading?: boolean;
   systemBlocked?: boolean;
+  blockedUntil?: string | null;
 }
 
 export interface Config {

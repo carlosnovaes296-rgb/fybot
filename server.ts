@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 // import AdmZip from 'adm-zip';
 import fs from 'node:fs';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,7 +153,7 @@ async function startServer() {
         pnlHistory: state.pnlHistory,
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
         logs: state.logs.slice(-20),
-        trades: state.trades.slice(-10).reverse(),
+        trades: state.trades.slice(-4).reverse(),
         activeLicense,
         pendingPayment,
         dailyProfit: Number(state.dailyProfit.toFixed(2)),
@@ -164,7 +165,8 @@ async function startServer() {
         antiOvertrading: state.antiOvertrading,
         systemBlocked: state.systemBlocked,
         accountType: state.accountType,
-        currentSessionTag: state.currentSessionTag || ''
+        currentSessionTag: state.currentSessionTag || '',
+        blockedUntil: state.blockedUntil || null
       });
     } catch (error) {
       res.status(500).json({ error: "Internal Server Error" });
@@ -638,6 +640,67 @@ async function startServer() {
     res.json({ success: true, received: true });
   });
 
+  // Endpoint for manual balance adjustments (Offline/Sync)
+  app.post('/api/balance/adjust', (req, res) => {
+    try {
+      const { userId, balance, equity, accountType } = req.body;
+      const state = getUserState(userId);
+      
+      if (typeof balance === 'number') state.balance = balance;
+      if (typeof equity === 'number') state.equity = equity;
+      if (accountType) state.accountType = accountType;
+      
+      // Add a log entry for the manual adjustment
+      addUserLog(userId, `🛠️ [CONTA ${state.accountType}] Saldo Sincronizado/Ajustado: $${state.balance.toFixed(2)}`);
+      
+      // Also push to PNL history
+      state.pnlHistory.push({ time: new Date().toISOString(), balance: state.balance });
+      if (state.pnlHistory.length > 30) state.pnlHistory.shift();
+
+      res.json({ success: true, balance: state.balance, accountType: state.accountType, equity: state.equity });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Error adjusting balance' });
+    }
+  });
+
+  // Endpoint to actively sync from local MT5 via Python
+  app.post('/api/balance/sync', (req, res) => {
+    const { userId } = req.body;
+    const state = getUserState(userId);
+    
+    exec('python mt5_sync.py', (error, stdout, stderr) => {
+      if (error) {
+        addUserLog(userId, `❌ Erro ao conectar ao MT5 local: ${error.message}`);
+        return res.status(500).json({ success: false, error: 'Failed to execute MT5 sync' });
+      }
+      
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result.success) {
+          state.balance = result.balance;
+          state.equity = result.equity;
+          state.accountType = result.accountType;
+          if (result.history) {
+            state.trades = result.history;
+          }
+          
+          addUserLog(userId, `✅ Sincronização MT5 Concluída: Saldo atualizado para $${state.balance.toFixed(2)} (${state.accountType})`);
+          
+          state.pnlHistory.push({ time: new Date().toISOString(), balance: state.balance });
+          if (state.pnlHistory.length > 30) state.pnlHistory.shift();
+
+          res.json({ success: true, balance: state.balance, equity: state.equity, accountType: state.accountType });
+        } else {
+          addUserLog(userId, `❌ Erro do MT5: ${result.error}`);
+          res.status(500).json({ success: false, error: result.error });
+        }
+      } catch (e: any) {
+        addUserLog(userId, `❌ Falha ao interpretar resposta do MT5: ${e.message}`);
+        res.status(500).json({ success: false, error: 'Invalid response from MT5 sync' });
+      }
+    });
+  });
+
   // Endpoint for users to generate a new license for themselves
   app.post('/api/license/generate', (req, res) => {
     const { userId } = req.body;
@@ -1058,121 +1121,156 @@ async function startServer() {
   setInterval(() => {
     try {
       const now = new Date();
-      const utcH = now.getUTCHours();
-      const utcM = now.getUTCMinutes();
-      const totalMins = utcH * 60 + utcM;
-
-      // Sessions: 13:00-14:59 UTC (10:00-11:59 BRT) / 00:00-01:59 UTC (21:00-22:59 BRT)
-      const isMorning = totalMins >= 780 && totalMins <= 899;
-      const isNight = totalMins >= 0 && totalMins <= 119;
-      const activeSession = isMorning ? 'MORNING' : (isNight ? 'NIGHT' : null);
+      // Reset diário baseado no dia UTC
+      const currentDayTag = now.toISOString().split('T')[0];
 
       Object.keys(userStates).forEach(uId => {
         const state = userStates[uId];
         
-        // Auto-reset when session switches
-        if (state.currentSessionTag !== activeSession) {
-          state.currentSessionTag = activeSession;
-          state.dailyProfit = 0;
-          state.systemBlocked = false;
-          state.botRunning = true;
+        // Auto-reset when day switches
+        if (state.currentSessionTag !== currentDayTag) {
+          state.currentSessionTag = currentDayTag;
         }
 
-        if (!state.botRunning || state.systemBlocked || !activeSession) return;
+        if (state.systemBlocked && state.blockedUntil) {
+          if (new Date() >= new Date(state.blockedUntil)) {
+             state.systemBlocked = false;
+             state.blockedUntil = null;
+             state.dailyProfit = 0;
+             addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/21h). Bot pronto para operar.");
+          }
+        }
 
-        config.symbols.forEach(symbol => {
-          const smcScore = Math.floor(Math.random() * 100);
-          const momScore = Math.floor(Math.random() * 100);
-          const smcDir = Math.random() > 0.5 ? "BUY" : "SELL";
-          const momDir = Math.random() > 0.5 ? "BUY" : "SELL";
+        if (!state.botRunning || state.systemBlocked) return;
 
-          const aiBias = Math.random() > 0.7 ? (Math.random() > 0.5 ? "BULLISH" : "BEARISH") : "NEUTRAL";
+        // Trava para permitir no máximo 4 ordens abertas simultâneas
+        const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+        if (openTrades.length >= 4) return;
 
-          let score = (smcScore * config.strategyWeights.smc) + (momScore * config.strategyWeights.momentum);
-          if (aiBias !== "NEUTRAL") score += config.strategyWeights.ai;
+        // Fetch real market signals from MT5
+        exec(`python mt5_signals.py ${config.symbols.join(" ")}`, (sigErr, sigOut) => {
+          if (sigErr) return;
+          try {
+            const sigRes = JSON.parse(sigOut.trim());
+            if (!sigRes.success || !sigRes.data) return;
 
-          const direction = smcDir === momDir ? smcDir : null;
+            config.symbols.forEach(symbol => {
+              const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+              if (currentOpenTrades.length >= 4) return;
+              if (currentOpenTrades.some((t: any) => t.symbol === symbol)) return; // Evitar abrir ordens no mesmo ativo
+
+              const symData = sigRes.data[symbol];
+              if (!symData) return;
+
+              const smcScore = symData.smcScore;
+              const momScore = symData.momScore;
+              const smcDir = symData.smcDir;
+              const momDir = symData.momDir;
+
+              const aiBias = Math.random() > 0.7 ? (Math.random() > 0.5 ? "BULLISH" : "BEARISH") : "NEUTRAL";
+
+              let score = (smcScore * config.strategyWeights.smc) + (momScore * config.strategyWeights.momentum);
+              if (aiBias !== "NEUTRAL") score += (100 * config.strategyWeights.ai);
+
+              const direction = smcDir === momDir ? smcDir : null;
 
           if (score >= config.minScore && direction) {
-            const lot = 0.0001;
+            const lot = 0.01; // Atualizado para 0.01 a pedido do usuário
 
-            const id = Math.random().toString(36).substr(2, 9);
-            const trade = {
-              id,
-              symbol,
-              lot,
-              type: direction,
-              openPrice: 1.1 + Math.random() * 0.1,
-              time: new Date().toISOString(),
-              status: 'OPEN'
-            };
-
-            state.trades.push(trade);
-            addUserLog(uId, `🎯 SIGNAL: ${symbol} | Score: ${score.toFixed(1)} | ${direction}`);
-
-            setTimeout(() => {
-              const finishedTrade = state.trades.find((t: any) => t.id === id);
-              if (finishedTrade) {
-                if (state.systemBlocked) {
-                  finishedTrade.status = 'CLOSED';
-                  finishedTrade.profit = 0.00;
-                  finishedTrade.closeTime = new Date().toISOString();
-                  return;
-                }
-                const isWin = Math.random() > 0.45;
-                const profit = isWin ? (Math.random() * 0.8 + 0.2) : -1.00;
-                finishedTrade.status = 'CLOSED';
-                finishedTrade.profit = Number(profit.toFixed(2));
-                finishedTrade.closeTime = new Date().toISOString();
-                state.balance += profit;
-                state.equity = state.balance;
-                state.pnlHistory.push({ time: new Date().toISOString(), balance: Number(state.balance.toFixed(2)) });
-                if (state.pnlHistory.length > 30) state.pnlHistory.shift();
-
-                // Dynamically calculate daily profit target as 2% of updated balance
-                state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
-
-                addUserLog(uId, `${profit >= 0 ? '✅' : '❌'} CLOSED ${symbol}: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
-
-                if (!state.systemBlocked) {
-                  state.dailyProfit += profit;
-                  const startingDailyBalance = state.balance - state.dailyProfit;
-                  const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
-
-                  if (state.dailyProfit >= state.dailyProfitTarget) {
-                    state.systemBlocked = true;
-                    state.botRunning = false;
-                    // Force close any remaining open target trades
-                    state.trades.forEach((t: any) => {
-                      if (t.status === 'OPEN') {
-                        t.status = 'CLOSED';
-                        t.profit = 0.00;
-                        t.closeTime = new Date().toISOString();
-                      }
-                    });
-                    addUserLog(uId, "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!");
-                    addUserLog(uId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro.");
-                    addUserLog(uId, "🛡️ Proteção anti-overtrading ativa. VPS Protegido.");
-                  } else if (state.dailyProfit <= -dailyLossLimit) {
-                    state.systemBlocked = true;
-                    state.botRunning = false;
-                    // Force close any remaining open target trades
-                    state.trades.forEach((t: any) => {
-                      if (t.status === 'OPEN') {
-                        t.status = 'CLOSED';
-                        t.profit = 0.00;
-                        t.closeTime = new Date().toISOString();
-                      }
-                    });
-                    addUserLog(uId, "🔴 [LIMITE DE PERDA] LIMITE DE PERDA DIÁRIA (10%) ATINGIDO!");
-                    addUserLog(uId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger seu capital.");
-                    addUserLog(uId, "🛡️ VPS interrompeu todas as ordens ativas e bloqueou novas operações.");
-                  } else {
-                    addUserLog(uId, `📈 Lucro diário: $${state.dailyProfit.toFixed(2)} / $${state.dailyProfitTarget.toFixed(2)} | Limite Perda: -$${dailyLossLimit.toFixed(2)}`);
-                  }
-                }
+            exec(`python mt5_open.py ${symbol} ${direction} ${lot}`, (err, stdout) => {
+              if (err) {
+                addUserLog(uId, `❌ Erro ao abrir ordem real: ${err.message}`);
+                return;
               }
-            }, 5000 + Math.random() * 10000);
+              try {
+                const res = JSON.parse(stdout.trim());
+                if (res.success) {
+                  const trade = {
+                    id: res.ticket,
+                    symbol,
+                    lot,
+                    type: direction,
+                    openPrice: res.price,
+                    time: new Date().toISOString(),
+                    status: 'OPEN'
+                  };
+
+                  state.trades.push(trade);
+                  addUserLog(uId, `🎯 ORDEM REAL ABERTA: ${symbol} | Ticket: ${res.ticket} | ${direction}`);
+
+                  // The trade will be closed by MT5's SL/TP or manual intervention.
+                  // We removed the artificial setTimeout close.
+                } else {
+                  addUserLog(uId, `❌ Falha ao abrir ordem real: ${res.error}`);
+                }
+              } catch(e) {
+                addUserLog(uId, `❌ Falha de comunicacao com MT5`);
+              }
+            });
+          }
+        });
+          } catch (e) {
+            console.error("Signal fetch error:", e);
+          }
+        }); // End of exec mt5_signals.py
+
+        // Continuously sync MT5 to ensure dashboard matches reality perfectly
+        exec('python mt5_sync.py', (serr, sstdout) => {
+          if (!serr) {
+            try {
+              const sres = JSON.parse(sstdout.trim());
+              if (sres.success) {
+                 const oldBalance = state.balance;
+                 state.balance = sres.balance;
+                 state.equity = sres.equity;
+                 
+                 // Real MT5 trades mirror
+                 if (sres.history) {
+                   state.trades = sres.history;
+                 }
+                 
+                 // Update daily profit tracking
+                 const currentOpenPositions = state.trades.filter((t: any) => t.status === 'OPEN').length;
+                 if (currentOpenPositions === 0 && state.balance !== oldBalance) {
+                    const profit = state.balance - oldBalance;
+                    state.dailyProfit += profit;
+                    state.pnlHistory.push({ time: new Date().toISOString(), balance: state.balance });
+                    if (state.pnlHistory.length > 30) state.pnlHistory.shift();
+                    
+                    const startingDailyBalance = state.balance - state.dailyProfit;
+                    const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+                    state.dailyProfitTarget = Number((startingDailyBalance * 0.01).toFixed(2));
+
+                    if (state.dailyProfit >= state.dailyProfitTarget) {
+                      state.systemBlocked = true;
+                      state.botRunning = false;
+                      const now = new Date();
+                      const target = new Date(now);
+                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+                      state.blockedUntil = target.toISOString();
+                      
+                      addUserLog(uId, "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!");
+                      addUserLog(uId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro.");
+                    } else if (state.dailyProfit <= -dailyLossLimit) {
+                      state.systemBlocked = true;
+                      state.botRunning = false;
+                      const now = new Date();
+                      const target = new Date(now);
+                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+                      state.blockedUntil = target.toISOString();
+
+                      addUserLog(uId, "🔴 [LIMITE DE PERDA] LIMITE DE PERDA DIÁRIA (10%) ATINGIDO!");
+                      addUserLog(uId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger seu capital.");
+                    } else {
+                      addUserLog(uId, `📈 Lucro diário: $${state.dailyProfit.toFixed(2)} / $${state.dailyProfitTarget.toFixed(2)} | Limite Perda: -$${dailyLossLimit.toFixed(2)}`);
+                    }
+                 }
+              }
+            } catch (e) {}
           }
         });
       });

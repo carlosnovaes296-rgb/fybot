@@ -77,7 +77,6 @@ import {
 import { translations } from './translations';
 import { safeFetch } from './utils';
 import { LicenseCountdown, LicenseHeaderButton } from './components/LicenseCountdown';
-import { MarketSessions } from './components/MarketSessions';
 import { NavItem } from './components/NavItem';
 import { StatCard } from './components/StatCard';
 import { StrategyGauge } from './components/StrategyGauge';
@@ -329,9 +328,12 @@ export default function App() {
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
   const [selectedInterval, setSelectedInterval] = useState('5M');
+  const [timeLeft, setTimeLeft] = useState<string>('');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [manualBalanceInput, setManualBalanceInput] = useState('');
+  const [manualAccountType, setManualAccountType] = useState('REAL');
 
   const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
@@ -424,6 +426,28 @@ export default function App() {
       fetchPaymentDestination();
     }
   }, [showPaymentModal]);
+
+  useEffect(() => {
+    if (stats.systemBlocked && stats.blockedUntil) {
+      const interval = setInterval(() => {
+        const now = new Date().getTime();
+        const target = new Date(stats.blockedUntil!).getTime();
+        const diff = target - now;
+        if (diff <= 0) {
+          setTimeLeft('');
+          clearInterval(interval);
+        } else {
+          const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diff % (1000 * 60)) / 1000);
+          setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setTimeLeft('');
+    }
+  }, [stats.systemBlocked, stats.blockedUntil]);
 
   const fetchAdminData = async () => {
     if (!isLoggedIn || currentUser?.role !== 'ADMIN') return;
@@ -643,6 +667,38 @@ export default function App() {
     }
   };
 
+  const handleManualAdjust = async () => {
+    if (!currentUser || !manualBalanceInput) return;
+    setLoading(true);
+    try {
+      const balanceVal = parseFloat(manualBalanceInput);
+      if (isNaN(balanceVal)) return;
+
+      const res = await fetch('/api/balance/adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: currentUser.id, 
+          balance: balanceVal,
+          equity: balanceVal,
+          accountType: manualAccountType
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setManualBalanceInput('');
+        fetchStatus();
+        alert(language === 'en' ? "Balance adjusted successfully!" : "Saldo ajustado com sucesso!");
+      } else {
+        alert(data.error || "Update failed");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateProfile = async () => {
     if (!currentUser) return;
     setLoading(true);
@@ -840,6 +896,19 @@ export default function App() {
 
     setLoading(true);
     try {
+      if (!stats.botRunning) {
+        // Auto-sync balance directly from broker when starting the bot
+        try {
+          await fetch('/api/balance/sync', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser?.id }) 
+          });
+        } catch (syncErr) {
+          console.error("Failed to auto-sync balance", syncErr);
+        }
+      }
+
       const res = await fetch('/api/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -851,6 +920,7 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setStats(prev => ({ ...prev, botRunning: data.botRunning }));
+        fetchStatus();
       } else if (data.error === 'ACTIVE_LICENSE_REQUIRED') {
         setActiveTab('plans');
       } else {
@@ -1075,7 +1145,6 @@ export default function App() {
           )}
           <NavItem icon={<History size={20} />} label={t.sidebar.history} active={activeTab === 'history'} onClick={() => { setActiveTab('history'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
-          <NavItem icon={<Download size={20} />} label={t.sidebar.installation} active={activeTab === 'installation'} onClick={() => { setActiveTab('installation'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
           {currentUser?.role === 'ADMIN' && (
             <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
@@ -1263,6 +1332,31 @@ export default function App() {
               <span className="text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
+            <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const res = await fetch('/api/balance/sync', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser?.id }) 
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    fetchStatus();
+                    alert(language === 'en' ? "Balance synced successfully with Exness (MT5)!" : "Saldo sincronizado com sucesso via MT5 (Exness)!");
+                  } else {
+                    alert("Sync error: " + (data.error || "Unknown"));
+                  }
+                } catch(e) { console.error(e); }
+                finally { setLoading(false); }
+              }}
+              disabled={loading}
+              className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-2 disabled:opacity-50"
+            >
+              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+              <span className="hidden sm:inline">SYNC MT5</span>
+            </button>
             <button 
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
@@ -1300,6 +1394,26 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
+                {stats.systemBlocked && stats.blockedUntil && (
+                   <motion.div 
+                     initial={{ opacity: 0, scale: 0.95 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     className="bg-[#0f0f12] border border-yellow-500/20 rounded-3xl p-8 text-center text-yellow-500 mb-8 relative overflow-hidden"
+                   >
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent opacity-50"></div>
+                      <Lock size={40} className="mx-auto mb-4 animate-pulse opacity-80" />
+                      <h2 className="text-2xl font-bold mb-2">META DIÁRIA ATINGIDA</h2>
+                      <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.</p>
+                      
+                      <div className="inline-flex flex-col items-center bg-black/40 border border-yellow-500/10 rounded-2xl px-10 py-6">
+                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">PRÓXIMA SESSÃO EM</span>
+                        <div className="text-5xl font-black font-mono tracking-wider tabular-nums text-white">
+                          {timeLeft || '00:00:00'}
+                        </div>
+                      </div>
+                   </motion.div>
+                )}
+
                 {/* Top Grid — Enhanced StatCards with sparklines */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <StatCard 
@@ -1344,21 +1458,7 @@ export default function App() {
                         {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
                       </div>
                     </div>
-                  ) : (
-                    <div 
-                      onClick={() => setActiveTab('installation')}
-                      className="bg-blue-500/10 border border-blue-500/20 rounded-3xl p-6 cursor-pointer hover:bg-blue-500/20 transition-all group relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <Download size={48} className="text-blue-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">{t.dashboard.stepByStep}</p>
-                      <p className="text-lg font-bold text-white mb-2">{t.dashboard.installV8}</p>
-                      <div className="flex items-center gap-1 text-[10px] text-blue-300 font-bold uppercase">
-                        {t.dashboard.fullGuide} <ArrowRight size={10} />
-                      </div>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
@@ -1562,9 +1662,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Market Sessions — Brazil Trading Windows */}
-                <MarketSessions language={language} stats={stats} />
-
                 {/* Intelligence Status — Enhanced with connection nodes */}
                 <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
                   {/* Animated grid bg */}
@@ -1704,7 +1801,7 @@ export default function App() {
                             </tr>
                           );
                           const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(t.profit!)), 1);
-                          return filtered.map((trade, idx) => {
+                          return filtered.slice(0, 4).map((trade, idx) => {
                             const isLatestTrade = idx === 0;
                             const profitPct = trade.profit ? (Math.abs(trade.profit) / maxAbsProfit) * 100 : 0;
                             const isProfit = (trade.profit ?? 0) >= 0;
@@ -3091,229 +3188,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'installation' && (
-              <motion.div 
-                key="installation"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="max-w-4xl mx-auto space-y-8 pb-20"
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
-                      <Download className="text-blue-400" size={24} />
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-black text-white tracking-tight uppercase font-['Orbitron']">⚡ {language === 'en' ? 'FYBOT V8 EA Installation Guide' : language === 'es' ? 'Guía de Instalación FYBOT V8 EA' : 'Guia de Instalação FYBOT V8 EA'}</h1>
-                      <p className="text-white/40 text-sm">{language === 'en' ? 'Follow the steps below to configure your FYBOT v8 robot.' : language === 'es' ? 'Siga los pasos a continuación para configurar su robot FYBOT v8.' : 'Siga os passos abaixo para configurar seu robô FYBOT v8.'}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setActiveTab('dashboard')} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 hover:bg-white/10 hover:text-white transition-all">
-                    <XCircle size={20} />
-                  </button>
-                </div>
-
-                <div className="bg-gradient-to-b from-blue-900/20 to-blue-900/5 border-2 border-dashed border-blue-500/40 rounded-3xl p-10 text-center space-y-6">
-                  <h2 className="text-3xl font-black text-white font-['Orbitron']">🚀 Passo Inicial: Baixar seu Robô</h2>
-                  <p className="text-blue-200/60 text-sm">Versão v8 Professional — Compatível para MetaTrader 5</p>
-                  <div className="flex flex-col md:flex-row gap-4 justify-center relative">
-                    {licenseCopied && (
-                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg animate-bounce whitespace-nowrap">
-                        ✓ Licença copiada para a área de transferência!
-                      </div>
-                    )}
-                    <a 
-                      href="/downloads/FYBOT_V8_INSTITUTIONAL.mq5" 
-                      download="FYBOT_V8_INSTITUTIONAL.mq5"
-                      onClick={() => {
-                        if (stats?.activeLicense?.key) {
-                          navigator.clipboard.writeText(stats.activeLicense.key);
-                          setLicenseCopied(true);
-                          setTimeout(() => setLicenseCopied(false), 3000);
-                        }
-                      }}
-                      className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-400 to-blue-600 px-8 py-4 rounded-2xl font-bold text-white shadow-lg shadow-blue-500/30 hover:scale-105 transition-all text-center justify-center"
-                    >
-                      <Download size={20} /> DOWNLOAD .MQ5 (CÓDIGO FONTE)
-                    </a>
-                    <a 
-                      href="/downloads/FYBOT_V8_COMPLETO.zip" 
-                      download="FYBOT_V8_COMPLETO.zip"
-                      onClick={() => {
-                        if (stats?.activeLicense?.key) {
-                          navigator.clipboard.writeText(stats.activeLicense.key);
-                          setLicenseCopied(true);
-                          setTimeout(() => setLicenseCopied(false), 3000);
-                        }
-                      }}
-                      className="inline-flex items-center gap-3 bg-white/10 border border-white/20 px-8 py-4 rounded-2xl font-bold text-white hover:bg-white/20 transition-all text-center justify-center"
-                    >
-                      <Download size={20} /> DOWNLOAD PASTA COMPLETA (.ZIP)
-                    </a>
-                  </div>
-                </div>
-
-                <div className="grid gap-6">
-                  <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">1</div>
-                      <h3 className="text-lg font-bold text-blue-400">Copiar o EA para o MetaTrader 5</h3>
-                    </div>
-                    <ul className="space-y-4 text-blue-100/70 text-sm">
-                      <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold mt-0.5">1.</span>
-                        <span>Dê dois cliques no arquivo <strong>FYBOT_V8_INSTITUTIONAL.mq5</strong> que você baixou. Ele abrirá no MetaEditor.</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold mt-0.5">2.</span>
-                        <span>No MetaEditor, clique no botão <strong>Compilar</strong> (ou aperte F7). Isso criará o arquivo .ex5 no seu MetaTrader.</span>
-                      </li>
-                      <li className="flex items-start gap-3">
-                        <span className="text-blue-500 font-bold mt-0.5">3.</span>
-                        <span>Reinicie o MetaTrader 5 (se necessário).</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">2</div>
-                      <h3 className="text-lg font-bold text-blue-400">Autorizar WebRequest (OBRIGATÓRIO)</h3>
-                    </div>
-                    <ol className="list-decimal list-inside space-y-3 text-sm text-blue-100/70 ml-4">
-                      <li>No MT5 vá em <span className="font-bold text-white">Ferramentas → Opções → Expert Advisors</span></li>
-                      <li>Marque <span className="font-bold text-white">"Permitir WebRequest para os seguintes URLs"</span></li>
-                      <li>Adicione o endereço abaixo:</li>
-                    </ol>
-                  <div className="flex justify-between items-center bg-[#07111f] border border-blue-500/20 rounded-xl p-4 gap-4">
-                      <code className="text-blue-400 font-mono text-xs overflow-hidden text-ellipsis whitespace-nowrap">
-                        {window.location.host}/api
-                      </code>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${window.location.origin}/api`);
-                          alert(language === 'en' ? 'URL copied!' : language === 'es' ? '¡URL copiada!' : 'URL copiada!');
-                        }}
-                        className="bg-blue-500 text-black px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-400 transition-all shrink-0"
-                      >
-                         {language === 'en' ? 'Copy' : language === 'es' ? 'Copiar' : 'Copiar'}
-                      </button>
-                    </div>
-                    <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl text-amber-500 flex items-start gap-3">
-                      <AlertTriangle className="shrink-0 mt-0.5" size={16} />
-                      <p className="text-xs font-medium">⚠️ Sem essa etapa, o EA não consegue validar licença nem conectar.</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">3</div>
-                      <h3 className="text-lg font-bold text-blue-400">Ativar e Aplicar</h3>
-                    </div>
-                    <ol className="list-decimal list-inside space-y-3 text-sm text-blue-100/70 ml-4">
-                      <li>Certifique-se que o botão <span className="font-bold text-emerald-400">Algo Trading</span> esteja VERDE.</li>
-                      <li>Arraste o FYBOT_V8 para o gráfico.</li>
-                      <li>Na janela aberta vá até <span className="font-bold text-white">Inputs</span>.</li>
-                    </ol>
-                  </div>
-
-                  <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">4</div>
-                      <h3 className="text-lg font-bold text-blue-400">Configurar os Inputs</h3>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead>
-                          <tr className="border-b border-white/5 text-blue-400">
-                            <th className="py-3 px-2 uppercase text-[10px] font-bold tracking-widest">Input</th>
-                            <th className="py-3 px-2 uppercase text-[10px] font-bold tracking-widest">Valor</th>
-                            <th className="py-3 px-2 uppercase text-[10px] font-bold tracking-widest">Descrição</th>
-                          </tr>
-                        </thead>
-                        <tbody className="text-blue-100/60 font-mono">
-                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">LICENSE_KEY</td>
-                            <td className="py-3 px-2 text-white flex items-center gap-2">
-                              {stats.activeLicense ? (
-                                <span className="text-emerald-400 font-bold tracking-wider">{stats.activeLicense.key}</span>
-                              ) : (
-                                <>
-                                  <span className="text-white/40 font-semibold text-xs">SEU-CODIGO-DE-LICENCA</span>
-                                  <button 
-                                    onClick={async () => {
-                                      if (!currentUser?.id) return;
-                                      try {
-                                        const res = await fetch('/api/license/generate', {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ userId: currentUser.id })
-                                        });
-                                        if (res.ok) await fetchStatus();
-                                      } catch (err) {
-                                        console.error(err);
-                                      }
-                                    }}
-                                    className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded text-xs font-bold transition-colors ml-2"
-                                  >
-                                    GERAR LICENÇA
-                                  </button>
-                                </>
-                              )}
-                            </td>
-                            <td className="py-3 px-2 italic">Sua chave pessoal</td>
-                          </tr>
-                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">API_URL</td>
-                            <td className="py-3 px-2 text-white">{window.location.origin}/api</td>
-                            <td className="py-3 px-2 italic">Endereço do servidor</td>
-                          </tr>
-                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">Daily_Target</td>
-                            <td className="py-3 px-2 text-white">1.0</td>
-                            <td className="py-3 px-2 italic">% da banca ao dia</td>
-                          </tr>
-                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">Fixed_Loss_Trade</td>
-                            <td className="py-3 px-2 text-white">1.00</td>
-                            <td className="py-3 px-2 italic">Risco travado em -$1.00</td>
-                          </tr>
-                          <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-2">Dynamic_TP_Range</td>
-                            <td className="py-3 px-2 text-white">0.20-1.00</td>
-                            <td className="py-3 px-2 italic">Lucro por ordem ($)</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0b1727] border border-blue-500/10 rounded-2xl p-6 space-y-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-black font-bold">!</div>
-                      <h3 className="text-lg font-bold text-blue-400">Orientações Importantes</h3>
-                    </div>
-                    <ul className="list-disc list-inside space-y-3 text-sm text-blue-100/70 ml-4 marker:text-blue-500">
-                      <li>Configure seu EA apenas em conta MT5.</li>
-                      <li>Adicione o domínio na lista de URLs permitidas.</li>
-                      <li>Utilize VPS para melhor estabilidade.</li>
-                      <li>Insira sua licença exatamente como recebida.</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="flex gap-4">
-                  <button onClick={() => setActiveTab('dashboard')} className="flex-1 py-4 bg-white/5 border border-white/10 text-blue-200 rounded-2xl font-bold hover:bg-white/10 transition-all">
-                    Fechar Guia
-                  </button>
-                  <button onClick={() => window.print()} className="flex-1 py-4 bg-gradient-to-r from-blue-400 to-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/20 hover:scale-105 transition-all">
-                    Imprimir Guia
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
             {activeTab === 'settings' && config && (
               <motion.div 
                 key="settings"
@@ -3383,6 +3257,49 @@ export default function App() {
                       className="flex-1 py-4 bg-white text-black rounded-2xl font-bold text-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 shadow-xl shadow-white/5"
                     >
                       {loading ? <RefreshCw className="animate-spin" size={18} /> : <><Save size={18} /> {t.settings.updateProfileBtn}</>}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
+                       Ajuste Manual de Saldo (Offline)
+                    </h2>
+                    <p className="text-sm text-white/40 mt-1">Utilize para forçar um saldo no painel quando o MT5 da Exness estiver desconectado.</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Novo Saldo (USD)</label>
+                        <input 
+                          type="number" 
+                          value={manualBalanceInput}
+                          onChange={(e) => setManualBalanceInput(e.target.value)}
+                          placeholder="Ex: 5000.00"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Tipo de Conta</label>
+                        <select 
+                          value={manualAccountType}
+                          onChange={(e) => setManualAccountType(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none appearance-none"
+                        >
+                          <option value="REAL" className="bg-[#0f0f12]">CONTA REAL</option>
+                          <option value="DEMO" className="bg-[#0f0f12]">CONTA DEMO</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-4 flex gap-4">
+                    <button 
+                      onClick={handleManualAdjust}
+                      disabled={loading || !manualBalanceInput}
+                      className="flex-1 py-4 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-2xl font-bold text-sm hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/5 disabled:opacity-50"
+                    >
+                      {loading ? <RefreshCw className="animate-spin" size={18} /> : <><RefreshCw size={18} /> Ajustar Saldo</>}
                     </button>
                   </div>
                 </div>
