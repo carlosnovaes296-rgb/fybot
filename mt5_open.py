@@ -35,21 +35,41 @@ def execute_trade(symbol, action, lot):
         # Determine order type and price
         point = symbol_info.point
         digits = symbol_info.digits
+        
+        # Parâmetros: Stop Loss de 0.20% (ajustado de 5% que estava muito longo) e Take Profit de 0.10%
+        sl_pct = 0.002
+        tp_pct = 0.001
+        
         # Ensure we are outside the minimum stops level
         min_stops = symbol_info.trade_stops_level
-        sl_points = max(500, min_stops + 50)
-        tp_points = max(1000, min_stops + 100)
+        min_distance = (min_stops + 10) * point
         
         if action.upper() == "BUY":
             order_type = mt5.ORDER_TYPE_BUY
             price = mt5.symbol_info_tick(symbol).ask
-            sl = round(price - (sl_points * point), digits)
-            tp = round(price + (tp_points * point), digits)
+            
+            raw_sl = price - (price * sl_pct)
+            raw_tp = price + (price * tp_pct)
+            
+            # Fallback de segurança contra Error 10016
+            if price - raw_sl < min_distance: raw_sl = price - min_distance
+            if raw_tp - price < min_distance: raw_tp = price + min_distance
+            
+            sl = round(raw_sl, digits)
+            tp = round(raw_tp, digits)
         else:
             order_type = mt5.ORDER_TYPE_SELL
             price = mt5.symbol_info_tick(symbol).bid
-            sl = round(price + (sl_points * point), digits)
-            tp = round(price - (tp_points * point), digits)
+            
+            raw_sl = price + (price * sl_pct)
+            raw_tp = price - (price * tp_pct)
+            
+            # Fallback de segurança contra Error 10016
+            if raw_sl - price < min_distance: raw_sl = price + min_distance
+            if price - raw_tp < min_distance: raw_tp = price - min_distance
+            
+            sl = round(raw_sl, digits)
+            tp = round(raw_tp, digits)
             
         # Ensure volume is valid for the broker
         volume = float(lot)

@@ -45,9 +45,9 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (1% da Banca)",
-    lossValue: "Limite de Perda (10% da Banca)",
-    currentProfit: "Lucro de Hoje",
+    targetValue: "Meta Diária (2% da Banca)",
+    lossValue: "Limite de Perda (5% da Banca)",
+    currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
     resetDesc: "Liberar operações e zerar ciclo diário",
     simulateProfit: "Testar Ganho (+$50)",
@@ -79,9 +79,9 @@ const targetTranslations = {
   en: {
     title: "SMART DAILY TARGET",
     subtitle: "V8 PRO SAFETY GATE - Advanced Capital Protection",
-    targetValue: "Daily Target (1% of Bankroll)",
-    lossValue: "Loss Limit (10% of Bankroll)",
-    currentProfit: "Today's Profit",
+    targetValue: "Daily Target (2% of Bankroll)",
+    lossValue: "Loss Limit (5% of Bankroll)",
+    currentProfit: "Today's Profit (Real-time)",
     resetManual: "Operational Reset",
     resetDesc: "Release operations and reset daily cycle",
     simulateProfit: "Simulate Gain (+$50)",
@@ -113,9 +113,9 @@ const targetTranslations = {
   es: {
     title: "META DIARIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Protección de Capital Avanzada",
-    targetValue: "Meta Diaria (1% de la Banca)",
-    lossValue: "Límite de Pérdida (10% de la Banca)",
-    currentProfit: "Ganancia de Hoy",
+    targetValue: "Meta Diaria (2% de la Banca)",
+    lossValue: "Límite de Pérdida (5% de la Banca)",
+    currentProfit: "Ganancia de Hoy (En Tiempo Real)",
     resetManual: "Reajuste Operativo",
     resetDesc: "Desbloquear operaciones y reiniciar ciclo diario",
     simulateProfit: "Simular Ganancia (+$50)",
@@ -150,7 +150,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.01) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -311,7 +311,8 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     }
   };
 
-  const pct = Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.01) || 200)) * 100));
+  const realTimeProfit = (stats.dailyProfit || 0) + ((stats.equity || 0) - (stats.balance || 0));
+  const pct = Math.min(100, Math.max(0, (realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -372,7 +373,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   exit={{ opacity: 0, scale: 0.98 }}
                   className="space-y-6 py-4 flex flex-col justify-between h-full relative z-10"
                 >
-                  {((stats.dailyProfit || 0) < 0) ? (
+                  {realTimeProfit < 0 ? (
                     // DRAWDOWN / DAILY LOSS HIT RED WARNING STATE
                     <>
                       <div className="flex items-start justify-between">
@@ -398,14 +399,14 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div>
                           <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-red-400 tracking-tight">
-                            -${Math.abs(stats.dailyProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            -${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </h4>
                         </div>
                         {isAdmin && (
                           <div className="text-right">
                             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.lossValue}</p>
                             <h5 className="text-xl font-mono font-bold text-white/80">
-                              -${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              -${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h5>
                           </div>
                         )}
@@ -448,7 +449,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div>
                           <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-emerald-400 tracking-tight">
-                            +${stats.dailyProfit?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {realTimeProfit >= 0 ? '+' : ''}${realTimeProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </h4>
                         </div>
                         {isAdmin && (
@@ -521,9 +522,9 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
                     <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.currentProfit}</p>
-                      <span className={`text-2xl font-mono font-black ${(stats.dailyProfit || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
-                        {(stats.dailyProfit || 0) >= 0 ? '+' : ''}${stats.dailyProfit?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || "$0.00"}
+                        {realTimeProfit >= 0 ? '+' : ''}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </span>
                     </div>
 
@@ -532,13 +533,13 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.01) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
                           <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1 font-bold">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
-                            -${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            -${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </>
@@ -608,7 +609,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       onChange={(e) => setTargetVal(parseInt(e.target.value) || 0)}
                       min="10"
                       max="100000"
-                      placeholder={String(Math.round(stats.balance * 0.01))}
+                      placeholder={String(Math.round(stats.balance * 0.02))}
                       className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
                     />
                   </div>

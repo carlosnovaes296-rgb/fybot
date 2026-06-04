@@ -55,25 +55,26 @@ def calculate_signals(symbols):
             
         real_sym = found_symbol
         
-        # Get last 50 candles of M15
-        rates = mt5.copy_rates_from_pos(real_sym, mt5.TIMEFRAME_M15, 0, 50)
+        # Get last 50 candles of M5 for faster reaction to market drops
+        rates = mt5.copy_rates_from_pos(real_sym, mt5.TIMEFRAME_M5, 0, 50)
         if rates is None or len(rates) < 50:
             continue
             
         close_prices = [float(r[4]) for r in rates] # r[4] is close price
         current_price = close_prices[-1]
         
-        ema20 = calc_ema(close_prices[-20:], 20)
-        ema50 = calc_ema(close_prices[-50:], 50)
+        # Use faster EMAs (9 and 21) to catch sudden drops quickly
+        ema9 = calc_ema(close_prices[-9:], 9)
+        ema21 = calc_ema(close_prices[-21:], 21)
         
-        if ema20 > ema50 and current_price > ema20:
+        if ema9 > ema21 and current_price > ema9:
             smc_dir = "BUY"
             smc_score = 85.0
-        elif ema20 < ema50 and current_price < ema20:
+        elif ema9 < ema21 and current_price < ema9:
             smc_dir = "SELL"
             smc_score = 85.0
         else:
-            smc_dir = "BUY" if current_price > ema50 else "SELL"
+            smc_dir = "BUY" if current_price > ema21 else "SELL"
             smc_score = 45.0
             
         rsi = calc_rsi(close_prices, 14)

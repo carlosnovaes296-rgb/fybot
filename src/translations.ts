@@ -42,8 +42,8 @@ export const translations = {
     },
     dashboard: {
       balance: "ACCOUNT BALANCE (REAL / DEMO)",
-      dailyTargetLabel: "Daily Target (1% of Bankroll)",
-      dailyLossLabel: "Daily Loss Limit (10% of Bankroll)",
+      dailyTargetLabel: "Daily Target (2% of Bankroll)",
+      dailyLossLabel: "Daily Loss Limit (5% of Bankroll)",
       dailyProfitLabel: "Today's Profit",
       activeTrades: "Active Positions",
       winrate: "Winrate",
@@ -214,8 +214,8 @@ export const translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diária (1% da Banca)",
-      dailyLossLabel: "Limite de Perda Diária (10% da Banca)",
+      dailyTargetLabel: "Meta Diária (2% da Banca)",
+      dailyLossLabel: "Limite de Perda Diária (5% da Banca)",
       dailyProfitLabel: "Lucro de Hoje",
       activeTrades: "Posições Ativas",
       winrate: "Taxa de Acerto",
@@ -386,8 +386,8 @@ export const translations = {
     },
     dashboard: {
       balance: "SALDO (REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (1% de la Banca)",
-      dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
+      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
+      dailyLossLabel: "Límite de Pérdida Diaria (5% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
       winrate: "Tasa de Acierto",

@@ -1143,7 +1143,7 @@ export default function App() {
               <NavItem icon={<BarChart3 size={20} />} label={t.sidebar.analytics} active={activeTab === 'analytics'} onClick={() => { setActiveTab('analytics'); setIsMobileMenuOpen(false); }} />
             </>
           )}
-          <NavItem icon={<History size={20} />} label={t.sidebar.history} active={activeTab === 'history'} onClick={() => { setActiveTab('history'); setIsMobileMenuOpen(false); }} />
+          {/* History menu item removed by request */}
           <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
           {currentUser?.role === 'ADMIN' && (
@@ -1426,20 +1426,25 @@ export default function App() {
                   />
                   <StatCard 
                     label={t.dashboard.dailyTargetLabel} 
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.01)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                     delta="2.0%" 
                     icon={<Target className="text-yellow-400" />}
                     trendPositive={true}
                     trend={[10,12,11,14,13,15,16,14,17,18,20,19]}
                   />
-                  <StatCard 
-                    label={t.dashboard.dailyProfitLabel} 
-                    value={`$${(stats.dailyProfit || 0.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    delta={stats.dailyProfit && stats.dailyProfit >= (stats.dailyProfitTarget || (stats.balance * 0.01)) ? "100%" : `${Math.round(((stats.dailyProfit || 0) / (stats.dailyProfitTarget || (stats.balance * 0.01) || 200)) * 100)}%`} 
-                    icon={<TrendingUp className="text-emerald-400" />} 
-                    valueClassName={(stats.dailyProfit || 0) >= 0 ? "text-emerald-400" : "text-red-400"}
-                    trendPositive={(stats.dailyProfit || 0) >= 0}
-                  />
+                  {(() => {
+                    const realTimeProfit = (stats.dailyProfit || 0) + ((stats.equity || 0) - (stats.balance || 0));
+                    return (
+                      <StatCard 
+                        label={t.dashboard.dailyProfitLabel} 
+                        value={`$${(realTimeProfit || 0.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`} 
+                        icon={<TrendingUp className="text-emerald-400" />} 
+                        valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
+                        trendPositive={realTimeProfit >= 0}
+                      />
+                    );
+                  })()}
                   {stats.activeLicense?.expiryDate ? (
                     <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                   ) : stats.pendingPayment ? (
@@ -1744,7 +1749,7 @@ export default function App() {
                 {/* Order Execution Table — Enhanced with filter + highlight */}
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col">
                   <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-xs text-white/60">
+                    <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-base text-white/60">
                       <History size={16} /> {t.dashboard.recentExecutions}
                     </h3>
                     <div className="flex items-center gap-3">
@@ -1754,7 +1759,7 @@ export default function App() {
                           <button
                             key={f}
                             onClick={() => setTradeFilter(f)}
-                            className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
                               tradeFilter === f 
                                 ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
                                   : f === 'CLOSED' ? 'bg-white/10 text-white' 
@@ -1768,22 +1773,20 @@ export default function App() {
                           </button>
                         ))}
                       </div>
-                      <button onClick={() => setActiveTab('history')} className="text-[10px] font-bold text-blue-400 tracking-widest border-b border-blue-400/50 hover:text-blue-300 transition-colors">
-                        {t.dashboard.viewFull}
-                      </button>
+                      {/* "VER HISTÓRICO COMPLETO" button removed by request */}
                     </div>
                   </div>
 
                   <div className="overflow-x-auto scrollbar-hide">
                     <table className="w-full text-left border-collapse min-w-[700px]">
                       <thead>
-                        <tr className="border-b border-white/5 text-[10px] uppercase tracking-wider text-white/30 font-bold">
+                        <tr className="border-b border-white/5 text-sm uppercase tracking-wider text-white/30 font-bold">
                           <th className="pb-3 font-bold">{language === 'en' ? 'Exec ID' : 'ID Exec.'}</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Asset' : 'Ativo'}</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Type' : 'Tipo'}</th>
                           <th className="pb-3 font-bold">Lot</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Price' : 'Preço'}</th>
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Time' : 'Hora'}</th>
+                          <th className="pb-3 font-bold text-emerald-400">{language === 'en' ? 'Time' : 'Hora'}</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Status' : 'Status'}</th>
                           <th className="pb-3 font-bold text-right">P&L</th>
                         </tr>
@@ -1801,7 +1804,7 @@ export default function App() {
                             </tr>
                           );
                           const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(t.profit!)), 1);
-                          return filtered.slice(0, 4).map((trade, idx) => {
+                          return filtered.slice(0, 15).map((trade, idx) => {
                             const isLatestTrade = idx === 0;
                             const profitPct = trade.profit ? (Math.abs(trade.profit) / maxAbsProfit) * 100 : 0;
                             const isProfit = (trade.profit ?? 0) >= 0;
@@ -1811,9 +1814,9 @@ export default function App() {
                                 initial={isLatestTrade ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}}
                                 animate={{ backgroundColor: 'rgba(255,255,255,0)' }}
                                 transition={{ duration: 2 }}
-                                className="text-xs text-white/80 hover:bg-white/[0.02] transition-colors group"
+                                className="text-sm text-white/80 hover:bg-white/[0.02] transition-colors group"
                               >
-                                <td className="py-3.5 font-mono text-white/30 text-[10px]">
+                                <td className="py-3.5 font-mono text-white/30">
                                   {isLatestTrade && (
                                     <span className="inline-block w-1 h-1 rounded-full bg-blue-400 mr-1.5 animate-pulse" />
                                   )}
@@ -1821,7 +1824,7 @@ export default function App() {
                                 </td>
                                 <td className="py-3.5 font-black text-white">{trade.symbol}</td>
                                 <td className="py-3.5">
-                                  <span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${
+                                  <span className={`px-2 py-0.5 rounded-md text-sm font-black ${
                                     trade.type === 'BUY' 
                                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
                                       : 'bg-red-500/10 text-red-400 border border-red-500/20'
@@ -1831,14 +1834,14 @@ export default function App() {
                                 </td>
                                 <td className="py-3.5 font-mono text-white/50">{trade.lot}</td>
                                 <td className="py-3.5 font-mono text-white/70">{trade.openPrice.toFixed(5)}</td>
-                                <td className="py-3.5 text-white/30 text-[10px] font-mono">
+                                <td className="py-3.5 text-emerald-400 text-sm font-bold font-mono">
                                   {new Date(trade.time).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                 </td>
                                 <td className="py-3.5">
                                   {trade.status === 'CLOSED' ? (
-                                    <span className="text-white/30 text-[9px] uppercase font-bold tracking-wider">● Closed</span>
+                                    <span className="text-white/30 text-sm uppercase font-bold tracking-wider">● Closed</span>
                                   ) : (
-                                    <span className="flex items-center gap-1.5 text-emerald-400 text-[9px] uppercase font-black tracking-wider">
+                                    <span className="flex items-center gap-1.5 text-emerald-400 text-sm uppercase font-black tracking-wider">
                                       <span className="relative flex h-2 w-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1848,9 +1851,9 @@ export default function App() {
                                   )}
                                 </td>
                                 <td className="py-3.5 text-right">
-                                  {trade.status === 'CLOSED' && trade.profit != null ? (
+                                  {trade.profit != null ? (
                                     <div className="flex flex-col items-end gap-1">
-                                      <span className={`font-mono font-black text-xs ${
+                                      <span className={`font-mono font-black text-sm ${
                                         isProfit ? 'text-emerald-400' : 'text-red-400'
                                       }`}>
                                         {isProfit ? '+' : ''}${trade.profit.toFixed(2)}

@@ -16,7 +16,7 @@ def get_mt5_data():
         if account_info != None:
             # Get history deals for today
             today = datetime.now()
-            start = datetime(today.year, today.month, today.day)
+            start = datetime(today.year, today.month, today.day) - timedelta(days=7)
             end = today + timedelta(days=1)
             deals = mt5.history_deals_get(start, end)
             
@@ -31,7 +31,7 @@ def get_mt5_data():
                             "type": "BUY" if deal.type == 1 else "SELL",
                             "lot": deal.volume,
                             "openPrice": deal.price,
-                            "time": datetime.fromtimestamp(deal.time).strftime('%H:%M:%S'),
+                            "time": datetime.fromtimestamp(deal.time).isoformat() + "Z",
                             "status": "CLOSED",
                             "profit": deal.profit
                         })
@@ -46,7 +46,7 @@ def get_mt5_data():
                         "type": "BUY" if pos.type == 0 else "SELL",
                         "lot": pos.volume,
                         "openPrice": pos.price_open,
-                        "time": datetime.fromtimestamp(pos.time).strftime('%H:%M:%S'),
+                        "time": datetime.fromtimestamp(pos.time).isoformat() + "Z",
                         "status": "OPEN",
                         "profit": pos.profit
                     })
