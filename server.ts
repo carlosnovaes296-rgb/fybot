@@ -17,12 +17,9 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
-  /*
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
   const DB_PATH = path.join(DB_DIR, 'db.json');
-  */
-
   // Generate standard UUID v4
   const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -45,6 +42,8 @@ async function startServer() {
         equity: 0,
         accountType: 'DISCONNECTED', // 'REAL' | 'DEMO' | 'DISCONNECTED'
         pendingOrders: new Set<string>(),
+        symbolTrend: {},
+        lastOrderTime: {},
         dailyProfit: 0.00,
         dailyProfitTarget: 0.00,
         isCustomTarget: false,
@@ -97,7 +96,7 @@ async function startServer() {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.0001,
     minScore: 55,
-    symbols: ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD"],
+    symbols: ["XAUUSDm"],
     strategyWeights: {
       smc: 0.4,
       momentum: 0.4,
@@ -106,7 +105,6 @@ async function startServer() {
     paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585'
   };
 
-  /*
   // Load from DB if exists
   if (fs.existsSync(DB_PATH)) {
     try {
@@ -120,16 +118,13 @@ async function startServer() {
       console.error('FYBOT: Failed to load DB', e);
     }
   }
-  */
 
   const saveDB = () => {
-    /*
     try {
       fs.writeFileSync(DB_PATH, JSON.stringify({ users, licenses, payments, config }, null, 2));
     } catch (e) {
       console.error('FYBOT: Failed to save DB', e);
     }
-    */
   };
 
   app.get('/api/status', (req, res) => {
@@ -142,7 +137,7 @@ async function startServer() {
       // Dynamically calculate daily profit target as 2% of current balance
       state.dailyProfitTarget = Number((state.balance * 0.02).toFixed(2));
       const startingDailyBalance = state.balance - state.dailyProfit;
-      const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
+      const dailyLossLimit = Number((startingDailyBalance * 0.02).toFixed(2));
 
       res.json({
         botRunning: state.botRunning,
@@ -245,39 +240,12 @@ async function startServer() {
       if (!state.systemBlocked) {
         state.dailyProfit += profitAmount;
         const startingDailyBalance = state.balance - state.dailyProfit;
-        const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+        const dailyLossLimit = Number((startingDailyBalance * 0.02).toFixed(2));
 
         if (state.dailyProfit >= state.dailyProfitTarget) {
-          state.systemBlocked = true;
-          state.botRunning = false;
-          // Force close any remaining open target trades
-          state.trades.forEach((t: any) => {
-            if (t.status === 'OPEN') {
-              t.status = 'CLOSED';
-              t.profit = 0.00;
-              t.closeTime = new Date().toISOString();
-            }
-          });
-          addUserLog(userId, "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!");
-          addUserLog(userId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro.");
-          addUserLog(userId, "🛡️ Proteção anti-overtrading ativa. VPS Protegido.");
-        } else if (state.dailyProfit <= -dailyLossLimit) {
-          state.systemBlocked = true;
-          state.botRunning = false;
-          // Force close any remaining open target trades
-          state.trades.forEach((t: any) => {
-            if (t.status === 'OPEN') {
-              t.status = 'CLOSED';
-              t.profit = 0.00;
-              t.closeTime = new Date().toISOString();
-            }
-          });
-          addUserLog(userId, "🔴 [LIMITE DE PERDA] LIMITE DE PERDA DIÁRIA (10%) ATINGIDO!");
-          addUserLog(userId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger seu capital.");
-          addUserLog(userId, "🛡️ VPS interrompeu todas as ordens ativas e bloqueou novas operações.");
-        } else {
-          addUserLog(userId, `📈 Lucro diário: $${state.dailyProfit.toFixed(2)} / $${state.dailyProfitTarget.toFixed(2)} | Limite Perda: -$${dailyLossLimit.toFixed(2)}`);
+          addUserLog(userId, "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA! (Trava desativada)");
         }
+        addUserLog(userId, `📈 Lucro diário: $${state.dailyProfit.toFixed(2)} / $${state.dailyProfitTarget.toFixed(2)}`);
       } else {
         addUserLog(userId, `🛡️ Lucro/risco protegido com sucesso. Sistema já bloqueado.`);
       }
@@ -623,7 +591,7 @@ async function startServer() {
         id: t.id || Math.random().toString(36).substr(2, 9),
         symbol: t.symbol || 'UNKNOWN',
         type: t.type || 'BUY',
-        lot: t.lot || 0.01,
+        lot: t.lot || 0.001,
         openPrice: t.openPrice || 0,
         time: t.time || new Date().toISOString(),
         status: t.status || 'OPEN',
@@ -1155,11 +1123,6 @@ async function startServer() {
             if (!sigRes.success || !sigRes.data) return;
 
             config.symbols.forEach(symbol => {
-              const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-              if (currentOpenTrades.length >= 7) return;
-              if (currentOpenTrades.some((t: any) => t.symbol.includes(symbol))) return; // Evitar abrir ordens no mesmo ativo
-              if (state.pendingOrders.has(symbol)) return; // Evitar disparar múltiplas ordens enquanto a primeira está processando
-
               const symData = sigRes.data[symbol];
               if (!symData) return;
 
@@ -1175,8 +1138,71 @@ async function startServer() {
 
               const direction = smcDir === momDir ? smcDir : null;
 
+              const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+              const symbolOpenTrades = currentOpenTrades.filter((t: any) => t.symbol.includes(symbol));
+
+              // 1. TRAVA DE TENDÊNCIA E REVERSÃO CONFIRMADA
+              if (!state.symbolTrend) state.symbolTrend = {};
+
+              if (!state.symbolTrend[symbol] && direction && score >= config.minScore) {
+                state.symbolTrend[symbol] = direction; // Inicializa a tendência se não tiver
+                addUserLog(uId, `📈 Tendência inicial definida para ${direction} em ${symbol}`);
+              }
+
+              const currentTrend = state.symbolTrend[symbol];
+
+              if (direction && currentTrend && direction !== currentTrend) {
+                // Sinais apontam para reversão
+                
+                // --- PROTEÇÃO DE CAPITAL (Early Exit na Reversão) ---
+                const currentPrice = symData.price;
+                if (currentPrice) {
+                  symbolOpenTrades.forEach((t: any) => {
+                    if (t.type === currentTrend) {
+                      const openPrice = t.openPrice;
+                      let drawdownPct = 0;
+                      if (t.type === 'BUY') {
+                        drawdownPct = (openPrice - currentPrice) / openPrice;
+                      } else {
+                        drawdownPct = (currentPrice - openPrice) / openPrice;
+                      }
+                      
+                      if (drawdownPct >= 0.0004) {
+                        addUserLog(uId, `🛡️ [PROTEÇÃO DE CAPITAL] Reversão detectada. Ordem ${t.id} de ${t.symbol} recuou -0.04% e foi fechada por segurança.`);
+                        exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                        t.status = 'CLOSED';
+                      }
+                    }
+                  });
+                }
+                // ---------------------------------------------------
+
+                if (score >= 80) {
+                  state.symbolTrend[symbol] = direction;
+                  addUserLog(uId, `🔄 [REVERSÃO CONFIRMADA] Tendência virou de ${currentTrend} para ${direction} em ${symbol} (Score: ${score.toFixed(1)})!`);
+                } else {
+                  // Reversão fraca, aguarda confirmação (bloqueia aberturas)
+                  return;
+                }
+              }
+
+              // Se o sinal atual está indefinido ou não concorda com a tendência confirmada, aborta
+              if (!direction || direction !== state.symbolTrend[symbol]) return;
+
+              // 2. LIMITES DE ABERTURA
+              if (currentOpenTrades.filter((t: any) => t.status === 'OPEN').length >= 7) return;
+              if (symbolOpenTrades.filter((t: any) => t.status === 'OPEN').length >= 2) return;
+              if (state.pendingOrders.has(symbol)) return;
+
           if (score >= config.minScore && direction) {
-            const lot = 0.01; // Atualizado para 0.01 a pedido do usuário
+            // Verificar intervalo de 3 minutos (cooldown por ativo)
+            const lastTime = state.lastOrderTime[symbol] || 0;
+            if (Date.now() - lastTime < 180000) {
+              return;
+            }
+            state.lastOrderTime[symbol] = Date.now();
+
+            const lot = 0.001; // Atualizado para 0.001 a pedido do usuário
 
             state.pendingOrders.add(symbol);
             exec(`python mt5_open.py ${symbol} ${direction} ${lot}`, (err, stdout) => {
@@ -1233,8 +1259,9 @@ async function startServer() {
                    state.trades = sres.history;
                  }
                  
-                 // Update daily profit tracking properly (Realized + Floating)
-                 const todayClosedTrades = state.trades.filter((t: any) => t.status === 'CLOSED');
+                 // Update daily profit tracking properly (Realized + Floating) ONLY FOR TODAY
+                 const todayStr = new Date().toISOString().split('T')[0];
+                 const todayClosedTrades = state.trades.filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
                  const realizedProfit = todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
                  const floatingProfit = state.equity - state.balance;
                  
@@ -1269,25 +1296,12 @@ async function startServer() {
                       });
 
                     } else */ 
+                    /* TRAVA DE PERDA REMOVIDA A PEDIDO DO USUÁRIO
                     if (state.dailyProfit <= -dailyLossLimit) {
                       state.systemBlocked = true;
-                      state.botRunning = false;
-                      const now = new Date();
-                      const target = new Date(now);
-                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-                      state.blockedUntil = target.toISOString();
-
-                      addUserLog(uId, `🔴 [LIMITE DE PERDA] LIMITE DE PERDA DIÁRIA ATINGIDO! ($${state.dailyProfit.toFixed(2)})`);
-                      addUserLog(uId, "🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger seu capital.");
-                      
-                      // Fechar todas as ordens abertas para estancar a perda!
-                      const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-                      openTrades.forEach((t: any) => {
-                         exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                      });
+                      ...
                     }
+                    */
                  }
               }
             } catch (e) {}

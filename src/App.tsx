@@ -773,6 +773,7 @@ export default function App() {
         body: JSON.stringify(config)
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      alert(language === 'en' ? "Configuration saved successfully!" : language === 'es' ? "¡Configuración guardada exitosamente!" : "Configuração salva com sucesso!");
     } catch (e: any) {
       console.error("Failed to save config:", e.message || e);
     } finally {
@@ -1780,7 +1781,7 @@ export default function App() {
                   <div className="overflow-x-auto scrollbar-hide">
                     <table className="w-full text-left border-collapse min-w-[700px]">
                       <thead>
-                        <tr className="border-b border-white/5 text-sm uppercase tracking-wider text-white/30 font-bold">
+                        <tr className="border-b border-white/5 text-sm uppercase tracking-wider text-emerald-400 font-bold">
                           <th className="pb-3 font-bold">{language === 'en' ? 'Exec ID' : 'ID Exec.'}</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Asset' : 'Ativo'}</th>
                           <th className="pb-3 font-bold">{language === 'en' ? 'Type' : 'Tipo'}</th>
@@ -3264,48 +3265,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
-                  <div>
-                    <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
-                       Ajuste Manual de Saldo (Offline)
-                    </h2>
-                    <p className="text-sm text-white/40 mt-1">Utilize para forçar um saldo no painel quando o MT5 da Exness estiver desconectado.</p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Novo Saldo (USD)</label>
-                        <input 
-                          type="number" 
-                          value={manualBalanceInput}
-                          onChange={(e) => setManualBalanceInput(e.target.value)}
-                          placeholder="Ex: 5000.00"
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Tipo de Conta</label>
-                        <select 
-                          value={manualAccountType}
-                          onChange={(e) => setManualAccountType(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none appearance-none"
-                        >
-                          <option value="REAL" className="bg-[#0f0f12]">CONTA REAL</option>
-                          <option value="DEMO" className="bg-[#0f0f12]">CONTA DEMO</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-4 flex gap-4">
-                    <button 
-                      onClick={handleManualAdjust}
-                      disabled={loading || !manualBalanceInput}
-                      className="flex-1 py-4 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-2xl font-bold text-sm hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/5 disabled:opacity-50"
-                    >
-                      {loading ? <RefreshCw className="animate-spin" size={18} /> : <><RefreshCw size={18} /> Ajustar Saldo</>}
-                    </button>
-                  </div>
-                </div>
+                {/* Manual balance adjustment UI removed by request */}
 
                 {currentUser?.role === 'ADMIN' && (
                   <>

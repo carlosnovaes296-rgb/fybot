@@ -1,0 +1,74 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "name": "Carlos Novaes",
+      "email": "carlosnovaes296@gmail.com",
+      "password": "password123",
+      "status": "ACTIVE",
+      "role": "ADMIN",
+      "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "referralCode": "CARLOS296",
+      "createdAt": "2026-05-06T00:58:22.149Z"
+    },
+    {
+      "id": "2",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "password": "password123",
+      "status": "INACTIVE",
+      "role": "USER",
+      "wallet": "",
+      "paymentWallet": "",
+      "referralCode": "JOHNDOE12",
+      "createdAt": "2026-05-11T00:58:22.150Z"
+    },
+    {
+      "id": "3",
+      "name": "Carlos Novaes",
+      "email": "carlosnovaecs296@gmail.com",
+      "password": "password123",
+      "status": "ACTIVE",
+      "role": "ADMIN",
+      "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "referralCode": "CARLOS296C",
+      "createdAt": "2026-05-08T00:58:22.150Z"
+    }
+  ],
+  "licenses": [
+    {
+      "id": "L1",
+      "userId": "1",
+      "key": "FY-PRO-99",
+      "type": "PRO",
+      "status": "ACTIVE",
+      "hwid": "BFEBFBFF000906E3",
+      "expiryDate": "2026-07-05T00:58:22.150Z"
+    },
+    {
+      "id": "L_TEST",
+      "userId": "",
+      "key": "FY-PRO-V8",
+      "type": "PRO",
+      "status": "PENDING",
+      "hwid": ""
+    }
+  ],
+  "payments": [],
+  "config": {
+    "riskLevel": "CONSERVATIVE",
+    "lotMultiplier": 0.0001,
+    "minScore": 55,
+    "symbols": [
+      "XAUUSDm"
+    ],
+    "strategyWeights": {
+      "smc": 0.4,
+      "momentum": 0.4,
+      "ai": 0.2
+    },
+    "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585"
+  }
+}
