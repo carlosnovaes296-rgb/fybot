@@ -6,6 +6,14 @@ import { fileURLToPath } from 'url';
 // import AdmZip from 'adm-zip';
 import fs from 'node:fs';
 import { exec } from 'child_process';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const supabase = createClient(
+  process.env.SUPABASE_URL || '',
+  process.env.SUPABASE_KEY || ''
+);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,25 +113,49 @@ async function startServer() {
     paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585'
   };
 
-  // Load from DB if exists
-  if (fs.existsSync(DB_PATH)) {
+  // Load from Supabase DB
+  const loadDB = async () => {
     try {
-      const data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-      users = data.users || users;
-      licenses = data.licenses || licenses;
-      payments = data.payments || payments;
-      config = data.config || config;
-      console.log('FYBOT: Loaded data from persistence');
+      const { data, error } = await supabase.from('fybot_db').select('data').eq('id', 1).single();
+      
+      if (!error && data && data.data) {
+        const dbData = data.data;
+        users = dbData.users || users;
+        licenses = dbData.licenses || licenses;
+        payments = dbData.payments || payments;
+        config = dbData.config || config;
+        console.log('FYBOT: Loaded data from Supabase Cloud');
+      } else {
+        if (error) console.log(`FYBOT: Note from Supabase (${error.message}). Attempting migration fallback...`);
+        // Fallback migration: If Supabase table is empty, load from local db.json and push to cloud
+        const DB_PATH = path.join(__dirname, 'data', 'db.json');
+        if (fs.existsSync(DB_PATH)) {
+          const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+          users = localData.users || users;
+          licenses = localData.licenses || licenses;
+          payments = localData.payments || payments;
+          config = localData.config || config;
+          console.log('FYBOT: Migrated data from local db.json to Supabase Cloud');
+          saveDB(); // Push to cloud
+        } else {
+          console.log('FYBOT: Initialized with empty default data, waiting for inputs.');
+        }
+      }
     } catch (e) {
       console.error('FYBOT: Failed to load DB', e);
     }
-  }
+  };
+  loadDB();
 
-  const saveDB = () => {
+  const saveDB = async () => {
     try {
-      fs.writeFileSync(DB_PATH, JSON.stringify({ users, licenses, payments, config }, null, 2));
+      const dbData = { users, licenses, payments, config };
+      const { error } = await supabase.from('fybot_db').upsert({ id: 1, data: dbData });
+      if (error) {
+        console.error('FYBOT: Failed to save to Supabase:', error.message);
+      }
     } catch (e) {
-      console.error('FYBOT: Failed to save DB', e);
+      console.error('FYBOT: Exception saving DB', e);
     }
   };
 
