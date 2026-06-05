@@ -3331,6 +3331,45 @@ export default function App() {
 
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Trading Direction' : language === 'es' ? 'Dirección de Operación' : 'Direção de Operação'}</label>
+                          </div>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={config.allowBuy !== false}
+                                onChange={(e) => setConfig({ ...config, allowBuy: e.target.checked })}
+                                className="accent-blue-500 w-4 h-4"
+                              />
+                              {language === 'en' ? 'Allow BUY' : language === 'es' ? 'Permitir COMPRA' : 'Permitir COMPRA'}
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={config.allowSell !== false}
+                                onChange={(e) => setConfig({ ...config, allowSell: e.target.checked })}
+                                className="accent-blue-500 w-4 h-4"
+                              />
+                              {language === 'en' ? 'Allow SELL' : language === 'es' ? 'Permitir VENDA' : 'Permitir VENDA'}
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Active Assets (Comma separated)' : language === 'es' ? 'Activos Activos (Separados por coma)' : 'Ativos Ativos (Separados por vírgula)'}</label>
+                          </div>
+                          <input 
+                            type="text" 
+                            value={Array.isArray(config.symbols) ? config.symbols.join(',') : (config.symbols || '')}
+                            onChange={(e) => setConfig({ ...config, symbols: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                            placeholder="XAUUSD"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm focus:border-blue-500 outline-none font-mono text-white"
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtReceiver}</label>
                           </div>
                           <input 

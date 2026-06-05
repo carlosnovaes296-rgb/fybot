@@ -87,6 +87,8 @@ export interface Config {
     ai: number;
   };
   paymentWallet?: string;
+  allowBuy?: boolean;
+  allowSell?: boolean;
 }
 
 export type Language = 'en' | 'pt' | 'es';

@@ -102,15 +102,17 @@ async function startServer() {
 
   let config = {
     riskLevel: 'MEDIUM',
-    lotMultiplier: 0.0001,
+    lotMultiplier: 0.001,
     minScore: 55,
-    symbols: ["XAUUSDm"],
+    symbols: ["XAUUSD"],
     strategyWeights: {
-      smc: 0.4,
-      momentum: 0.4,
+      smc: 0.5,
+      momentum: 0.3,
       ai: 0.20
     },
-    paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585'
+    paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
+    allowBuy: true,
+    allowSell: true
   };
 
   // Load from Supabase DB
@@ -123,7 +125,13 @@ async function startServer() {
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
-        config = dbData.config || config;
+        config = { ...config, ...(dbData.config || {}) };
+        
+        // Ensure strategyWeights exists
+        if (!config.strategyWeights) {
+          config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
+        }
+        
         console.log('FYBOT: Loaded data from Supabase Cloud');
       } else {
         if (error) console.log(`FYBOT: Note from Supabase (${error.message}). Attempting migration fallback...`);
@@ -134,8 +142,11 @@ async function startServer() {
           users = localData.users || users;
           licenses = localData.licenses || licenses;
           payments = localData.payments || payments;
-          config = localData.config || config;
-          console.log('FYBOT: Migrated data from local db.json to Supabase Cloud');
+          config = { ...config, ...(localData.config || {}) };
+          if (!config.strategyWeights) {
+            config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
+          }
+          console.log('FYBOT: Loaded data from local db.json and pushed to Cloud');
           saveDB(); // Push to cloud
         } else {
           console.log('FYBOT: Initialized with empty default data, waiting for inputs.');
@@ -1227,6 +1238,9 @@ async function startServer() {
               if (state.pendingOrders.has(symbol)) return;
 
           if (score >= config.minScore && direction) {
+            if (direction === 'BUY' && config.allowBuy === false) return;
+            if (direction === 'SELL' && config.allowSell === false) return;
+
             // Verificar intervalo de 3 minutos (cooldown por ativo)
             const lastTime = state.lastOrderTime[symbol] || 0;
             if (Date.now() - lastTime < 180000) {
