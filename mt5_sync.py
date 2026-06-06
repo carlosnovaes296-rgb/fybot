@@ -2,13 +2,13 @@ import sys
 import json
 from datetime import datetime, timedelta
 
-def get_mt5_data():
+def get_mt5_data(login, password, server):
     try:
         import MetaTrader5 as mt5
         
         # Initialize MT5 connection
-        if not mt5.initialize():
-            return {"error": "Failed to initialize MT5", "success": False}
+        if not mt5.initialize(login=int(login), password=password, server=server):
+            return {"error": f"Failed to connect to MT5 with login {login} on {server}", "success": False}
         
         # Get account info
         account_info = mt5.account_info()
@@ -72,5 +72,13 @@ def get_mt5_data():
         return {"error": str(e), "success": False}
 
 if __name__ == "__main__":
-    result = get_mt5_data()
+    if len(sys.argv) < 4:
+        print(json.dumps({"error": "Missing MT5 credentials", "success": False}))
+        sys.exit(1)
+        
+    login = sys.argv[1]
+    password = sys.argv[2]
+    server = sys.argv[3]
+    
+    result = get_mt5_data(login, password, server)
     print(json.dumps(result))

@@ -683,8 +683,15 @@ async function startServer() {
   app.post('/api/balance/sync', (req, res) => {
     const { userId } = req.body;
     const state = getUserState(userId);
+    const user = users.find(u => u.id === userId);
     
-    exec('python mt5_sync.py', (error, stdout, stderr) => {
+    if (!user || !user.mt5Login || !user.mt5Password || !user.mt5Server) {
+        addUserLog(userId, `❌ Erro: Credenciais do MT5 (Login, Senha, Servidor) não preenchidas no seu perfil.`);
+        return res.status(400).json({ success: false, error: 'Credenciais do MT5 ausentes no perfil. Vá em Configuração > Conta e Finanças e preencha seus dados.' });
+    }
+
+    const cmd = `python mt5_sync.py "${user.mt5Login}" "${user.mt5Password}" "${user.mt5Server}"`;
+    exec(cmd, (error, stdout, stderr) => {
       if (error) {
         addUserLog(userId, `❌ Erro ao conectar ao MT5 local: ${error.message}`);
         return res.status(500).json({ success: false, error: 'Failed to execute MT5 sync' });
@@ -812,20 +819,8 @@ async function startServer() {
     };
     users.push(newUser);
 
-    // Auto-generate license for the new user
-    const expiryDate = new Date();
-    expiryDate.setMonth(expiryDate.getMonth() + 1);
-    const newLicense = {
-      id: 'L' + Math.random().toString(36).substr(2, 4),
-      userId: newUser.id,
-      key: generateUUID(),
-      type: 'PRO',
-      status: 'ACTIVE',
-      hwid: '',
-      expiryDate: expiryDate.toISOString()
-    };
-    licenses.push(newLicense);
-
+    // No automatic license generation to ensure separation
+    
     saveDB();
     res.json({ success: true, user: newUser });
   });
@@ -1089,13 +1084,16 @@ async function startServer() {
   });
 
   app.post('/api/user/profile', (req, res) => {
-    const { id, name, email, wallet, paymentWallet, password } = req.body;
+    const { id, name, email, wallet, paymentWallet, password, mt5Login, mt5Password, mt5Server } = req.body;
     const user = users.find(u => u.id === id);
     if (user) {
       user.name = name || user.name;
       user.email = email || user.email;
       user.wallet = wallet || user.wallet;
       user.paymentWallet = paymentWallet !== undefined ? paymentWallet : user.paymentWallet;
+      user.mt5Login = mt5Login || user.mt5Login;
+      user.mt5Password = mt5Password || user.mt5Password;
+      user.mt5Server = mt5Server || user.mt5Server;
       if (password && password !== '••••••••') {
         user.password = password;
       }
@@ -1291,45 +1289,36 @@ async function startServer() {
         } // End of botRunning check
 
         // Continuously sync MT5 to ensure dashboard matches reality perfectly
-        exec('python mt5_sync.py', (serr, sstdout) => {
-          if (!serr) {
-            try {
-              const sres = JSON.parse(sstdout.trim());
-              if (sres.success) {
-                 const oldBalance = state.balance;
-                 state.balance = sres.balance;
-                 state.equity = sres.equity;
-                 
-                 // Real MT5 trades mirror
-                 if (sres.history) {
-                   state.trades = sres.history;
-                 }
-                 
-                 // Update daily profit tracking properly (Realized + Floating) ONLY FOR TODAY
-                 const todayStr = new Date().toISOString().split('T')[0];
-                 const todayClosedTrades = state.trades.filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
-                 const realizedProfit = todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-                 const floatingProfit = state.equity - state.balance;
-                 
-                 state.dailyProfit = realizedProfit + floatingProfit;
-                 
-                 const startingDailyBalance = state.balance - realizedProfit;
-                 const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
-                 if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
-                   state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
-                 }
+        // REMOVIDO: Sincronização automática contínua foi desativada para evitar que
+        // todas as contas puxem os dados (histórico/saldo) do MT5 aberto no servidor.
+        // Agora o histórico e saldo só serão atualizados quando o usuário clicar 
+        // no botão "SYNC MT5", e usará exclusivamente as credenciais dele.
+        
+        // Verifica se a meta diária foi batida baseado nos lucros já registrados
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayClosedTrades = state.trades.filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
+        const realizedProfit = todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
+        const floatingProfit = state.equity - state.balance;
+        
+        state.dailyProfit = realizedProfit + floatingProfit;
+        
+        const startingDailyBalance = state.balance - realizedProfit;
+        const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
+        if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
+          state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
+        }
 
-                 // Check if target is met and system isn't already blocked
-                 if (!state.systemBlocked) {
-                    /* TRAVA DE META BATIDA REMOVIDA A PEDIDO DO USUÁRIO
-                    if (state.dailyProfit >= state.dailyProfitTarget) {
-                      state.systemBlocked = true;
-                      state.botRunning = false;
-                      const now = new Date();
-                      const target = new Date(now);
-                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+        // Check if target is met and system isn't already blocked
+        if (!state.systemBlocked) {
+           /* TRAVA DE META BATIDA REMOVIDA A PEDIDO DO USUÁRIO
+           if (state.dailyProfit >= state.dailyProfitTarget) {
+             state.systemBlocked = true;
+             state.botRunning = false;
+             const now = new Date();
+             const target = new Date(now);
+             if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+             else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+             else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
                       state.blockedUntil = target.toISOString();
                       
                       addUserLog(uId, `🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA! ($${state.dailyProfit.toFixed(2)})`);
@@ -1349,10 +1338,6 @@ async function startServer() {
                     }
                     */
                  }
-              }
-            } catch (e) {}
-          }
-        });
       });
     } catch (e) {
       console.error("Error in trading loop:", e);

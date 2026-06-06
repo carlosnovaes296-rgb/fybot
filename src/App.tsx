@@ -378,7 +378,10 @@ export default function App() {
     email: 'carlosnovaes296@gmail.com',
     password: '••••••••',
     wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
-    paymentWallet: ''
+    paymentWallet: '',
+    mt5Login: '',
+    mt5Password: '',
+    mt5Server: ''
   });
 
   const [targetPaymentWallet, setTargetPaymentWallet] = useState<string>('');
@@ -414,7 +417,10 @@ export default function App() {
         email: currentUser.email || '',
         password: '••••••••',
         wallet: currentUser.wallet || '',
-        paymentWallet: currentUser.paymentWallet || ''
+        paymentWallet: currentUser.paymentWallet || '',
+        mt5Login: currentUser.mt5Login || '',
+        mt5Password: currentUser.mt5Password || '',
+        mt5Server: currentUser.mt5Server || ''
       });
       setWithdrawWallet(currentUser.wallet || '');
       fetchPaymentDestination();
@@ -897,18 +903,7 @@ export default function App() {
 
     setLoading(true);
     try {
-      if (!stats.botRunning) {
-        // Auto-sync balance directly from broker when starting the bot
-        try {
-          await fetch('/api/balance/sync', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser?.id }) 
-          });
-        } catch (syncErr) {
-          console.error("Failed to auto-sync balance", syncErr);
-        }
-      }
+      // Auto-sync removed as per requirements - sync is now fully manual
 
       const res = await fetch('/api/control', {
         method: 'POST',
@@ -1464,7 +1459,25 @@ export default function App() {
                         {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
                       </div>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div 
+                      onClick={() => setActiveTab('plans')}
+                      className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <CreditCard size={48} className="text-red-400" />
+                      </div>
+                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">
+                        {language === 'en' ? 'License Required' : language === 'es' ? 'Licencia Requerida' : 'Licença Requerida'}
+                      </p>
+                      <p className="text-lg font-bold text-white mb-2">
+                        {language === 'en' ? 'No Active License' : language === 'es' ? 'Sin Licencia Activa' : 'Sem Licença Ativa'}
+                      </p>
+                      <div className="flex items-center gap-1 text-[10px] text-red-300 font-bold uppercase">
+                        {language === 'en' ? 'Acquire License' : language === 'es' ? 'Adquirir Licencia' : 'Adquirir Licença'} <ArrowRight size={10} />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
@@ -3250,6 +3263,43 @@ export default function App() {
                           placeholder={t.settings.walletPlaceholder}
                           className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-blue-500 outline-none font-mono"
                         />
+                      </div>
+                    </div>
+
+                    {/* MT5 Configs */}
+                    <div className="pt-4 border-t border-white/5 mt-4">
+                      <h3 className="text-sm font-bold text-white/80 mb-4 uppercase tracking-widest">Credenciais MT5</h3>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Login</label>
+                          <input 
+                            type="text" 
+                            value={profileForm.mt5Login}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
+                            placeholder="Ex: 12345678"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Senha</label>
+                          <input 
+                            type="password" 
+                            value={profileForm.mt5Password}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
+                            placeholder="Sua senha do MT5"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Servidor</label>
+                          <input 
+                            type="text" 
+                            value={profileForm.mt5Server}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
+                            placeholder="Ex: Exness-MT5Trial6"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

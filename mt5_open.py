@@ -36,9 +36,9 @@ def execute_trade(symbol, action, lot):
         point = symbol_info.point
         digits = symbol_info.digits
         
-        # Parâmetros: Stop Loss de 0.45% e Take Profit de 0.02%
+        # Parâmetros: Stop Loss de 0.45% e Take Profit de 0.03%
         sl_pct = 0.0045
-        tp_pct = 0.0002
+        tp_pct = 0.0003
         
         # Ensure we are outside the minimum stops level
         min_stops = symbol_info.trade_stops_level
