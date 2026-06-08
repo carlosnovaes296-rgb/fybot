@@ -179,9 +179,7 @@ async function startServer() {
       const pendingPayment = userId ? payments.find(p => p.userId === userId && p.status === 'PENDING') : null;
 
       const todayStr = new Date().toISOString().split('T')[0];
-      const todayClosedTrades = (state.trades || []).filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
-      const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-      const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : (state.balance - realizedProfit);
+      const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
       // Dynamically calculate daily profit target as 2% of starting daily balance
       if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
@@ -1185,6 +1183,10 @@ async function startServer() {
               if (sigRes.account.today_realized_profit !== undefined) {
                 state.trueRealizedProfit = sigRes.account.today_realized_profit;
               }
+              // Trava a banca inicial para o cálculo exato de 2% e 5% na primeira leitura
+              if (!state.customStartingBalance && state.balance > 0) {
+                state.customStartingBalance = state.balance;
+              }
             }
 
             // NOVA REGRA: Verifica ordens abertas no painel que já fecharam no MT5 (atingiram TP ou SL)
@@ -1335,7 +1337,7 @@ async function startServer() {
         
         state.dailyProfit = (realizedProfit + floatingProfit) - (state.dailyProfitOffset || 0);
         
-        const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : (state.balance - realizedProfit);
+        const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
         const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
         if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
           state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
@@ -1363,13 +1365,26 @@ async function startServer() {
                          exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
                       });
 
-                    } 
-                    /* TRAVA DE PERDA REMOVIDA A PEDIDO DO USUÁRIO
-                    if (state.dailyProfit <= -dailyLossLimit) {
+                    } else if (state.dailyProfit <= -dailyLossLimit) {
                       state.systemBlocked = true;
-                      ...
+                      state.botRunning = false;
+                      const now = new Date();
+                      const target = new Date(now);
+                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+                      state.blockedUntil = target.toISOString();
+                      
+                      const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
+                      addUserLog(uId, `🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO! ($${state.dailyProfit.toFixed(2)})`);
+                      addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteção. ${nextSessionMsg}`);
+                      
+                      // Fechar todas as ordens abertas para estancar a perda!
+                      const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+                      openTrades.forEach((t: any) => {
+                         exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                      });
                     }
-                    */
                  }
       });
     } catch (e) {
