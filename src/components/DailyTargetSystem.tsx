@@ -311,8 +311,10 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     }
   };
 
-  const realTimeProfit = (stats.dailyProfit || 0) + ((stats.equity || 0) - (stats.balance || 0));
-  const pct = Math.min(100, Math.max(0, (realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
+  const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
+  const totalDailyProfit = stats.dailyProfit || 0;
+  const realTimeProfit = totalDailyProfit;
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -405,9 +407,9 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         {isAdmin && (
                           <div className="text-right">
                             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.lossValue}</p>
-                            <h5 className="text-xl font-mono font-bold text-white/80">
-                              -${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </h5>
+                            <span className="text-xl font-bold text-white/80 font-mono tracking-tight">
+                              ${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
                           </div>
                         )}
                       </div>
@@ -437,6 +439,11 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                           <h3 className="text-2xl font-black tracking-tighter text-emerald-400 uppercase pt-2 drop-shadow-[0_0_6px_rgba(52,211,153,0.3)]">
                             {t.blocked}
                           </h3>
+                          {stats.blockedUntil && (
+                            <p className="text-xs font-bold text-emerald-500/80 mt-1">
+                              {new Date(stats.blockedUntil).getHours() === 10 ? 'PRÓXIMA SESSÃO: 10:00 GMT-3 (NY)' : 'PRÓXIMA SESSÃO: 21:00 GMT-3 (ÁSIA)'}
+                            </p>
+                          )}
                         </div>
 
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 animate-pulse">
@@ -524,7 +531,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.currentProfit}</p>
                       <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
-                        {realTimeProfit >= 0 ? '+' : ''}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {realTimeProfit >= 0 ? '+' : '-'}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </span>
                     </div>
 
@@ -539,7 +546,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
                           <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1 font-bold">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
-                            -${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </>

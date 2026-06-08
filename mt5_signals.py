@@ -96,8 +96,42 @@ def calculate_signals(symbols):
             "price": current_price
         }
         
+    account_info = mt5.account_info()
+    acc_data = None
+    if account_info is not None:
+        acc_data = {
+            "balance": account_info.balance,
+            "equity": account_info.equity,
+            "server": account_info.server
+        }
+
+    today_realized_profit = 0.0
+    try:
+        from datetime import datetime, timedelta
+        today_local_str = datetime.now().strftime('%Y-%m-%d')
+        start_time = datetime.now() - timedelta(days=2)
+        end_time = datetime.now() + timedelta(days=1)
+        deals = mt5.history_deals_get(start_time, end_time)
+        if deals:
+            for deal in deals:
+                if deal.entry in (1, 2) and deal.type != 2:
+                    deal_local_str = datetime.fromtimestamp(deal.time).strftime('%Y-%m-%d')
+                    if deal_local_str == today_local_str:
+                        # Include profit, swap, commission and fee
+                        total_profit = getattr(deal, 'profit', 0.0) + getattr(deal, 'swap', 0.0) + getattr(deal, 'commission', 0.0) + getattr(deal, 'fee', 0.0)
+                        today_realized_profit += total_profit
+    except Exception as e:
+        pass
+
+    positions = mt5.positions_get()
+    open_tickets = [p.ticket for p in positions] if positions else []
+
     mt5.shutdown()
-    return {"success": True, "data": results}
+    
+    if acc_data is not None:
+        acc_data['today_realized_profit'] = today_realized_profit
+
+    return {"success": True, "data": results, "open_tickets": open_tickets, "account": acc_data}
 
 if __name__ == "__main__":
     try:

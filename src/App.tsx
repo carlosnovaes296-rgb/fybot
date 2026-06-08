@@ -1429,11 +1429,11 @@ export default function App() {
                     trend={[10,12,11,14,13,15,16,14,17,18,20,19]}
                   />
                   {(() => {
-                    const realTimeProfit = (stats.dailyProfit || 0) + ((stats.equity || 0) - (stats.balance || 0));
+                    const realTimeProfit = stats.dailyProfit || 0;
                     return (
                       <StatCard 
                         label={t.dashboard.dailyProfitLabel} 
-                        value={`$${(realTimeProfit || 0.00).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+                        value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
                         delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`} 
                         icon={<TrendingUp className="text-emerald-400" />} 
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
