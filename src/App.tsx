@@ -4,18 +4,18 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { 
-  Play, 
-  Pause, 
-  BarChart3, 
-  Activity, 
-  LayoutDashboard, 
-  Settings, 
-  History, 
-  Clock, 
-  Wallet, 
-  TrendingUp, 
-  ShieldCheck, 
+import {
+  Play,
+  Pause,
+  BarChart3,
+  Activity,
+  LayoutDashboard,
+  Settings,
+  History,
+  Clock,
+  Wallet,
+  TrendingUp,
+  ShieldCheck,
   Zap,
   X,
   Terminal,
@@ -55,25 +55,25 @@ import DailyTargetSystem from './components/DailyTargetSystem';
 import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
 // @ts-ignore
 import fybotLoginBg from './assets/images/fybot_robot_bg_v3.jpg';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer
 } from 'recharts';
 
-import { 
-  User, 
-  ReferralEarning, 
-  License, 
-  Payment, 
-  Trade, 
-  Stats, 
-  Config, 
-  Language 
+import {
+  User,
+  ReferralEarning,
+  License,
+  Payment,
+  Trade,
+  Stats,
+  Config,
+  Language
 } from './types';
 import { translations } from './translations';
 import { safeFetch } from './utils';
@@ -373,7 +373,7 @@ export default function App() {
       { name: 'Mai/26', value: 3750 },
     ],
   };
-  
+
   const [profileForm, setProfileForm] = useState({
     name: 'Carlos Novaes',
     email: 'carlosnovaes296@gmail.com',
@@ -473,7 +473,7 @@ export default function App() {
   };
 
   const toggleUser = async (id: string) => {
-    await fetch(`/api/admin/users/${id}/toggle`, { 
+    await fetch(`/api/admin/users/${id}/toggle`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -481,7 +481,7 @@ export default function App() {
   };
 
   const grantAccess = async (id: string) => {
-    await fetch(`/api/admin/users/${id}/grant-access`, { 
+    await fetch(`/api/admin/users/${id}/grant-access`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -489,7 +489,7 @@ export default function App() {
   };
 
   const grantLifetimeAccess = async (id: string) => {
-    await fetch(`/api/admin/users/${id}/grant-lifetime-access`, { 
+    await fetch(`/api/admin/users/${id}/grant-lifetime-access`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -525,23 +525,23 @@ export default function App() {
           'LICENSE_BOUND_TO_OTHER_ACCOUNT': language === 'en'
             ? '🔒 This license is already active on another account. Each license can only be used by one account.'
             : language === 'es'
-            ? '🔒 Esta licencia ya está activa en otra cuenta. Cada licencia solo puede usarse en una cuenta.'
-            : '🔒 Esta licença já está ativa em outra conta. Cada licença pode ser usada em apenas uma conta.',
+              ? '🔒 Esta licencia ya está activa en otra cuenta. Cada licencia solo puede usarse en una cuenta.'
+              : '🔒 Esta licença já está ativa em outra conta. Cada licença pode ser usada em apenas uma conta.',
           'ALREADY_ACTIVE_ON_THIS_ACCOUNT': language === 'en'
             ? '✅ This license is already active on your account.'
             : language === 'es'
-            ? '✅ Esta licencia ya está activa en tu cuenta.'
-            : '✅ Esta licença já está ativa na sua conta.',
+              ? '✅ Esta licencia ya está activa en tu cuenta.'
+              : '✅ Esta licença já está ativa na sua conta.',
           'INVALID_KEY': language === 'en'
             ? '❌ Invalid license key. Check the key and try again.'
             : language === 'es'
-            ? '❌ Clave de licencia inválida. Verifique la clave e intente de nuevo.'
-            : '❌ Chave de licença inválida. Verifique a chave e tente novamente.',
+              ? '❌ Clave de licencia inválida. Verifique la clave e intente de nuevo.'
+              : '❌ Chave de licença inválida. Verifique a chave e tente novamente.',
           'MISSING_FIELDS': language === 'en'
             ? '❌ Please enter the license key.'
             : language === 'es'
-            ? '❌ Por favor ingrese la clave de licencia.'
-            : '❌ Por favor insira a chave de licença.',
+              ? '❌ Por favor ingrese la clave de licencia.'
+              : '❌ Por favor insira a chave de licença.',
         };
         setLicenseActivationError(errMap[data.error] || (language === 'en' ? '❌ Invalid or unavailable key.' : '❌ Chave inválida ou indisponível.'));
       }
@@ -554,7 +554,7 @@ export default function App() {
   };
 
   const approvePayment = async (id: string) => {
-    await fetch(`/api/admin/payments/${id}/approve`, { 
+    await fetch(`/api/admin/payments/${id}/approve`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -575,7 +575,7 @@ export default function App() {
     setDeleteConfirmModal(null);
     try {
       const endpoint = type === 'user' ? `/api/admin/users/${id}` : `/api/admin/licenses/${id}`;
-      const res = await fetch(endpoint, { 
+      const res = await fetch(endpoint, {
         method: 'DELETE',
         headers: { 'x-admin-userid': currentUser?.id || '' }
       });
@@ -592,7 +592,7 @@ export default function App() {
   };
 
   const toggleLicense = async (id: string) => {
-    await fetch(`/api/admin/licenses/${id}/toggle`, { 
+    await fetch(`/api/admin/licenses/${id}/toggle`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -600,7 +600,7 @@ export default function App() {
   };
 
   const rejectPayment = async (id: string) => {
-    await fetch(`/api/admin/payments/${id}/reject`, { 
+    await fetch(`/api/admin/payments/${id}/reject`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -608,7 +608,7 @@ export default function App() {
   };
 
   const approveWithdrawal = async (id: string) => {
-    await fetch(`/api/admin/withdrawals/${id}/approve`, { 
+    await fetch(`/api/admin/withdrawals/${id}/approve`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -616,7 +616,7 @@ export default function App() {
   };
 
   const rejectWithdrawal = async (id: string) => {
-    await fetch(`/api/admin/withdrawals/${id}/reject`, { 
+    await fetch(`/api/admin/withdrawals/${id}/reject`, {
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -657,10 +657,10 @@ export default function App() {
           return { ...prev, wallet: withdrawWallet };
         });
         setWithdrawalMessage({
-          text: language === 'en' 
-            ? 'Withdrawal request approved and processed automatically!' 
-            : language === 'es' 
-              ? '¡Solicitud de retiro procesada y aprobada automáticamente!' 
+          text: language === 'en'
+            ? 'Withdrawal request approved and processed automatically!'
+            : language === 'es'
+              ? '¡Solicitud de retiro procesada y aprobada automáticamente!'
               : 'Solicitação de saque aprovada e processada automaticamente!',
           isError: false
         });
@@ -692,8 +692,8 @@ export default function App() {
       const res = await fetch('/api/balance/adjust', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: currentUser.id, 
+        body: JSON.stringify({
+          userId: currentUser.id,
           balance: balanceVal,
           equity: balanceVal,
           accountType: manualAccountType
@@ -863,9 +863,9 @@ export default function App() {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          name: registerName, 
-          email: loginEmail, 
+        body: JSON.stringify({
+          name: registerName,
+          email: loginEmail,
           password: loginPassword,
           referredBy: referredByCode
         })
@@ -895,11 +895,11 @@ export default function App() {
     // If system is blocked by daily target, prevent starting the robot
     if (!stats.botRunning && stats.systemBlocked) {
       alert(
-        language === 'en' 
-          ? "System locked! Your Daily Profit Target is already saved and secured on the VPS." 
+        language === 'en'
+          ? "System locked! Your Daily Profit Target is already saved and secured on the VPS."
           : language === 'es'
-          ? "¡Sistema bloqueado! Su meta de ganancias diarias ya está guardada y protegida en el VPS."
-          : "Sistema Bloqueado! Sua meta de lucro diário já foi batida e está totalmente protegida no VPS. O sistema só aceita novos arranques após a virada do cronômetro diário."
+            ? "¡Sistema bloqueado! Su meta de ganancias diarias ya está guardada y protegida en el VPS."
+            : "Sistema Bloqueado! Sua meta de lucro diário já foi batida e está totalmente protegida no VPS. O sistema só aceita novos arranques após a virada do cronômetro diário."
       );
       return;
     }
@@ -917,9 +917,9 @@ export default function App() {
       const res = await fetch('/api/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action: stats.botRunning ? 'stop' : 'start',
-          userId: currentUser?.id 
+          userId: currentUser?.id
         })
       });
       const data = await res.json();
@@ -970,36 +970,33 @@ export default function App() {
       <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-end lg:items-center lg:pr-20 xl:pr-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
         {/* Floating Language Switcher for Login Screen */}
         <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-[#050508]/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
-          <button 
-            onClick={() => setLanguage('en')} 
-            title="English" 
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${
-              language === 'en' 
-                ? 'bg-[#ffbe1a] text-black shadow-md scale-110' 
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+          <button
+            onClick={() => setLanguage('en')}
+            title="English"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇺🇸
           </button>
-          <button 
-            onClick={() => setLanguage('pt')} 
-            title="Português" 
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${
-              language === 'pt' 
-                ? 'bg-[#ffbe1a] text-black shadow-md scale-110' 
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+          <button
+            onClick={() => setLanguage('pt')}
+            title="Português"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇧🇷
           </button>
-          <button 
-            onClick={() => setLanguage('es')} 
-            title="Español" 
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${
-              language === 'es' 
-                ? 'bg-[#ffbe1a] text-black shadow-md scale-110' 
-                : 'text-white/60 hover:text-white hover:bg-white/5'
-            }`}
+          <button
+            onClick={() => setLanguage('es')}
+            title="Español"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇪🇸
           </button>
@@ -1007,15 +1004,15 @@ export default function App() {
 
         {/* Background Image with Full Realism and Visibility */}
         <div className="absolute inset-0 z-0 overflow-hidden">
-          <img 
-            src={fybotLoginBg} 
-            alt="Futuristic Robot Background" 
+          <img
+            src={fybotLoginBg}
+            alt="Futuristic Robot Background"
             className="w-full h-full object-cover object-top select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
           />
         </div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl my-6 md:my-0 mx-2 sm:mx-0"
@@ -1029,8 +1026,8 @@ export default function App() {
               <>
                 <div className="space-y-2">
                   <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.name}</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
                     placeholder="Seu nome"
@@ -1041,8 +1038,8 @@ export default function App() {
                   <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">
                     {language === 'en' ? 'Referral Code (Optional)' : language === 'es' ? 'Código de Referido (Opcional)' : 'Código de Indicação (Opcional)'}
                   </label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={referredByCode}
                     onChange={(e) => setReferredByCode(e.target.value)}
                     placeholder="Ex: CARLOS296"
@@ -1053,8 +1050,8 @@ export default function App() {
             )}
             <div className="space-y-2">
               <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.email}</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 placeholder="seu@email.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
@@ -1064,13 +1061,13 @@ export default function App() {
             <div className="space-y-2">
               <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.password}</label>
               <div className="relative group">
-                <input 
-                  type={showPassword ? "text" : "password"} 
+                <input
+                  type={showPassword ? "text" : "password"}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 hover:text-black transition-colors"
@@ -1081,7 +1078,7 @@ export default function App() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={isSignUp ? handleRegister : handleLogin}
             disabled={loading}
             className="w-full py-3 sm:py-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-sm transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
@@ -1090,7 +1087,7 @@ export default function App() {
           </button>
 
           <div className="text-center space-y-3 sm:space-y-4 pt-1">
-            <button 
+            <button
               onClick={() => setIsSignUp(!isSignUp)}
               className="w-full py-2.5 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-[11px] rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
             >
@@ -1110,9 +1107,9 @@ export default function App() {
     <div className="min-h-screen bg-[#0a0a0c] text-white font-sans selection:bg-blue-500/30">
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" 
-          onClick={() => setIsMobileMenuOpen(false)} 
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
@@ -1138,7 +1135,7 @@ export default function App() {
               <button onClick={() => setLanguage('es')} title="Español" className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${language === 'es' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20 scale-110 font-bold' : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white'}`}>🇪🇸</button>
             </div>
           </div>
-          
+
           <NavItem icon={<LayoutDashboard size={20} />} label={t.sidebar.dashboard} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
           {currentUser?.role === 'ADMIN' && (
             <>
@@ -1156,9 +1153,58 @@ export default function App() {
           <div className="pt-4 mt-4 border-t border-white/5">
             <NavItem icon={<LogOut size={20} />} label={t.sidebar.logout} onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); }} />
           </div>
+
         </nav>
 
         <div className="p-4 md:p-6 pb-10">
+          <div className="mb-6 flex flex-col items-center gap-4">
+            <a href="https://t.me/fybotpro_bot"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: '#0088cc',
+                color: '#fff',
+                padding: '18px 35px',
+                textDecoration: 'none',
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                fontSize: '18px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                textAlign: 'center'
+              }}>
+              <img src="/logo telegram.png" alt="Telegram" className="w-14 h-14 object-contain drop-shadow-md" />
+              <span className="whitespace-nowrap">Fybot pro Telegram</span>
+            </a>
+
+            <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                background: '#25D366',
+                color: '#fff',
+                padding: '18px 35px',
+                textDecoration: 'none',
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                fontSize: '18px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                textAlign: 'center'
+              }}>
+              <img src="/logo zap.webp" alt="WhatsApp" className="w-14 h-14 object-contain drop-shadow-md" />
+              <span className="whitespace-nowrap">Grupo Fybot WhatsApp</span>
+            </a>
+          </div>
+
           <div className="md:bg-white/5 rounded-2xl p-4 flex items-center gap-3 border border-white/5 hover:border-yellow-500/20 transition-all">
             <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-500 font-bold text-xs uppercase border border-yellow-500/20">
               {currentUser?.name?.split(' ').map(n => n[0]).join('') || 'U'}
@@ -1177,20 +1223,20 @@ export default function App() {
         <AnimatePresence>
           {showLicenseModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setShowLicenseModal(false)}
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
               />
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 className="relative w-full max-w-md bg-[#16161a] border border-white/10 rounded-3xl p-8 shadow-2xl"
               >
-                <button 
+                <button
                   onClick={() => setShowLicenseModal(false)}
                   className="absolute top-4 right-4 p-2 text-white/20 hover:text-white transition-colors"
                 >
@@ -1207,7 +1253,7 @@ export default function App() {
 
                 <div className="space-y-4">
                   <div className="relative">
-                    <input 
+                    <input
                       type="text"
                       placeholder={t.dashboard.keyPlaceholder}
                       value={licenseKeyField}
@@ -1215,23 +1261,22 @@ export default function App() {
                       className="w-full bg-white/5 border border-white/10 rounded-xl px-6 py-4 text-white font-mono text-center tracking-widest focus:border-blue-500/50 outline-none transition-all"
                     />
                   </div>
-                  
+
                   {licenseActivationError && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`p-3 rounded-xl text-sm font-medium border ${
-                        licenseActivationError.includes('✅') 
-                          ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                          : 'bg-red-500/10 border-red-500/20 text-red-400'
-                      }`}
+                      className={`p-3 rounded-xl text-sm font-medium border ${licenseActivationError.includes('✅')
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}
                     >
                       {licenseActivationError}
                     </motion.div>
                   )}
 
 
-                  <button 
+                  <button
                     onClick={submitActivateLicense}
                     disabled={loading || !licenseKeyField}
                     className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-blue-900/20 hover:bg-blue-500 transition-all disabled:opacity-50 active:scale-[0.98]"
@@ -1245,20 +1290,20 @@ export default function App() {
 
           {deleteConfirmModal && (
             <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setDeleteConfirmModal(null)}
                 className="absolute inset-0 bg-black/85 backdrop-blur-sm"
               />
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 className="relative w-full max-w-md bg-[#16161a] border border-red-500/15 rounded-3xl p-8 shadow-2xl shadow-red-950/20"
               >
-                <button 
+                <button
                   onClick={() => setDeleteConfirmModal(null)}
                   className="absolute top-4 right-4 p-2 text-white/20 hover:text-white transition-colors"
                 >
@@ -1270,35 +1315,35 @@ export default function App() {
                     <Trash2 size={32} />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-2">
-                    {deleteConfirmModal.type === 'user' 
+                    {deleteConfirmModal.type === 'user'
                       ? (language === 'en' ? 'Delete User' : language === 'es' ? 'Eliminar Usuario' : 'Excluir Usuário')
                       : (language === 'en' ? 'Delete License' : language === 'es' ? 'Eliminar Licencia' : 'Excluir Licença')
                     }
                   </h3>
                   <p className="text-sm text-white/60 leading-relaxed px-2">
-                    {deleteConfirmModal.type === 'user' 
-                      ? (language === 'en' 
-                          ? `Are you sure you want to permanently delete the user "${deleteConfirmModal.displayLabel}"? This action cannot be undone.` 
-                          : language === 'es' 
-                            ? `¿Está seguro de que desea eliminar permanentemente al usuario "${deleteConfirmModal.displayLabel}"? Esta acción no se puede deshacer.` 
-                            : `Tem certeza que deseja excluir permanentemente o usuário "${deleteConfirmModal.displayLabel}"? Esta ação não pode ser desfeita.`)
-                      : (language === 'en' 
-                          ? `Are you sure you want to permanently delete the license "${deleteConfirmModal.displayLabel}"? This action cannot be undone.` 
-                          : language === 'es' 
-                            ? `¿Está seguro de que desea eliminar permanentemente la licencia "${deleteConfirmModal.displayLabel}"? Esta acción no se puede deshacer.` 
-                            : `Tem certeza que deseja excluir permanentemente a licença "${deleteConfirmModal.displayLabel}"? Esta ação não pode ser desfeita.`)
+                    {deleteConfirmModal.type === 'user'
+                      ? (language === 'en'
+                        ? `Are you sure you want to permanently delete the user "${deleteConfirmModal.displayLabel}"? This action cannot be undone.`
+                        : language === 'es'
+                          ? `¿Está seguro de que desea eliminar permanentemente al usuario "${deleteConfirmModal.displayLabel}"? Esta acción no se puede deshacer.`
+                          : `Tem certeza que deseja excluir permanentemente o usuário "${deleteConfirmModal.displayLabel}"? Esta ação não pode ser desfeita.`)
+                      : (language === 'en'
+                        ? `Are you sure you want to permanently delete the license "${deleteConfirmModal.displayLabel}"? This action cannot be undone.`
+                        : language === 'es'
+                          ? `¿Está seguro de que desea eliminar permanentemente la licencia "${deleteConfirmModal.displayLabel}"? Esta acción no se puede deshacer.`
+                          : `Tem certeza que deseja excluir permanentemente a licença "${deleteConfirmModal.displayLabel}"? Esta ação não pode ser desfeita.`)
                     }
                   </p>
                 </div>
 
                 <div className="flex gap-4">
-                  <button 
+                  <button
                     onClick={() => setDeleteConfirmModal(null)}
                     className="flex-1 py-3.5 bg-white/5 text-white/80 rounded-xl font-bold uppercase tracking-wider text-xs hover:bg-white/10 transition-colors"
                   >
                     {language === 'en' ? 'Cancel' : language === 'es' ? 'Cancelar' : 'Cancelar'}
                   </button>
-                  <button 
+                  <button
                     onClick={handleConfirmDelete}
                     className="flex-1 py-3.5 bg-red-600 text-white rounded-xl font-bold uppercase tracking-wider text-xs shadow-lg shadow-red-900/40 hover:bg-red-500 transition-colors active:scale-[0.98]"
                   >
@@ -1312,7 +1357,7 @@ export default function App() {
         {/* Header */}
         <header className="h-20 border-b border-white/5 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
           <div className="flex items-center gap-3 md:gap-4">
-            <button 
+            <button
               className="md:hidden p-2 text-white/70 hover:text-white"
               onClick={() => setIsMobileMenuOpen(true)}
             >
@@ -1339,10 +1384,10 @@ export default function App() {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const res = await fetch('/api/balance/sync', { 
-                    method: 'POST', 
+                  const res = await fetch('/api/balance/sync', {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser?.id }) 
+                    body: JSON.stringify({ userId: currentUser?.id })
                   });
                   const data = await res.json();
                   if (data.success) {
@@ -1351,7 +1396,7 @@ export default function App() {
                   } else {
                     alert("Sync error: " + (data.error || "Unknown"));
                   }
-                } catch(e) { console.error(e); }
+                } catch (e) { console.error(e); }
                 finally { setLoading(false); }
               }}
               disabled={loading}
@@ -1360,16 +1405,15 @@ export default function App() {
               <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
               <span className="hidden sm:inline">SYNC MT5</span>
             </button>
-            <button 
+            <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
-              className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-xl ${
-                stats.systemBlocked
-                  ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
-                  : stats.botRunning 
-                  ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5' 
+              className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-xl ${stats.systemBlocked
+                ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
+                : stats.botRunning
+                  ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
                   : 'bg-white text-black hover:bg-white/90 shadow-white/5'
-              }`}
+                }`}
             >
               {loading ? (
                 <RefreshCw className="animate-spin" size={18} />
@@ -1390,7 +1434,7 @@ export default function App() {
         <div className="p-8 space-y-8">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
-              <motion.div 
+              <motion.div
                 key="dashboard"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1398,51 +1442,51 @@ export default function App() {
                 className="space-y-8"
               >
                 {stats.systemBlocked && stats.blockedUntil && (
-                   <motion.div 
-                     initial={{ opacity: 0, scale: 0.95 }}
-                     animate={{ opacity: 1, scale: 1 }}
-                     className="bg-[#0f0f12] border border-yellow-500/20 rounded-3xl p-8 text-center text-yellow-500 mb-8 relative overflow-hidden"
-                   >
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent opacity-50"></div>
-                      <Lock size={40} className="mx-auto mb-4 animate-pulse opacity-80" />
-                      <h2 className="text-2xl font-bold mb-2">META DIÁRIA ATINGIDA</h2>
-                      <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.</p>
-                      
-                      <div className="inline-flex flex-col items-center bg-black/40 border border-yellow-500/10 rounded-2xl px-10 py-6">
-                        <span className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">PRÓXIMA SESSÃO EM</span>
-                        <div className="text-5xl font-black font-mono tracking-wider tabular-nums text-white">
-                          {timeLeft || '00:00:00'}
-                        </div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-[#0f0f12] border border-yellow-500/20 rounded-3xl p-8 text-center text-yellow-500 mb-8 relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent opacity-50"></div>
+                    <Lock size={40} className="mx-auto mb-4 animate-pulse opacity-80" />
+                    <h2 className="text-2xl font-bold mb-2">META DIÁRIA ATINGIDA</h2>
+                    <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.</p>
+
+                    <div className="inline-flex flex-col items-center bg-black/40 border border-yellow-500/10 rounded-2xl px-10 py-6">
+                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">PRÓXIMA SESSÃO EM</span>
+                      <div className="text-5xl font-black font-mono tracking-wider tabular-nums text-white">
+                        {timeLeft || '00:00:00'}
                       </div>
-                   </motion.div>
+                    </div>
+                  </motion.div>
                 )}
 
                 {/* Top Grid — Enhanced StatCards with sparklines */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard 
-                    label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`} 
-                    value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"} 
+                  <StatCard
+                    label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
+                    value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
                     icon={<Wallet className="text-blue-400" />}
                     trendPositive={true}
-                    trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000,10100,10080,10250,10400,10350,10580,10720,10690,10850,11000,11200]}
+                    trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                   />
-                  <StatCard 
-                    label={t.dashboard.dailyTargetLabel} 
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                    delta="2.0%" 
+                  <StatCard
+                    label={t.dashboard.dailyTargetLabel}
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="2.0%"
                     icon={<Target className="text-yellow-400" />}
                     trendPositive={true}
-                    trend={[10,12,11,14,13,15,16,14,17,18,20,19]}
+                    trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
                     return (
-                      <StatCard 
-                        label={t.dashboard.dailyProfitLabel} 
-                        value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`} 
-                        icon={<TrendingUp className="text-emerald-400" />} 
+                      <StatCard
+                        label={t.dashboard.dailyProfitLabel}
+                        value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
+                        icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         trendPositive={realTimeProfit >= 0}
                       />
@@ -1451,7 +1495,7 @@ export default function App() {
                   {stats.activeLicense?.expiryDate ? (
                     <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                   ) : stats.pendingPayment ? (
-                    <div 
+                    <div
                       onClick={() => setActiveTab('plans')}
                       className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-6 cursor-pointer hover:bg-amber-500/20 transition-all group relative overflow-hidden"
                     >
@@ -1467,7 +1511,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div 
+                    <div
                       onClick={() => setActiveTab('plans')}
                       className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
                     >
@@ -1501,14 +1545,13 @@ export default function App() {
                         </div>
                         <div className="flex gap-2">
                           {['1M', '5M', '1H'].map((interval) => (
-                            <button 
+                            <button
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
-                              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
-                                selectedInterval === interval 
-                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]' 
-                                  : 'bg-white/5 text-white/60 hover:bg-white/10'
-                              }`}
+                              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${selectedInterval === interval
+                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                                }`}
                             >
                               {interval}
                             </button>
@@ -1555,23 +1598,23 @@ export default function App() {
                           ]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                             <defs>
                               <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                            <Tooltip 
+                            <Tooltip
                               contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', padding: '8px 12px' }}
                               itemStyle={{ color: '#60a5fa' }}
                               labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}
                               formatter={(v: any) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Balance']}
                             />
-                            <Area 
-                              type="monotone" 
-                              dataKey="balance" 
-                              stroke="#3b82f6" 
-                              fillOpacity={1} 
-                              fill="url(#colorPnL)" 
+                            <Area
+                              type="monotone"
+                              dataKey="balance"
+                              stroke="#3b82f6"
+                              fillOpacity={1}
+                              fill="url(#colorPnL)"
                               strokeWidth={2}
                               dot={false}
                             />
@@ -1639,7 +1682,7 @@ export default function App() {
 
 
                       {/* Log entries with categories */}
-                      <div 
+                      <div
                         ref={logContainerRef}
                         className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
                         style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
@@ -1668,14 +1711,14 @@ export default function App() {
                           else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
 
                           return (
-                            <motion.div 
-                              key={`${i}-${log.slice(0,10)}`}
+                            <motion.div
+                              key={`${i}-${log.slice(0, 10)}`}
                               initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
                               animate={{ opacity: 1, x: 0 }}
                               transition={{ duration: 0.25 }}
                               className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
                             >
-                              <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2,'0')}]</span>
+                              <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
                               {iconEl}
                               <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
                             </motion.div>
@@ -1720,7 +1763,7 @@ export default function App() {
                             </div>
                             {ni < 2 && (
                               <div className="flex gap-1.5 mx-2">
-                                {[0,1,2].map(dot => (
+                                {[0, 1, 2].map(dot => (
                                   <motion.div
                                     key={dot}
                                     animate={{ opacity: [0.1, 1, 0.1] }}
@@ -1754,8 +1797,8 @@ export default function App() {
                     </div>
 
                     {currentUser?.role === 'ADMIN' && (
-                      <button 
-                        onClick={() => setActiveTab('settings')} 
+                      <button
+                        onClick={() => setActiveTab('settings')}
                         className="w-full py-3 bg-white/5 hover:bg-indigo-500/10 border border-white/5 hover:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-white/60 hover:text-white"
                       >
                         <Settings size={14} />
@@ -1778,17 +1821,16 @@ export default function App() {
                           <button
                             key={f}
                             onClick={() => setTradeFilter(f)}
-                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                              tradeFilter === f 
-                                ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
-                                  : f === 'CLOSED' ? 'bg-white/10 text-white' 
+                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${tradeFilter === f
+                              ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                : f === 'CLOSED' ? 'bg-white/10 text-white'
                                   : 'bg-white/10 text-white'
-                                : 'text-white/30 hover:text-white/60'
-                            }`}
+                              : 'text-white/30 hover:text-white/60'
+                              }`}
                           >
-                            {f === 'ALL' ? (language === 'en' ? 'All' : 'Todos') 
-                              : f === 'OPEN' ? (language === 'en' ? 'Open' : 'Abertas') 
-                              : (language === 'en' ? 'Closed' : 'Fechadas')}
+                            {f === 'ALL' ? (language === 'en' ? 'All' : 'Todos')
+                              : f === 'OPEN' ? (language === 'en' ? 'Open' : 'Abertas')
+                                : (language === 'en' ? 'Closed' : 'Fechadas')}
                           </button>
                         ))}
                       </div>
@@ -1812,7 +1854,7 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/[0.03]">
                         {(() => {
-                          const filtered = trades.filter(tr => 
+                          const filtered = trades.filter(tr =>
                             tradeFilter === 'ALL' ? true : tr.status === tradeFilter
                           );
                           if (filtered.length === 0) return (
@@ -1828,7 +1870,7 @@ export default function App() {
                             const profitPct = trade.profit ? (Math.abs(trade.profit) / maxAbsProfit) * 100 : 0;
                             const isProfit = (trade.profit ?? 0) >= 0;
                             return (
-                              <motion.tr 
+                              <motion.tr
                                 key={trade.id}
                                 initial={isLatestTrade ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}}
                                 animate={{ backgroundColor: 'rgba(255,255,255,0)' }}
@@ -1843,11 +1885,10 @@ export default function App() {
                                 </td>
                                 <td className="py-3.5 font-black text-white">{trade.symbol}</td>
                                 <td className="py-3.5">
-                                  <span className={`px-2 py-0.5 rounded-md text-sm font-black ${
-                                    trade.type === 'BUY' 
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                  }`}>
+                                  <span className={`px-2 py-0.5 rounded-md text-sm font-black ${trade.type === 'BUY'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                    }`}>
                                     {trade.type}
                                   </span>
                                 </td>
@@ -1872,14 +1913,13 @@ export default function App() {
                                 <td className="py-3.5 text-right">
                                   {trade.profit != null ? (
                                     <div className="flex flex-col items-end gap-1">
-                                      <span className={`font-mono font-black text-sm ${
-                                        isProfit ? 'text-emerald-400' : 'text-red-400'
-                                      }`}>
+                                      <span className={`font-mono font-black text-sm ${isProfit ? 'text-emerald-400' : 'text-red-400'
+                                        }`}>
                                         {isProfit ? '+' : ''}${trade.profit.toFixed(2)}
                                       </span>
                                       {/* Mini P&L bar */}
                                       <div className="w-16 h-0.5 bg-white/5 rounded-full overflow-hidden">
-                                        <motion.div 
+                                        <motion.div
                                           initial={{ width: 0 }}
                                           animate={{ width: `${profitPct}%` }}
                                           transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -1905,7 +1945,7 @@ export default function App() {
             )}
 
             {activeTab === 'strategies' && currentUser?.role === 'ADMIN' && (
-              <motion.div 
+              <motion.div
                 key="strategies"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2015,7 +2055,7 @@ export default function App() {
             )}
 
             {activeTab === 'analytics' && currentUser?.role === 'ADMIN' && (
-              <motion.div 
+              <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2056,15 +2096,15 @@ export default function App() {
                       <p className="text-xs text-white/40">{t.analytics.performanceTrack}</p>
                     </div>
                     <div className="flex gap-2">
-                       {['7D', '30D', '90D', 'ALL'].map(p => (
-                         <button 
-                           key={p} 
-                           onClick={() => setAnalyticsPeriod(p as any)}
-                           className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${analyticsPeriod === p ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
-                         >
-                           {p}
-                         </button>
-                       ))}
+                      {['7D', '30D', '90D', 'ALL'].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setAnalyticsPeriod(p as any)}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${analyticsPeriod === p ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="h-[400px] w-full">
@@ -2072,24 +2112,24 @@ export default function App() {
                       <AreaChart data={chartDataMap[analyticsPeriod]}>
                         <defs>
                           <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis 
-                          dataKey="name" 
-                          axisLine={false} 
-                          tickLine={false} 
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
                           tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
                         />
-                        <YAxis 
-                          axisLine={false} 
-                          tickLine={false} 
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
                           tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
                           tickFormatter={(v) => `$${v}`}
                         />
-                        <Tooltip 
+                        <Tooltip
                           contentStyle={{ backgroundColor: '#141418', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
                           itemStyle={{ color: '#fff' }}
                         />
@@ -2155,7 +2195,7 @@ export default function App() {
             )}
 
             {activeTab === 'plans' && (
-              <motion.div 
+              <motion.div
                 key="plans"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2176,11 +2216,11 @@ export default function App() {
                           {language === 'en' ? 'USDT Transfer Under Review' : language === 'es' ? 'Transferencia USDT en Revisión' : 'Transferência USDT em Análise'}
                         </h3>
                         <p className="text-sm text-white/60 max-w-xl">
-                          {language === 'en' 
-                            ? 'Your payment hash is currently being verified on the blockchain explorer. The license will be activated automatically once the balance is confirmed.' 
+                          {language === 'en'
+                            ? 'Your payment hash is currently being verified on the blockchain explorer. The license will be activated automatically once the balance is confirmed.'
                             : language === 'es'
-                            ? 'El hash de su pago se está verificando en el explorador de blockchain. La licencia se activará automáticamente una vez confirmado el saldo.'
-                            : 'A hash do seu pagamento está sendo verificada no explorador da blockchain. A licença será liberada e ativada automaticamente assim que o saldo for confirmado.'}
+                              ? 'El hash de su pago se está verificando en el explorador de blockchain. La licencia se activará automáticamente una vez confirmado el saldo.'
+                              : 'A hash do seu pagamento está sendo verificada no explorador da blockchain. A licença será liberada e ativada automaticamente assim que o saldo for confirmado.'}
                         </p>
                         <div className="pt-2 text-xs font-mono text-white/40 space-y-1">
                           <p><span className="text-white/60 font-medium">HASH:</span> <span className="break-all select-all text-amber-300">{stats.pendingPayment.hash}</span></p>
@@ -2200,36 +2240,36 @@ export default function App() {
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
-                  <PricingCard 
-                    title={t.plans.card1Title} 
-                    price={10} 
+                  <PricingCard
+                    title={t.plans.card1Title}
+                    price={10}
                     desc={t.plans.card1Desc}
                     features={t.plans.card1Features}
                     language={language}
                     image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card1Title, price: 10 })}
                   />
-                  <PricingCard 
-                    title={t.plans.card2Title} 
-                    price={20} 
-                    recommended 
+                  <PricingCard
+                    title={t.plans.card2Title}
+                    price={20}
+                    recommended
                     desc={t.plans.card2Desc}
                     features={t.plans.card2Features}
                     language={language}
                     image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card2Title, price: 20 })}
                   />
-                  <PricingCard 
-                    title={t.plans.card3Title} 
-                    price={50} 
+                  <PricingCard
+                    title={t.plans.card3Title}
+                    price={50}
                     desc={t.plans.card3Desc}
                     features={t.plans.card3Features}
                     language={language}
                     image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
-                  <PricingCard 
-                    title={t.plans.card4Title} 
+                  <PricingCard
+                    title={t.plans.card4Title}
                     price={100}
                     customPriceText={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
                     desc={t.plans.card4Desc}
@@ -2248,7 +2288,7 @@ export default function App() {
             )}
 
             {activeTab === 'affiliates' && (
-              <motion.div 
+              <motion.div
                 key="affiliates"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2260,7 +2300,7 @@ export default function App() {
                   <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
                   <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] -mr-48 -mt-48 transition-all" />
                   <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-600/10 blur-[100px] -ml-24 -mb-24 transition-all" />
-                  
+
                   {/* Subtle Chart SVG */}
                   <div className="absolute bottom-0 right-0 w-full h-1/2 opacity-5 pointer-events-none">
                     <svg viewBox="0 0 1000 200" className="w-full h-full preserve-3d">
@@ -2268,7 +2308,7 @@ export default function App() {
                       <path d="M0 120 Q50 150 150 100 T350 130 T550 70 T750 110 T1000 50" stroke="rgba(59,130,246,0.5)" strokeWidth="1" fill="none" />
                     </svg>
                   </div>
-                  
+
                   <div className="relative z-10 max-w-2xl">
                     <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-6 text-white">
                       {language === 'en' ? 'Referral Program' : language === 'es' ? 'Programa de Referidos' : 'Programa de Indicação'}
@@ -2281,16 +2321,16 @@ export default function App() {
 
                   {/* Decorative Tree Element */}
                   <div className="hidden lg:block absolute right-16 top-1/2 -translate-y-1/2 w-80 h-80 opacity-20">
-                     <svg viewBox="0 0 100 100" className="w-full h-full stroke-blue-500 fill-none">
-                        <circle cx="50" cy="20" r="5" />
-                        <path d="M50 25 L30 50 M50 25 L70 50 M30 55 L20 80 M30 55 L40 80 M70 55 L60 80 M70 55 L80 80" strokeWidth="2" strokeLinecap="round" />
-                        <circle cx="30" cy="50" r="4" />
-                        <circle cx="70" cy="50" r="4" />
-                        <circle cx="20" cy="80" r="3" />
-                        <circle cx="40" cy="80" r="3" />
-                        <circle cx="60" cy="80" r="3" />
-                        <circle cx="80" cy="80" r="3" />
-                     </svg>
+                    <svg viewBox="0 0 100 100" className="w-full h-full stroke-blue-500 fill-none">
+                      <circle cx="50" cy="20" r="5" />
+                      <path d="M50 25 L30 50 M50 25 L70 50 M30 55 L20 80 M30 55 L40 80 M70 55 L60 80 M70 55 L80 80" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="30" cy="50" r="4" />
+                      <circle cx="70" cy="50" r="4" />
+                      <circle cx="20" cy="80" r="3" />
+                      <circle cx="40" cy="80" r="3" />
+                      <circle cx="60" cy="80" r="3" />
+                      <circle cx="80" cy="80" r="3" />
+                    </svg>
                   </div>
                 </div>
 
@@ -2318,7 +2358,7 @@ export default function App() {
                             {currentUser?.referralCode || 'CARLOS296'}
                           </code>
                         </div>
-                        <button 
+                        <button
                           onClick={() => {
                             const code = currentUser?.referralCode || 'CARLOS296';
                             navigator.clipboard.writeText(code);
@@ -2416,7 +2456,7 @@ export default function App() {
                                 </label>
                                 <div className="relative">
                                   <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                  <input 
+                                  <input
                                     type="text"
                                     required
                                     value={withdrawWallet}
@@ -2433,7 +2473,7 @@ export default function App() {
                                 </label>
                                 <div className="relative">
                                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-white/30">$</span>
-                                  <input 
+                                  <input
                                     type="number"
                                     step="0.01"
                                     min="30"
@@ -2447,11 +2487,10 @@ export default function App() {
                               </div>
 
                               {withdrawalMessage && (
-                                <div className={`p-4 rounded-2xl border text-xs font-semibold ${
-                                  withdrawalMessage.isError 
-                                    ? 'bg-red-500/10 border-red-500/10 text-red-400' 
-                                    : 'bg-emerald-500/10 border-emerald-500/10 text-emerald-400'
-                                }`}>
+                                <div className={`p-4 rounded-2xl border text-xs font-semibold ${withdrawalMessage.isError
+                                  ? 'bg-red-500/10 border-red-500/10 text-red-400'
+                                  : 'bg-emerald-500/10 border-emerald-500/10 text-emerald-400'
+                                  }`}>
                                   {withdrawalMessage.text}
                                 </div>
                               )}
@@ -2505,14 +2544,13 @@ export default function App() {
                                             <span className="text-white/60 font-bold">${parseFloat(w.amount).toFixed(2)}</span>
                                             <span className="text-white/30 text-[10px]">• ID: {w.id}</span>
                                           </div>
-                                          <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${
-                                            w.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
+                                          <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase ${w.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
                                             w.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
-                                            'bg-amber-500/10 text-amber-500'
-                                          }`}>
+                                              'bg-amber-500/10 text-amber-500'
+                                            }`}>
                                             {w.status === 'APPROVED' ? (language === 'en' ? 'Approved' : language === 'es' ? 'Aprobado' : 'Aprovado') :
-                                             w.status === 'REJECTED' ? (language === 'en' ? 'Rejected' : language === 'es' ? 'Rechazado' : 'Rejeitado') :
-                                             (language === 'en' ? 'Pending' : language === 'es' ? 'Pendiente' : 'Pendente')}
+                                              w.status === 'REJECTED' ? (language === 'en' ? 'Rejected' : language === 'es' ? 'Rechazado' : 'Rejeitado') :
+                                                (language === 'en' ? 'Pending' : language === 'es' ? 'Pendiente' : 'Pendente')}
                                           </span>
                                         </div>
                                         <div className="flex justify-between items-center">
@@ -2537,7 +2575,7 @@ export default function App() {
                             const levelEarnings = referralHistory
                               .filter(item => item.level === lvl)
                               .reduce((sum, item) => sum + item.amount, 0);
-                            
+
                             const colors = [
                               'border-blue-500/10 text-blue-400 bg-blue-500/5',
                               'border-cyan-500/10 text-cyan-400 bg-cyan-500/5',
@@ -2545,7 +2583,7 @@ export default function App() {
                               'border-purple-500/10 text-purple-400 bg-purple-500/5',
                               'border-amber-500/10 text-amber-400 bg-amber-500/5'
                             ];
-                            
+
                             return (
                               <div key={lvl} className={`border rounded-[20px] p-6 flex flex-col justify-between ${colors[lvl - 1]} hover:scale-[1.02] transition-transform duration-200`}>
                                 <div>
@@ -2572,7 +2610,7 @@ export default function App() {
                                   </div>
                                 </div>
                                 <div className="w-full bg-white/5 rounded-full h-1 mt-4 overflow-hidden">
-                                  <div 
+                                  <div
                                     className="bg-current h-full rounded-full transition-all duration-300"
                                     style={{ width: `${levelTotals > 0 ? (levelActives / levelTotals) * 100 : 0}%` }}
                                   />
@@ -2590,21 +2628,19 @@ export default function App() {
                           <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 shrink-0">
                             <button
                               onClick={() => setFilterActiveNetworkOnly(false)}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                                !filterActiveNetworkOnly 
-                                  ? 'bg-white/10 text-white' 
-                                  : 'text-white/40 hover:text-white'
-                              }`}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${!filterActiveNetworkOnly
+                                ? 'bg-white/10 text-white'
+                                : 'text-white/40 hover:text-white'
+                                }`}
                             >
                               {language === 'en' ? 'All Members' : language === 'es' ? 'Todos los Miembros' : 'Todos os Membros'}
                             </button>
                             <button
                               onClick={() => setFilterActiveNetworkOnly(true)}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                                filterActiveNetworkOnly 
-                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/10' 
-                                  : 'text-white/40 hover:text-white'
-                              }`}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${filterActiveNetworkOnly
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/10'
+                                : 'text-white/40 hover:text-white'
+                                }`}
                             >
                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                               {language === 'en' ? 'Active License Only' : language === 'es' ? 'Solo Activos' : 'Apenas Ativos (Licença Ativa)'}
@@ -2639,7 +2675,7 @@ export default function App() {
                                   const avatarColor = colors[(item.level - 1) % colors.length];
 
                                   return (
-                                    <motion.tr 
+                                    <motion.tr
                                       key={item.id}
                                       initial={{ opacity: 0, x: -10 }}
                                       animate={{ opacity: 1, x: 0 }}
@@ -2658,17 +2694,16 @@ export default function App() {
                                         </div>
                                       </td>
                                       <td className="px-6 py-4">
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                          item.level === 1 
-                                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
-                                            : item.level === 2 
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${item.level === 1
+                                          ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                          : item.level === 2
                                             ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
                                             : item.level === 3
-                                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                            : item.level === 4
-                                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                        }`}>
+                                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                              : item.level === 4
+                                                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                          }`}>
                                           {language === 'en' ? `Level ${item.level}` : language === 'es' ? `Nivel ${item.level}` : `Nível ${item.level}`}
                                         </span>
                                       </td>
@@ -2677,7 +2712,7 @@ export default function App() {
                                           day: '2-digit',
                                           month: '2-digit',
                                           year: 'numeric'
-                                        })} &nbsp; 
+                                        })} &nbsp;
                                         <span className="text-white/20">
                                           {new Date(item.createdAt).toLocaleTimeString(undefined, {
                                             hour: 'numeric',
@@ -2687,13 +2722,12 @@ export default function App() {
                                         </span>
                                       </td>
                                       <td className="px-6 py-4">
-                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase ${
-                                          item.status === 'ACTIVE'
-                                            ? 'bg-emerald-500/10 text-emerald-400'
-                                            : 'bg-red-500/10 text-red-400'
-                                        }`}>
-                                          ● {item.status === 'ACTIVE' 
-                                            ? (language === 'en' ? 'ONLINE' : language === 'es' ? 'ACTIVO' : 'ATIVO') 
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black tracking-wider uppercase ${item.status === 'ACTIVE'
+                                          ? 'bg-emerald-500/10 text-emerald-400'
+                                          : 'bg-red-500/10 text-red-400'
+                                          }`}>
+                                          ● {item.status === 'ACTIVE'
+                                            ? (language === 'en' ? 'ONLINE' : language === 'es' ? 'ACTIVO' : 'ATIVO')
                                             : (language === 'en' ? 'OFFLINE' : language === 'es' ? 'INACTIVO' : 'INATIVO')}
                                         </span>
                                       </td>
@@ -2756,7 +2790,7 @@ export default function App() {
                               const avatarColor = colors[idx % colors.length];
 
                               return (
-                                <motion.tr 
+                                <motion.tr
                                   key={item.id}
                                   initial={{ opacity: 0, x: -10 }}
                                   animate={{ opacity: 1, x: 0 }}
@@ -2775,17 +2809,16 @@ export default function App() {
                                     </div>
                                   </td>
                                   <td className="px-6 py-4">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                      item.level === 1 
-                                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' 
-                                        : item.level === 2 
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${item.level === 1
+                                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                      : item.level === 2
                                         ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
                                         : item.level === 3
-                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                        : item.level === 4
-                                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                    }`}>
+                                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                          : item.level === 4
+                                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                      }`}>
                                       {language === 'en' ? `Level ${item.level}` : language === 'es' ? `Nivel ${item.level}` : `Nível ${item.level}`}
                                     </span>
                                   </td>
@@ -2802,7 +2835,7 @@ export default function App() {
                                       day: '2-digit',
                                       month: '2-digit',
                                       year: 'numeric'
-                                    })} &nbsp; 
+                                    })} &nbsp;
                                     <span className="text-white/20">
                                       {new Date(item.timestamp).toLocaleTimeString(undefined, {
                                         hour: 'numeric',
@@ -2831,7 +2864,7 @@ export default function App() {
                     <h2 className="text-2xl font-bold tracking-tight text-white">{language === 'en' ? 'Network Commission Structure (5 Levels)' : language === 'es' ? 'Estructura de Comisión de Red (5 Niveles)' : 'Estrutura de Comissão de Rede (5 Níveis)'}</h2>
                     <p className="text-white/40 text-sm">{language === 'en' ? 'Our 5-level matrix distributes automatic rewards up to 5 tiers of your active network.' : language === 'es' ? 'Nuestra matriz de 5 niveles distribuye recompensas automáticas en su red activa.' : 'Nossa matriz de 5 níveis distribui comissões automáticas em até 5 gerações de sua rede ativa.'}</p>
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-2">
                     <AffiliateLevel level={1} percentage={20} label={language === 'en' ? 'Direct Referrals' : language === 'es' ? 'Directos' : 'Indicações Diretas'} color="bg-blue-500" language={language} />
                     <AffiliateLevel level={2} percentage={15} label={language === 'en' ? 'Tier 2' : language === 'es' ? 'Nivel 2' : 'Nível 2'} color="bg-blue-400" language={language} />
@@ -2844,7 +2877,7 @@ export default function App() {
             )}
 
             {activeTab === 'admin' && currentUser?.role === 'ADMIN' && (
-              <motion.div 
+              <motion.div
                 key="admin"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2875,32 +2908,32 @@ export default function App() {
                           </span>
                         </div>
                         <div className="flex gap-2 items-center flex-wrap">
-                          <button 
-                            onClick={() => grantAccess(u.id)} 
+                          <button
+                            onClick={() => grantAccess(u.id)}
                             title={t.dashboard.grantAccess}
                             className="p-2 px-3 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 text-emerald-500 transition-colors flex items-center gap-1.5"
                           >
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
                           </button>
-                          <button 
-                            onClick={() => grantLifetimeAccess(u.id)} 
+                          <button
+                            onClick={() => grantLifetimeAccess(u.id)}
                             title={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
                             className="p-2 px-3 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 text-amber-500 transition-colors flex items-center gap-1.5"
                           >
                             <Crown size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Lifetime' : language === 'es' ? 'Vitalicio' : 'Vitalício'}</span>
                           </button>
-                          <button 
-                            onClick={() => toggleUser(u.id)} 
+                          <button
+                            onClick={() => toggleUser(u.id)}
                             title={u.status === 'ACTIVE' ? 'Lock User' : 'Activate User'}
                             className="p-2 px-3 bg-white/5 rounded-lg hover:bg-white/10 text-white/60 transition-colors flex items-center gap-1.5"
                           >
                             {u.status === 'ACTIVE' ? <Lock size={14} /> : <UserCheck size={14} />}
                             <span className="text-[10px] font-bold uppercase tracking-tight">{u.status === 'ACTIVE' ? (language === 'en' ? 'Lock' : language === 'es' ? 'Bloquear' : 'Bloquear') : (language === 'en' ? 'Unlock' : language === 'es' ? 'Desbloquear' : 'Desbloquear')}</span>
                           </button>
-                          <button 
-                            onClick={() => deleteUser(u.id, u.name)} 
+                          <button
+                            onClick={() => deleteUser(u.id, u.name)}
                             className="p-2 px-3 bg-red-400/10 rounded-lg hover:bg-red-400/20 text-red-400 transition-colors flex items-center gap-1.5 border border-red-500/10"
                           >
                             <Trash2 size={14} />
@@ -2935,8 +2968,8 @@ export default function App() {
                               </div>
                             </div>
                             <div className="flex gap-2 items-center flex-wrap">
-                              <button 
-                                onClick={() => toggleLicense(l.id)} 
+                              <button
+                                onClick={() => toggleLicense(l.id)}
                                 className="p-2 px-3 bg-white/5 rounded-lg hover:bg-white/10 text-white/60 transition-colors flex items-center gap-1.5"
                               >
                                 {l.status === 'ACTIVE' ? <Lock size={14} /> : <CheckCircle2 size={14} />}
@@ -2944,8 +2977,8 @@ export default function App() {
                                   {l.status === 'ACTIVE' ? (language === 'en' ? 'Disable' : language === 'es' ? 'Desactivar' : 'Desativar') : (language === 'en' ? 'Enable' : language === 'es' ? 'Activar' : 'Ativar')}
                                 </span>
                               </button>
-                              <button 
-                                onClick={() => deleteLicense(l.id, l.key)} 
+                              <button
+                                onClick={() => deleteLicense(l.id, l.key)}
                                 className="p-2 px-3 bg-red-400/10 rounded-lg hover:bg-red-400/20 text-red-400 transition-colors flex items-center gap-1.5 border border-red-500/10"
                               >
                                 <Trash2 size={14} />
@@ -2975,9 +3008,9 @@ export default function App() {
                           <div className="flex justify-between items-center">
                             <p className="text-sm font-bold">${p.amount} • {p.method}</p>
                             <div className="flex gap-2">
-                              <a 
+                              <a
                                 href={p.hash && p.hash.trim().startsWith('0x') ? `https://bscscan.com/tx/${p.hash.trim()}` : `https://bscscan.com/search?q=${p.hash ? p.hash.trim() : ''}`}
-                                target="_blank" 
+                                target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/20 hover:text-blue-300 transition-colors flex items-center justify-center gap-1.5 text-xs font-bold"
                                 title={language === 'en' ? 'Check BSC' : language === 'es' ? 'Verificar BSC' : 'Verificar no BSC'}
@@ -3031,16 +3064,16 @@ export default function App() {
                             </p>
                           </div>
                           <div className="flex gap-2 self-end md:self-center">
-                            <button 
-                              onClick={() => approveWithdrawal(w.id)} 
+                            <button
+                              onClick={() => approveWithdrawal(w.id)}
                               title={language === 'en' ? 'Approve' : 'Aprovar'}
                               className="p-2.5 bg-emerald-500 text-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center gap-1 text-xs font-bold font-mono cursor-pointer"
                             >
                               <CheckCircle2 size={16} />
                               {language === 'en' ? 'Approve' : 'Aprovar'}
                             </button>
-                            <button 
-                              onClick={() => rejectWithdrawal(w.id)} 
+                            <button
+                              onClick={() => rejectWithdrawal(w.id)}
                               title={language === 'en' ? 'Reject' : 'Rejeitar'}
                               className="p-2.5 bg-white/5 text-white/70 rounded-lg hover:bg-white/10 hover:text-white transition-colors flex items-center gap-1 text-xs font-bold font-mono cursor-pointer"
                             >
@@ -3085,11 +3118,10 @@ export default function App() {
                               <td className="py-4 font-mono font-bold text-emerald-400">${parseFloat(w.amount).toFixed(2)}</td>
                               <td className="py-4 font-mono text-[11px] text-white/65 select-all">{w.wallet}</td>
                               <td className="py-4">
-                                <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
-                                  w.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
+                                <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${w.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
                                   w.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
-                                  'bg-amber-500/10 text-amber-500'
-                                }`}>
+                                    'bg-amber-500/10 text-amber-500'
+                                  }`}>
                                   {w.status}
                                 </span>
                               </td>
@@ -3146,11 +3178,10 @@ export default function App() {
                               <td className="py-4 font-mono font-bold text-emerald-400">${p.amount}</td>
                               <td className="py-4 text-white/60">{p.method}</td>
                               <td className="py-4">
-                                <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
-                                  p.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
+                                <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${p.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
                                   p.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
-                                  'bg-amber-500/10 text-amber-500'
-                                }`}>
+                                    'bg-amber-500/10 text-amber-500'
+                                  }`}>
                                   {p.status}
                                 </span>
                               </td>
@@ -3166,7 +3197,7 @@ export default function App() {
             )}
 
             {activeTab === 'history' && (
-              <motion.div 
+              <motion.div
                 key="history"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -3235,7 +3266,7 @@ export default function App() {
             )}
 
             {activeTab === 'settings' && config && (
-              <motion.div 
+              <motion.div
                 key="settings"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -3245,7 +3276,7 @@ export default function App() {
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
                   <div>
                     <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
-                       {t.settings.accountFinance}
+                      {t.settings.accountFinance}
                     </h2>
                     <p className="text-sm text-white/40 mt-1">{t.settings.accountFinanceDesc}</p>
                   </div>
@@ -3254,8 +3285,8 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.fullName}</label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={profileForm.name}
                           onChange={(e) => setProfileForm(f => ({ ...f, name: e.target.value }))}
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
@@ -3263,8 +3294,8 @@ export default function App() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.emailAddress}</label>
-                        <input 
-                          type="email" 
+                        <input
+                          type="email"
                           value={profileForm.email}
                           onChange={(e) => setProfileForm(f => ({ ...f, email: e.target.value }))}
                           className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
@@ -3273,8 +3304,8 @@ export default function App() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.updatePassword}</label>
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         value={profileForm.password}
                         onChange={(e) => setProfileForm(f => ({ ...f, password: e.target.value }))}
                         placeholder={t.settings.passwordPlaceholder}
@@ -3285,8 +3316,8 @@ export default function App() {
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtWallet}</label>
                       <div className="relative">
                         <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           value={profileForm.wallet}
                           onChange={(e) => setProfileForm(f => ({ ...f, wallet: e.target.value }))}
                           placeholder={t.settings.walletPlaceholder}
@@ -3301,8 +3332,8 @@ export default function App() {
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Login</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={profileForm.mt5Login}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
                             placeholder="Ex: 12345678"
@@ -3311,8 +3342,8 @@ export default function App() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Senha</label>
-                          <input 
-                            type="password" 
+                          <input
+                            type="password"
                             value={profileForm.mt5Password}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
                             placeholder="Sua senha do MT5"
@@ -3321,8 +3352,8 @@ export default function App() {
                         </div>
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Servidor</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={profileForm.mt5Server}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
                             placeholder="Ex: Exness-MT5Trial6"
@@ -3334,7 +3365,7 @@ export default function App() {
                   </div>
 
                   <div className="pt-4 flex gap-4">
-                    <button 
+                    <button
                       onClick={updateProfile}
                       disabled={loading}
                       className="flex-1 py-4 bg-white text-black rounded-2xl font-bold text-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 shadow-xl shadow-white/5"
@@ -3351,7 +3382,7 @@ export default function App() {
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
                       <div>
                         <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
-                           {t.settings.engineConfig}
+                          {t.settings.engineConfig}
                         </h2>
                         <p className="text-sm text-white/40 mt-1">{t.settings.engineConfigDesc}</p>
                       </div>
@@ -3361,14 +3392,13 @@ export default function App() {
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.riskProfile}</label>
                           <div className="grid grid-cols-3 gap-3">
                             {['CONSERVATIVE', 'MEDIUM', 'AGGRESSIVE'].map((level) => (
-                              <button 
+                              <button
                                 key={level}
                                 onClick={() => setConfig({ ...config, riskLevel: level })}
-                                className={`py-3 rounded-xl text-[10px] font-bold border transition-all ${
-                                  config.riskLevel === level 
-                                    ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40' 
-                                    : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'
-                                }`}
+                                className={`py-3 rounded-xl text-[10px] font-bold border transition-all ${config.riskLevel === level
+                                  ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40'
+                                  : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'
+                                  }`}
                               >
                                 {level}
                               </button>
@@ -3381,10 +3411,10 @@ export default function App() {
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.lotMultiplier}</label>
                             <span className="text-xs font-mono text-blue-400">{config.lotMultiplier.toFixed(4)}</span>
                           </div>
-                          <input 
-                            type="range" 
-                            min="0.0001" 
-                            max="0.0020" 
+                          <input
+                            type="range"
+                            min="0.0001"
+                            max="0.0020"
                             step="0.0001"
                             value={config.lotMultiplier}
                             onChange={(e) => setConfig({ ...config, lotMultiplier: parseFloat(e.target.value) })}
@@ -3397,10 +3427,10 @@ export default function App() {
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.minConsensus}</label>
                             <span className="text-xs font-mono text-blue-400">{config.minScore}%</span>
                           </div>
-                          <input 
-                            type="range" 
-                            min="40" 
-                            max="90" 
+                          <input
+                            type="range"
+                            min="40"
+                            max="90"
                             step="1"
                             value={config.minScore}
                             onChange={(e) => setConfig({ ...config, minScore: parseInt(e.target.value) })}
@@ -3414,8 +3444,8 @@ export default function App() {
                           </div>
                           <div className="flex gap-4">
                             <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 checked={config.allowBuy !== false}
                                 onChange={(e) => setConfig({ ...config, allowBuy: e.target.checked })}
                                 className="accent-blue-500 w-4 h-4"
@@ -3423,8 +3453,8 @@ export default function App() {
                               {language === 'en' ? 'Allow BUY' : language === 'es' ? 'Permitir COMPRA' : 'Permitir COMPRA'}
                             </label>
                             <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 checked={config.allowSell !== false}
                                 onChange={(e) => setConfig({ ...config, allowSell: e.target.checked })}
                                 className="accent-blue-500 w-4 h-4"
@@ -3438,8 +3468,8 @@ export default function App() {
                           <div className="flex justify-between items-center">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Active Assets (Comma separated)' : language === 'es' ? 'Activos Activos (Separados por coma)' : 'Ativos Ativos (Separados por vírgula)'}</label>
                           </div>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={Array.isArray(config.symbols) ? config.symbols.join(',') : (config.symbols || '')}
                             onChange={(e) => setConfig({ ...config, symbols: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
                             placeholder="XAUUSD"
@@ -3451,8 +3481,8 @@ export default function App() {
                           <div className="flex justify-between items-center">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtReceiver}</label>
                           </div>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={config.paymentWallet || ''}
                             onChange={(e) => setConfig({ ...config, paymentWallet: e.target.value })}
                             placeholder="0x..."
@@ -3462,7 +3492,7 @@ export default function App() {
                       </div>
 
                       <div className="pt-4 flex gap-4">
-                        <button 
+                        <button
                           onClick={saveConfig}
                           disabled={loading}
                           className="flex-1 py-4 bg-white text-black rounded-2xl font-bold text-sm hover:bg-white/90 transition-all flex items-center justify-center gap-2 shadow-xl shadow-white/5"
@@ -3481,7 +3511,7 @@ export default function App() {
                         <WeightControl label={t.dashboard.smc} value={config.strategyWeights.smc * 100} color="#3b82f6" />
                         <WeightControl label={t.dashboard.momentum} value={config.strategyWeights.momentum * 100} color="#10b981" />
                         <WeightControl label={t.dashboard.aiBias} value={config.strategyWeights.ai} color="#8b5cf6" max={50} />
-                        
+
                         <div className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex gap-4">
                           <AlertTriangle className="text-amber-500 shrink-0" />
                           <div>
@@ -3504,14 +3534,14 @@ export default function App() {
         <AnimatePresence>
           {showPaymentModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setShowPaymentModal(null)}
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
               />
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -3529,7 +3559,7 @@ export default function App() {
                       <code className="flex-1 bg-black/40 p-3 rounded-xl border border-white/5 text-[11px] font-mono break-all leading-relaxed text-white">
                         {targetPaymentWallet || config?.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585'}
                       </code>
-                      <button 
+                      <button
                         onClick={() => {
                           const addr = targetPaymentWallet || config?.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585';
                           navigator.clipboard.writeText(addr);
@@ -3546,19 +3576,19 @@ export default function App() {
                   {/* Network Fee/Commission info section */}
                   <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5">
                     <p className="text-[11px] text-white/60 leading-relaxed">
-                      {language === 'en' 
+                      {language === 'en'
                         ? `To activate instantly, send exactly ${showPaymentModal.price} USDT. Remember to add the network transfer commission (normally $0.10 - $0.30 USDT on BEP20) so the net received value is correct.`
                         : language === 'es'
-                        ? `Para activar al instante, envíe exactamente ${showPaymentModal.price} USDT. Recuerde agregar la comisión de envío de la red (normalmente $0.10 - $0.30 USDT en BEP20) para que el monto neto sea exacto.`
-                        : `Para ativação imediata, envie exatamente $${showPaymentModal.price} USDT. BEP20 para que o valor líquido recebido seja exato.`
+                          ? `Para activar al instante, envíe exactamente ${showPaymentModal.price} USDT. Recuerde agregar la comisión de envío de la red (normalmente $0.10 - $0.30 USDT en BEP20) para que el monto neto sea exacto.`
+                          : `Para ativação imediata, envie exatamente $${showPaymentModal.price} USDT. BEP20 para que o valor líquido recebido seja exato.`
                       }
                     </p>
                   </div>
 
                   <div className="space-y-3">
                     <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Transaction Hash' : language === 'es' ? 'Hash de la Transacción' : 'Hash do Pagamento'}</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={paymentHash}
                       onChange={(e) => setPaymentHash(e.target.value)}
                       placeholder="0x..."
@@ -3569,13 +3599,13 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-4">
-                  <button 
+                  <button
                     onClick={() => setShowPaymentModal(null)}
                     className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold text-sm hover:bg-white/10 transition-all"
                   >
                     {language === 'en' ? 'Cancel' : language === 'es' ? 'Cancelar' : 'Cancelar'}
                   </button>
-                  <button 
+                  <button
                     onClick={submitPayment}
                     disabled={loading}
                     className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-500 transition-all shadow-xl shadow-blue-500/20"
