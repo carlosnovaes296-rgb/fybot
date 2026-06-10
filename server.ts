@@ -10,6 +10,17 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const isTradingTime = (): boolean => {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Domingo, 1 = Segunda, ..., 5 = Sexta, 6 = Sábado
+  const hour = now.getHours();
+
+  if (day === 0) return hour >= 20; // Domingo: apenas >= 20h
+  if (day >= 1 && day <= 4) return hour < 17 || hour >= 20; // Seg a Qui: antes das 17h ou após 20h
+  if (day === 5) return hour < 17; // Sexta: apenas antes das 17h
+  return false; // Sábado: bloqueado
+};
+
 const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_KEY || ''
@@ -1230,12 +1241,42 @@ async function startServer() {
             // NOVA REGRA: Verifica ordens abertas no painel que já fecharam no MT5 (atingiram TP ou SL)
             if (sigRes.open_tickets) {
               const mt5OpenTickets = sigRes.open_tickets.map((t: number) => t.toString());
+              
+              const getProfit = (ticketId: string) => {
+                if (!sigRes.open_positions) return 0;
+                const pos = sigRes.open_positions.find((p: any) => p.ticket.toString() === ticketId);
+                return pos ? pos.profit : 0;
+              };
+
               state.trades.forEach((t: any) => {
                 if (t.status === 'OPEN') {
                   // Se a ordem está OPEN no nosso state mas não está na lista de abertas do MT5, significa que fechou
                   if (!mt5OpenTickets.includes(t.id.toString())) {
                     t.status = 'CLOSED';
                     addUserLog(uId, `🔄 Ordem ${t.id} (${t.symbol}) finalizada no MT5. Vaga liberada!`);
+                  } else {
+                    const currentProfit = getProfit(t.id.toString());
+                    t.maxProfit = Math.max(t.maxProfit || 0, currentProfit);
+
+                    // REGRA DA TRAVA DE RETRAÇÃO (Retracement Lock)
+                    if (t.maxProfit >= 4.00) {
+                      const retractionLimit = t.maxProfit * 0.10;
+                      if (currentProfit <= retractionLimit) {
+                        t.status = 'CLOSED';
+                        addUserLog(uId, `🛡️ [TRAVA DE RETRAÇÃO] Ordem ${t.id} (${t.symbol}) fechada para garantir lucro! Pico: $${t.maxProfit.toFixed(2)}, Atual: $${currentProfit.toFixed(2)}`);
+                        exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                        return; // Pula a próxima regra para não executar duas vezes
+                      }
+                    }
+
+                    // REGRA DE LATERALIZAÇÃO: Se a ordem continuar aberta no MT5 por mais de 10 minutos, fecha a mercado!
+                    const tradeTime = new Date(t.time).getTime();
+                    const nowTime = new Date().getTime();
+                    if (nowTime - tradeTime > 10 * 60 * 1000) {
+                      t.status = 'CLOSED'; // Marca fechado no painel para não repetir o comando
+                      addUserLog(uId, `⏳ [PROTEÇÃO] Ordem ${t.id} (${t.symbol}) presa por mais de 10 min em lateralização. Fechando a mercado!`);
+                      exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                    }
                   }
                 }
               });
@@ -1259,15 +1300,17 @@ async function startServer() {
 
               const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
               const symbolOpenTrades = currentOpenTrades.filter((t: any) => t.symbol.includes(symbol));
+              const openCount = symbolOpenTrades.length;
 
-              // 1. VERIFICAÇÃO DE DCA (RECUPERAÇÃO)
+              // BLOQUEIO 1: Horário de Operação
+              if (!isTradingTime()) return;
+
+              // 1. VERIFICAÇÃO DE DCA (RECUPERAÇÃO E PREÇO MÉDIO)
               let isDCATrade = false;
-              const openCount = symbolOpenTrades.filter((t: any) => t.status === 'OPEN').length;
 
               if (openCount > 0 && openCount < 7) {
                 const currentPrice = symData.price;
                 if (currentPrice) {
-                  // Pega a ordem mais recente (última da lista)
                   const newestOrder = symbolOpenTrades[symbolOpenTrades.length - 1];
                   const newestPrice = newestOrder.openPrice;
                   
@@ -1278,23 +1321,26 @@ async function startServer() {
                     stepDrawdownPct = (currentPrice - newestPrice) / newestPrice;
                   }
 
-                  // A cada 0.04% de queda em relação à ÚLTIMA ordem aberta, abre a próxima!
-                  // Isso cria exatamente a grade de: 0.04%, 0.08%, 0.12%, 0.16%, 0.20%, 0.24% a partir da 1ª ordem.
+                  // A cada recuo de 0.04% da ÚLTIMA ordem (o que acumula a grade 0.04, 0.08, 0.12, 0.16, 0.20, 0.24)
                   if (stepDrawdownPct >= 0.0004) {
                     isDCATrade = true;
-                    direction = state.symbolTrend[symbol]; // Força abrir na mesma direção
-                    addUserLog(uId, `⚠️ [DCA ${openCount}] Preço recuou -0.04% da última ordem. Abrindo ${openCount + 1}ª ordem para ${symbol}.`);
+                    direction = state.symbolTrend[symbol]; // Força a mesma direção da primeira
+                    const accumulatedDist = (openCount * 0.04).toFixed(2);
+                    addUserLog(uId, `⚠️ [DCA] Preço recuou -0.04% do degrau anterior (Distanciamento Acumulado: -${accumulatedDist}%). Abrindo a ${openCount + 1}ª ordem para ${symbol}.`);
                   }
                 }
               }
 
-              // 2. TRAVA DE TENDÊNCIA E REVERSÃO (Somente para novas ordens normais)
+              // Se já tem ordens abertas, mas não atingiu a distância do DCA, cancela abertura de novas ordens normais
+              if (openCount > 0 && !isDCATrade) return;
+
+              // 2. TRAVA DE TENDÊNCIA E REVERSÃO (Somente para a Primeira Ordem)
               if (!isDCATrade) {
                 if (!state.symbolTrend) state.symbolTrend = {};
 
                 if (!state.symbolTrend[symbol] && direction && score >= config.minScore) {
                   state.symbolTrend[symbol] = direction; 
-                  addUserLog(uId, `📈 Tendência inicial definida para ${direction} em ${symbol}`);
+                  addUserLog(uId, `🔄 Tendência inicial definida para ${direction} em ${symbol}`);
                 }
 
                 const currentTrend = state.symbolTrend[symbol];
@@ -1313,12 +1359,8 @@ async function startServer() {
               }
 
               // 3. LIMITES FINAIS
-              if (currentOpenTrades.filter((t: any) => t.status === 'OPEN').length >= 10) return;
+              if (currentOpenTrades.length >= 10) return;
               if (openCount >= 7) return;
-              
-              // Evitar spam de ordens normais: se já tem ordem aberta, só pode abrir mais se for DCA!
-              if (openCount > 0 && !isDCATrade) return;
-
               if (state.pendingOrders.has(symbol)) return;
 
           if (direction) {
@@ -1329,7 +1371,7 @@ async function startServer() {
             // Quando esta ordem fechar, a vaga será liberada e ele abrirá outra imediatamente.
             state.lastOrderTime[symbol] = Date.now();
 
-            const lot = 0.001; // Atualizado para 0.001 a pedido do usuário
+            const lot = 0.002; // Atualizado para 0.002 a pedido do usuário
 
             state.pendingOrders.add(symbol);
             exec(`python mt5_open.py ${symbol} ${direction} ${lot}`, (err, stdout) => {

@@ -125,13 +125,14 @@ def calculate_signals(symbols):
 
     positions = mt5.positions_get()
     open_tickets = [p.ticket for p in positions] if positions else []
+    open_positions = [{"ticket": p.ticket, "profit": getattr(p, 'profit', 0.0)} for p in positions] if positions else []
 
     mt5.shutdown()
     
     if acc_data is not None:
         acc_data['today_realized_profit'] = today_realized_profit
 
-    return {"success": True, "data": results, "open_tickets": open_tickets, "account": acc_data}
+    return {"success": True, "data": results, "open_tickets": open_tickets, "open_positions": open_positions, "account": acc_data}
 
 if __name__ == "__main__":
     try:
