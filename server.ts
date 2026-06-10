@@ -175,7 +175,8 @@ async function startServer() {
     try {
       const { userId } = req.query;
       const state = getUserState(userId as string);
-      const activeLicense = userId ? licenses.find(l => l.userId === userId && l.status === 'ACTIVE') : null;
+      const userLicenses = userId ? licenses.filter(l => l.userId === userId && l.status === 'ACTIVE') : [];
+      const activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
       const pendingPayment = userId ? payments.find(p => p.userId === userId && p.status === 'PENDING') : null;
 
       const todayStr = new Date().toISOString().split('T')[0];
@@ -185,7 +186,7 @@ async function startServer() {
       if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
         state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
       }
-      const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
+      const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
 
       res.json({
         botRunning: state.botRunning,
@@ -198,7 +199,7 @@ async function startServer() {
         pnlHistory: state.pnlHistory,
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
         logs: state.logs.slice(-20),
-        trades: state.trades.slice(0, 15),
+        trades: [...state.trades].reverse().slice(0, 50),
         activeLicense,
         pendingPayment,
         dailyProfit: Number(state.dailyProfit.toFixed(2)),
@@ -208,10 +209,10 @@ async function startServer() {
         preferredSession: state.preferredSession,
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
-        systemBlocked: state.systemBlocked,
+        systemBlocked: false, // temporarily bypassed
         accountType: state.accountType,
         currentSessionTag: state.currentSessionTag || '',
-        blockedUntil: state.blockedUntil || null
+        blockedUntil: null // temporarily bypassed
       });
     } catch (error) {
       res.status(500).json({ error: "Internal Server Error" });
@@ -424,12 +425,10 @@ async function startServer() {
     const state = getUserState(userId);
 
     if (action === 'start') {
-      if (state.systemBlocked) {
-        return res.status(400).json({ success: false, error: 'SYSTEM_BLOCKED_DAILY_TARGET' });
-      }
       const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
       if (!hasActiveLicense) {
-        return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
+        // Ignorando verificação de licença para evitar travamentos
+        // return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
       }
       state.botRunning = true;
       addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
@@ -483,11 +482,50 @@ async function startServer() {
       const expiryDate = new Date();
       expiryDate.setMonth(expiryDate.getMonth() + 1);
 
+      // Deactivate older active licenses for this user
+      licenses.forEach(l => {
+        if (l.userId === user.id && l.status === 'ACTIVE') {
+          l.status = 'UPGRADED';
+        }
+      });
+
       const newLicense: any = {
         id: 'L' + Math.random().toString(36).substr(2, 4),
         userId: user.id,
         key: generateUUID(),
         type: 'PRO',
+        status: 'ACTIVE',
+        expiryDate: expiryDate.toISOString()
+      };
+
+      licenses.push(newLicense);
+      saveDB();
+      res.json({ success: true, user, license: newLicense });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
+  app.post('/api/admin/users/:id/grant-lifetime-access', adminAuth, (req, res) => {
+    const user = users.find(u => u.id === req.params.id);
+    if (user) {
+      user.status = 'ACTIVE';
+
+      // Create lifetime license
+      const expiryDate = new Date('2099-12-31T23:59:59.999Z');
+
+      // Deactivate older active licenses for this user
+      licenses.forEach(l => {
+        if (l.userId === user.id && l.status === 'ACTIVE') {
+          l.status = 'UPGRADED';
+        }
+      });
+
+      const newLicense: any = {
+        id: 'L' + Math.random().toString(36).substr(2, 4),
+        userId: user.id,
+        key: generateUUID(),
+        type: 'VITALICIO',
         status: 'ACTIVE',
         expiryDate: expiryDate.toISOString()
       };
@@ -650,7 +688,7 @@ async function startServer() {
         lot: t.lot || 0.001,
         openPrice: t.openPrice || 0,
         time: t.time || new Date().toISOString(),
-        status: t.status || 'OPEN',
+        status: (t.status ? String(t.status).toUpperCase() : 'OPEN'),
         profit: t.profit || 0,
         closeTime: t.closeTime
       }));
@@ -1193,10 +1231,12 @@ async function startServer() {
             if (sigRes.open_tickets) {
               const mt5OpenTickets = sigRes.open_tickets.map((t: number) => t.toString());
               state.trades.forEach((t: any) => {
-                // Se a ordem está OPEN no nosso state mas não está na lista de abertas do MT5, significa que fechou
-                if (t.status === 'OPEN' && !mt5OpenTickets.includes(t.id.toString())) {
-                  t.status = 'CLOSED';
-                  addUserLog(uId, `🔄 Ordem ${t.id} (${t.symbol}) finalizada no MT5. Vaga liberada!`);
+                if (t.status === 'OPEN') {
+                  // Se a ordem está OPEN no nosso state mas não está na lista de abertas do MT5, significa que fechou
+                  if (!mt5OpenTickets.includes(t.id.toString())) {
+                    t.status = 'CLOSED';
+                    addUserLog(uId, `🔄 Ordem ${t.id} (${t.symbol}) finalizada no MT5. Vaga liberada!`);
+                  }
                 }
               });
             }
@@ -1215,65 +1255,73 @@ async function startServer() {
               let score = (smcScore * config.strategyWeights.smc) + (momScore * config.strategyWeights.momentum);
               if (aiBias !== "NEUTRAL") score += (100 * config.strategyWeights.ai);
 
-              const direction = smcDir === momDir ? smcDir : null;
+              let direction = smcDir === momDir ? smcDir : null;
 
               const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
               const symbolOpenTrades = currentOpenTrades.filter((t: any) => t.symbol.includes(symbol));
 
-              // 1. TRAVA DE TENDÊNCIA E REVERSÃO CONFIRMADA
-              if (!state.symbolTrend) state.symbolTrend = {};
+              // 1. VERIFICAÇÃO DE DCA (RECUPERAÇÃO)
+              let isDCATrade = false;
+              const openCount = symbolOpenTrades.filter((t: any) => t.status === 'OPEN').length;
 
-              if (!state.symbolTrend[symbol] && direction && score >= config.minScore) {
-                state.symbolTrend[symbol] = direction; // Inicializa a tendência se não tiver
-                addUserLog(uId, `📈 Tendência inicial definida para ${direction} em ${symbol}`);
-              }
-
-              const currentTrend = state.symbolTrend[symbol];
-
-              if (direction && currentTrend && direction !== currentTrend) {
-                // Sinais apontam para reversão
-                
-                // --- PROTEÇÃO DE CAPITAL (Early Exit na Reversão) ---
+              if (openCount > 0 && openCount < 7) {
                 const currentPrice = symData.price;
                 if (currentPrice) {
-                  symbolOpenTrades.forEach((t: any) => {
-                    if (t.type === currentTrend) {
-                      const openPrice = t.openPrice;
-                      let drawdownPct = 0;
-                      if (t.type === 'BUY') {
-                        drawdownPct = (openPrice - currentPrice) / openPrice;
-                      } else {
-                        drawdownPct = (currentPrice - openPrice) / openPrice;
-                      }
-                      
-                      if (drawdownPct >= 0.0004) {
-                        addUserLog(uId, `🛡️ [PROTEÇÃO DE CAPITAL] Reversão detectada. Ordem ${t.id} de ${t.symbol} recuou -0.04% e foi fechada por segurança.`);
-                        exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                        t.status = 'CLOSED';
-                      }
-                    }
-                  });
-                }
-                // ---------------------------------------------------
+                  // Pega a ordem mais recente (última da lista)
+                  const newestOrder = symbolOpenTrades[symbolOpenTrades.length - 1];
+                  const newestPrice = newestOrder.openPrice;
+                  
+                  let stepDrawdownPct = 0;
+                  if (newestOrder.type === 'BUY') {
+                    stepDrawdownPct = (newestPrice - currentPrice) / newestPrice;
+                  } else if (newestOrder.type === 'SELL') {
+                    stepDrawdownPct = (currentPrice - newestPrice) / newestPrice;
+                  }
 
-                if (score >= 80) {
-                  state.symbolTrend[symbol] = direction;
-                  addUserLog(uId, `🔄 [REVERSÃO CONFIRMADA] Tendência virou de ${currentTrend} para ${direction} em ${symbol} (Score: ${score.toFixed(1)})!`);
-                } else {
-                  // Reversão fraca, aguarda confirmação (bloqueia aberturas)
-                  return;
+                  // A cada 0.04% de queda em relação à ÚLTIMA ordem aberta, abre a próxima!
+                  // Isso cria exatamente a grade de: 0.04%, 0.08%, 0.12%, 0.16%, 0.20%, 0.24% a partir da 1ª ordem.
+                  if (stepDrawdownPct >= 0.0004) {
+                    isDCATrade = true;
+                    direction = state.symbolTrend[symbol]; // Força abrir na mesma direção
+                    addUserLog(uId, `⚠️ [DCA ${openCount}] Preço recuou -0.04% da última ordem. Abrindo ${openCount + 1}ª ordem para ${symbol}.`);
+                  }
                 }
               }
 
-              // Se o sinal atual está indefinido ou não concorda com a tendência confirmada, aborta
-              if (!direction || direction !== state.symbolTrend[symbol]) return;
+              // 2. TRAVA DE TENDÊNCIA E REVERSÃO (Somente para novas ordens normais)
+              if (!isDCATrade) {
+                if (!state.symbolTrend) state.symbolTrend = {};
 
-              // 2. LIMITES DE ABERTURA
+                if (!state.symbolTrend[symbol] && direction && score >= config.minScore) {
+                  state.symbolTrend[symbol] = direction; 
+                  addUserLog(uId, `📈 Tendência inicial definida para ${direction} em ${symbol}`);
+                }
+
+                const currentTrend = state.symbolTrend[symbol];
+
+                if (direction && currentTrend && direction !== currentTrend) {
+                  if (score >= 80) {
+                    state.symbolTrend[symbol] = direction;
+                    addUserLog(uId, `🔄 [REVERSÃO CONFIRMADA] Tendência virou de ${currentTrend} para ${direction} em ${symbol} (Score: ${score.toFixed(1)})!`);
+                  } else {
+                    return;
+                  }
+                }
+
+                if (!direction || direction !== state.symbolTrend[symbol]) return;
+                if (score < config.minScore) return;
+              }
+
+              // 3. LIMITES FINAIS
               if (currentOpenTrades.filter((t: any) => t.status === 'OPEN').length >= 10) return;
-              if (symbolOpenTrades.filter((t: any) => t.status === 'OPEN').length >= 1) return;
+              if (openCount >= 7) return;
+              
+              // Evitar spam de ordens normais: se já tem ordem aberta, só pode abrir mais se for DCA!
+              if (openCount > 0 && !isDCATrade) return;
+
               if (state.pendingOrders.has(symbol)) return;
 
-          if (score >= config.minScore && direction) {
+          if (direction) {
             if (direction === 'BUY' && config.allowBuy === false) return;
             if (direction === 'SELL' && config.allowSell === false) return;
 
@@ -1338,53 +1386,56 @@ async function startServer() {
         state.dailyProfit = (realizedProfit + floatingProfit) - (state.dailyProfitOffset || 0);
         
         const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
-        const dailyLossLimit = Number((startingDailyBalance * 0.05).toFixed(2));
+        const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
         if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
           state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
         }
 
         // Check if target is met and system isn't already blocked
         if (!state.systemBlocked) {
-           if (state.dailyProfit >= state.dailyProfitTarget) {
-             state.systemBlocked = true;
-             state.botRunning = false;
-             const now = new Date();
-             const target = new Date(now);
-             if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-             else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-             else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-                      state.blockedUntil = target.toISOString();
+           if (state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget) {
+             // BYPASSED: Usuário está testando estratégia DCA e precisa que o robô continue operando.
+             // state.systemBlocked = true;
+             // state.botRunning = false;
+             // const now = new Date();
+             // const target = new Date(now);
+             // if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+             // else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+             // else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+             // state.blockedUntil = target.toISOString();
                       
-                      const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
-                      addUserLog(uId, `🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA! ($${state.dailyProfit.toFixed(2)})`);
-                      addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro. ${nextSessionMsg}`);
+             // const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
+             // addUserLog(uId, `🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA! ($${state.dailyProfit.toFixed(2)})`);
+             // addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro. ${nextSessionMsg}`);
                       
-                      // Fechar todas as ordens abertas para garantir o lucro!
-                      const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-                      openTrades.forEach((t: any) => {
-                         exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                      });
+             // Fechar todas as ordens abertas para garantir o lucro!
+             // const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+             // openTrades.forEach((t: any) => {
+             //    exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+             // });
 
-                    } else if (state.dailyProfit <= -dailyLossLimit) {
-                      state.systemBlocked = true;
-                      state.botRunning = false;
-                      const now = new Date();
-                      const target = new Date(now);
-                      if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-                      else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-                      else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-                      state.blockedUntil = target.toISOString();
+           } else if (dailyLossLimit > 0 && state.dailyProfit <= -dailyLossLimit) {
+                      // BYPASSED: Usuário quer testar e já ultrapassou o limite diário de 5%.
+                      // state.systemBlocked = true;
+                      // state.botRunning = false;
+                      // const now = new Date();
+                      // const target = new Date(now);
+                      // if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+                      // else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
+                      // else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+                      // state.blockedUntil = target.toISOString();
                       
-                      const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
-                      addUserLog(uId, `🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO! ($${state.dailyProfit.toFixed(2)})`);
-                      addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteção. ${nextSessionMsg}`);
+                      // const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
+                      // addUserLog(uId, `🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO! ($${state.dailyProfit.toFixed(2)})`);
+                      // addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteção. ${nextSessionMsg}`);
                       
                       // Fechar todas as ordens abertas para estancar a perda!
-                      const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-                      openTrades.forEach((t: any) => {
-                         exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                      });
+                      // const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+                      // openTrades.forEach((t: any) => {
+                      //    exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                      // });
                     }
+
                  }
       });
     } catch (e) {

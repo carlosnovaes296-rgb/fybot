@@ -47,6 +47,7 @@ import {
   Key,
   Copy,
   Menu,
+  Crown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
@@ -201,7 +202,7 @@ const _unused_translations = {
       performanceTrack: "Seguimiento del desempeño en los últimos 30 días de negociación",
       advancedMetrics: "Métricas Avanzadas",
       aiInsight: "Insight de IA",
-      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en EURUSD y reducir la exposición en pares JPY en las próximas 48h.",
+      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en XAUUSD y reducir la exposición en pares GBP en las próximas 48h.",
       viewFullAnalysis: "VER ANÁLISE COMPLETO"
     },
     plans: {
@@ -481,6 +482,14 @@ export default function App() {
 
   const grantAccess = async (id: string) => {
     await fetch(`/api/admin/users/${id}/grant-access`, { 
+      method: 'POST',
+      headers: { 'x-admin-userid': currentUser?.id || '' }
+    });
+    fetchAdminData();
+  };
+
+  const grantLifetimeAccess = async (id: string) => {
+    await fetch(`/api/admin/users/${id}/grant-lifetime-access`, { 
       method: 'POST',
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
@@ -1109,16 +1118,14 @@ export default function App() {
 
       {/* Sidebar */}
       <div className={`fixed left-0 top-0 h-full w-64 bg-[#0f0f12] border-r border-white/5 flex flex-col items-stretch z-50 transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-6 flex items-center justify-center gap-3 border-b border-white/5 h-20">
-          {/* Expanded (Desktop): Brand Neon Logo Centered & 30% Larger */}
-          <div className="hidden md:flex items-center justify-center select-none font-['Orbitron']">
-            <span className="font-black text-[32px] tracking-[0.05em] text-[#ff00e5] drop-shadow-[0_0_15px_rgba(255,0,229,0.85)]">FY</span>
-            <span className="font-black text-[32px] tracking-[0.05em] text-[#00f0ff] drop-shadow-[0_0_15px_rgba(0,240,255,0.85)]">BOT</span>
+        <div className="py-6 flex items-center justify-center gap-3 border-b border-white/5">
+          {/* Expanded (Desktop): Brand Logo */}
+          <div className="hidden md:flex items-center justify-center select-none">
+            <img src="/fybot-logo.png.png" alt="Fybot Logo" className="h-28 object-contain scale-110" />
           </div>
-          {/* Collapsed (Mobile/Tablet): Compact Neon Icon Centered & 30% Larger */}
-          <div className="md:hidden flex items-center justify-center select-none font-['Orbitron']">
-            <span className="font-black text-[26px] text-[#ff00e5] drop-shadow-[0_0_12px_rgba(255,0,229,0.85)]">F</span>
-            <span className="font-black text-[26px] text-[#00f0ff] drop-shadow-[0_0_12px_rgba(0,240,255,0.85)]">B</span>
+          {/* Collapsed (Mobile/Tablet): Brand Logo */}
+          <div className="md:hidden flex items-center justify-center select-none">
+            <img src="/fybot-logo.png.png" alt="Fybot Logo" className="h-20 object-contain scale-110" />
           </div>
         </div>
 
@@ -1512,8 +1519,6 @@ export default function App() {
                       {/* Live price tickers */}
                       <div className="flex gap-3 mb-4">
                         {[
-                          { sym: 'EURUSD', base: 1.08243, color: '#3b82f6' },
-                          { sym: 'GBPUSD', base: 1.27051, color: '#8b5cf6' },
                           { sym: 'XAUUSD', base: 2335.40, color: '#f59e0b' }
                         ].map(({ sym, base, color }, i) => {
                           const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
@@ -2194,13 +2199,14 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
                   <PricingCard 
                     title={t.plans.card1Title} 
                     price={10} 
                     desc={t.plans.card1Desc}
                     features={t.plans.card1Features}
                     language={language}
+                    image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card1Title, price: 10 })}
                   />
                   <PricingCard 
@@ -2210,6 +2216,7 @@ export default function App() {
                     desc={t.plans.card2Desc}
                     features={t.plans.card2Features}
                     language={language}
+                    image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card2Title, price: 20 })}
                   />
                   <PricingCard 
@@ -2218,7 +2225,21 @@ export default function App() {
                     desc={t.plans.card3Desc}
                     features={t.plans.card3Features}
                     language={language}
+                    image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
+                  />
+                  <PricingCard 
+                    title={t.plans.card4Title} 
+                    price={100}
+                    customPriceText={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
+                    desc={t.plans.card4Desc}
+                    features={t.plans.card4Features}
+                    language={language}
+                    image="/bot_trading.png"
+                    hideButton={true}
+                    largeFeatures={true}
+                    titleColor="text-emerald-400"
+                    descColor="text-emerald-400"
                   />
                 </div>
 
@@ -2861,6 +2882,14 @@ export default function App() {
                           >
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
+                          </button>
+                          <button 
+                            onClick={() => grantLifetimeAccess(u.id)} 
+                            title={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
+                            className="p-2 px-3 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 text-amber-500 transition-colors flex items-center gap-1.5"
+                          >
+                            <Crown size={14} />
+                            <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Lifetime' : language === 'es' ? 'Vitalicio' : 'Vitalício'}</span>
                           </button>
                           <button 
                             onClick={() => toggleUser(u.id)} 
@@ -3665,53 +3694,7 @@ function BenefitCard({ title, desc, icon }: { title: string, desc: string, icon:
       <p className="text-xs text-white/40 leading-relaxed">{desc}</p>
     </div>
   );
-}
 
-function PricingCard({ title, price, recommended, desc, features, language, onBuy }: { title: string, price: number, recommended?: boolean, desc: string, features: string[], language: Language, onBuy: () => void }) {
-  return (
-    <div className={`relative flex flex-col p-8 rounded-[40px] border transition-all ${
-      recommended 
-        ? 'bg-[#14141d] border-blue-500/50 shadow-[0_0_50px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/50' 
-        : 'bg-[#0f0f12] border-white/5 hover:border-white/10'
-    }`}>
-      {recommended && (
-        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-[10px] font-black uppercase px-4 py-1.5 rounded-full tracking-[2px] shadow-lg shadow-blue-900/40">
-          {language === 'en' ? 'Recommended' : language === 'es' ? 'Recomendado' : 'Recomendado'}
-        </div>
-      )}
-      
-      <div className="mb-8">
-        <h3 className="text-xl font-bold">{title}</h3>
-        <p className="text-xs text-white/40 mt-2">{desc}</p>
-      </div>
-
-      <div className="mb-8">
-        <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-black">${price}</span>
-        </div>
-      </div>
-
-      <div className="flex-1 space-y-4 mb-10">
-        {features.map((f, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <CheckCircle2 size={16} className="text-blue-500" />
-            <span className="text-sm text-white/70">{f}</span>
-          </div>
-        ))}
-      </div>
-
-      <button 
-        onClick={onBuy}
-        className={`w-full py-5 rounded-2xl font-black text-sm transition-all active:scale-95 ${
-        recommended 
-          ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-xl shadow-blue-900/20' 
-          : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
-      }`}>
-        {language === 'en' ? 'BUY NOW' : language === 'es' ? 'COMPRAR AHORA' : 'COMPRAR AGORA'}
-      </button>
-    </div>
-  );
-}
 
 
 

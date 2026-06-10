@@ -408,7 +408,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                           <div className="text-right">
                             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.lossValue}</p>
                             <span className="text-xl font-bold text-white/80 font-mono tracking-tight">
-                              ${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                         )}
@@ -546,7 +546,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
                           <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1 font-bold">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
-                            ${(stats.dailyLossLimit || (stats.balance * 0.05))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </>

@@ -138,7 +138,7 @@ if __name__ == "__main__":
         if len(sys.argv) > 1:
             symbols = sys.argv[1:]
         else:
-            symbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+            symbols = ["XAUUSD"]
             
         res = calculate_signals(symbols)
         print(json.dumps(res))

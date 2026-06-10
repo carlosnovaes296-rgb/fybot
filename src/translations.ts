@@ -43,7 +43,7 @@ export const translations = {
     dashboard: {
       balance: "ACCOUNT BALANCE (REAL / DEMO)",
       dailyTargetLabel: "Daily Target (2% of Bankroll)",
-      dailyLossLabel: "Daily Loss Limit (5% of Bankroll)",
+      dailyLossLabel: "Daily Loss Limit (10% of Bankroll)",
       dailyProfitLabel: "Today's Profit",
       activeTrades: "Active Positions",
       winrate: "Winrate",
@@ -108,7 +108,7 @@ export const translations = {
       performanceTrack: "Performance tracking over the last 30 trading days",
       advancedMetrics: "Advanced Metrics",
       aiInsight: "AI Insight",
-      insightText: "The market is showing strong accumulation in institutional liquidity regions (SMC). I recommend increasing weight in EURUSD and reducing exposure in JPY pairs in the next 48h.",
+      insightText: "The market is showing strong accumulation in institutional liquidity regions (SMC). I recommend increasing weight in XAUUSD and reducing exposure in GBP pairs in the next 48h.",
       viewFullAnalysis: "VIEW FULL ANALYSIS"
     },
     plans: {
@@ -123,6 +123,9 @@ export const translations = {
       card3Title: "Institutional Pro",
       card3Desc: "Maximum performance for professional capital.",
       card3Features: ["90 Days License"],
+      card4Title: "Partnership License",
+      card4Desc: "Activate 10 Institutional Pro licenses on your first level and become a Leader with LIFETIME access.",
+      card4Features: [],
       period: "DAYS"
     },
     installation: {
@@ -215,7 +218,7 @@ export const translations = {
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
       dailyTargetLabel: "Meta Diária (2% da Banca)",
-      dailyLossLabel: "Limite de Perda Diária (5% da Banca)",
+      dailyLossLabel: "Limite de Perda Diária (10% da Banca)",
       dailyProfitLabel: "Lucro de Hoje",
       activeTrades: "Posições Ativas",
       winrate: "Taxa de Acerto",
@@ -280,7 +283,7 @@ export const translations = {
       performanceTrack: "Acompanhamento de desempenho nos últimos 30 dias de negociação",
       advancedMetrics: "Métricas Avançadas",
       aiInsight: "Insight da IA",
-      insightText: "O mercado está apresentando forte acumulação em regiões de liquidez institucional (SMC). Recomendo aumentar o peso em EURUSD e reduzir exposição em pares JPY nas próximas 48h.",
+      insightText: "O mercado está apresentando forte acumulação em regiões de liquidez institucional (SMC). Recomendo aumentar o peso em XAUUSD e reduzir exposição em pares GBP nas próximas 48h.",
       viewFullAnalysis: "VER ANÁLISE COMPLETA"
     },
     plans: {
@@ -295,6 +298,9 @@ export const translations = {
       card3Title: "Institucional Pro",
       card3Desc: "Máxima performance para capital profissional.",
       card3Features: ["Licença de 90 dias"],
+      card4Title: "Licença Parceria",
+      card4Desc: "Ativar 10 licenças Institucional Pro em seu primeiro nível e torne-se Líder com acesso VITALÍCIO.",
+      card4Features: [],
       period: "DIAS"
     },
     installation: {
@@ -387,7 +393,7 @@ export const translations = {
     dashboard: {
       balance: "SALDO (REAL / DEMO)",
       dailyTargetLabel: "Meta Diaria (2% de la Banca)",
-      dailyLossLabel: "Límite de Pérdida Diaria (5% de la Banca)",
+      dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
       winrate: "Tasa de Acierto",
@@ -452,7 +458,7 @@ export const translations = {
       performanceTrack: "Seguimiento del desempeño en los últimos 30 días de negociación",
       advancedMetrics: "Métricas Avanzadas",
       aiInsight: "Insight de IA",
-      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en EURUSD y reducir la exposición en pares JPY en las próximas 48h.",
+      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en XAUUSD y reducir la exposición en pares GBP en las próximas 48h.",
       viewFullAnalysis: "VER ANÁLISE COMPLETO"
     },
     plans: {
@@ -467,6 +473,9 @@ export const translations = {
       card3Title: "Institucional Pro",
       card3Desc: "Máximo rendimiento para capital profesional.",
       card3Features: ["Licencia de 90 días"],
+      card4Title: "Licencia Asociación",
+      card4Desc: "Active 10 licencias Institucional Pro en su primer nivel y conviértase en Líder con acceso VITALICIO.",
+      card4Features: [],
       period: "DÍAS"
     },
     installation: {

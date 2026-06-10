@@ -25,6 +25,12 @@ export function CompactCountdown({ expiryDate, t }: CompactCountdownProps) {
   const [timeLeft, setTimeLeft] = useState('');
 
   useEffect(() => {
+    const isLifetime = new Date(expiryDate).getFullYear() > 2090;
+    if (isLifetime) {
+      setTimeLeft(t.plans?.lifetime || 'VITALÍCIO');
+      return;
+    }
+
     const calculateTimeLeft = () => {
       const difference = +new Date(expiryDate) - +new Date();
       if (difference > 0) {
@@ -55,7 +61,11 @@ interface LicenseCountdownProps {
 export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdownProps) {
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
 
+  const isLifetime = new Date(expiryDate).getFullYear() > 2090;
+
   useEffect(() => {
+    if (isLifetime) return;
+
     const calculateTimeLeft = () => {
       const difference = +new Date(expiryDate) - +new Date();
       if (difference > 0) {
@@ -72,7 +82,7 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
     setTimeLeft(calculateTimeLeft());
     const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 1000);
     return () => clearInterval(timer);
-  }, [expiryDate]);
+  }, [expiryDate, isLifetime]);
 
   return (
     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-center group hover:border-white/10 transition-all">
@@ -87,23 +97,34 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
       
       <div className="space-y-1">
         <p className="text-[10px] font-bold text-white uppercase tracking-widest mb-3 flex items-center gap-2">
-          <ShieldCheck size={12} className="text-white" /> {t.dashboard.licenseExpires}
+          <ShieldCheck size={12} className="text-white" /> {isLifetime ? 'STATUS DA LICENÇA' : t.dashboard.licenseExpires}
         </p>
         
-        <div className="grid grid-cols-4 gap-2">
-          {timeLeft ? (
-            <>
-              <TimeUnit value={timeLeft.d} label={t.dashboard.days} />
-              <TimeUnit value={timeLeft.h} label={t.dashboard.hrs} />
-              <TimeUnit value={timeLeft.m} label={t.dashboard.min} />
-              <TimeUnit value={timeLeft.s} label={t.dashboard.sec} />
-            </>
-          ) : (
-            <div className="col-span-4 py-2">
-              <span className="text-xs font-bold text-red-500 uppercase tracking-widest">EXPIRED</span>
-            </div>
-          )}
-        </div>
+        {isLifetime ? (
+          <div className="py-4 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(245,158,11,0.15)] relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-16 h-16 bg-white/20 blur-2xl transform rotate-45 pointer-events-none" />
+             <ShieldCheck size={28} className="text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
+             <div>
+               <p className="text-xl font-black text-amber-400 uppercase tracking-widest leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">ACESSO VITALÍCIO</p>
+               <p className="text-[9px] font-bold text-amber-500/80 uppercase tracking-widest mt-1">Líder Institucional Pro</p>
+             </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {timeLeft ? (
+              <>
+                <TimeUnit value={timeLeft.d} label={t.dashboard.days} />
+                <TimeUnit value={timeLeft.h} label={t.dashboard.hrs} />
+                <TimeUnit value={timeLeft.m} label={t.dashboard.min} />
+                <TimeUnit value={timeLeft.s} label={t.dashboard.sec} />
+              </>
+            ) : (
+              <div className="col-span-4 py-2">
+                <span className="text-xs font-bold text-red-500 uppercase tracking-widest">EXPIRED</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Visual background element */}

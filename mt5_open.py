@@ -36,9 +36,9 @@ def execute_trade(symbol, action, lot):
         point = symbol_info.point
         digits = symbol_info.digits
         
-        # Parâmetros: Stop Loss de 0.50% e Take Profit de 0.03%
-        sl_pct = 0.0050
-        tp_pct = 0.0003
+        # Identifica a moeda base ignorando sufixos
+        base_symbol = symbol.upper()
+        if "XAUUSD" in base_symbol: base_symbol = "XAUUSD"
         
         # Ensure we are outside the minimum stops level
         min_stops = symbol_info.trade_stops_level
@@ -48,8 +48,13 @@ def execute_trade(symbol, action, lot):
             order_type = mt5.ORDER_TYPE_BUY
             price = mt5.symbol_info_tick(symbol).ask
             
-            raw_sl = price - (price * sl_pct)
-            raw_tp = price + (price * tp_pct)
+            if base_symbol == "XAUUSD":
+                # TP 0.02%, SL 0.50%
+                raw_sl = price - (price * 0.0050)
+                raw_tp = price + (price * 0.0002)
+            else:
+                raw_sl = price - (25 * 10 * point)
+                raw_tp = price + (50 * 10 * point)
             
             # Fallback de segurança contra Error 10016
             if price - raw_sl < min_distance: raw_sl = price - min_distance
@@ -61,8 +66,13 @@ def execute_trade(symbol, action, lot):
             order_type = mt5.ORDER_TYPE_SELL
             price = mt5.symbol_info_tick(symbol).bid
             
-            raw_sl = price + (price * sl_pct)
-            raw_tp = price - (price * tp_pct)
+            if base_symbol == "XAUUSD":
+                # TP 0.02%, SL 0.50%
+                raw_sl = price + (price * 0.0050)
+                raw_tp = price - (price * 0.0002)
+            else:
+                raw_sl = price + (25 * 10 * point)
+                raw_tp = price - (50 * 10 * point)
             
             # Fallback de segurança contra Error 10016
             if raw_sl - price < min_distance: raw_sl = price + min_distance
