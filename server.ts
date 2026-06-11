@@ -12,13 +12,18 @@ dotenv.config();
 
 const isTradingTime = (): boolean => {
   const now = new Date();
-  const day = now.getDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
+  const day = now.getDay(); // 0 = Domingo, 1 = Segunda ... 5 = Sexta, 6 = Sábado
   const hour = now.getHours();
 
-  // Bloqueio de fim de semana: bloqueia Sexta às 18h até Domingo às 19:59
-  if (day === 5 && hour >= 18) return false; // Sexta a partir das 18:00
+  // Bloqueio de Fim de Semana (Sexta 17h até Domingo 19:59)
   if (day === 6) return false;               // Sábado o dia todo
-  if (day === 0 && hour < 20) return false;  // Domingo antes das 20:00
+  if (day === 0 && hour < 20) return false;  // Domingo antes das 20h
+  if (day === 5 && hour >= 17) return false; // Sexta a partir das 17h
+
+  // Pausa Diária: Segunda a Quinta das 17h às 19:59
+  if (day >= 1 && day <= 4) {
+    if (hour >= 17 && hour < 20) return false;
+  }
 
   return true;
 };
