@@ -1445,14 +1445,20 @@ export default function App() {
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-[#0f0f12] border border-yellow-500/20 rounded-3xl p-8 text-center text-yellow-500 mb-8 relative overflow-hidden"
+                    className={`bg-[#0f0f12] border ${stats.dailyProfit < 0 ? 'border-red-500/20 text-red-500' : 'border-yellow-500/20 text-yellow-500'} rounded-3xl p-8 text-center mb-8 relative overflow-hidden`}
                   >
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent opacity-50"></div>
+                    <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent ${stats.dailyProfit < 0 ? 'via-red-500' : 'via-yellow-500'} to-transparent opacity-50`}></div>
                     <Lock size={40} className="mx-auto mb-4 animate-pulse opacity-80" />
-                    <h2 className="text-2xl font-bold mb-2">META DIÁRIA ATINGIDA</h2>
-                    <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.</p>
+                    <h2 className="text-2xl font-bold mb-2">
+                      {stats.dailyProfit < 0 ? 'LIMITE DE PERDA ATINGIDO' : 'META DIÁRIA ATINGIDA'}
+                    </h2>
+                    <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">
+                      {stats.dailyProfit < 0
+                        ? 'O limite máximo de perda diária foi atingido. O sistema foi bloqueado para proteger o restante do seu capital. As operações retornarão na próxima sessão.'
+                        : 'O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.'}
+                    </p>
 
-                    <div className="inline-flex flex-col items-center bg-black/40 border border-yellow-500/10 rounded-2xl px-10 py-6">
+                    <div className={`inline-flex flex-col items-center bg-black/40 border ${stats.dailyProfit < 0 ? 'border-red-500/10' : 'border-yellow-500/10'} rounded-2xl px-10 py-6`}>
                       <span className="text-[10px] font-bold uppercase tracking-widest opacity-50 mb-2">PRÓXIMA SESSÃO EM</span>
                       <div className="text-5xl font-black font-mono tracking-wider tabular-nums text-white">
                         {timeLeft || '00:00:00'}

@@ -12,13 +12,15 @@ dotenv.config();
 
 const isTradingTime = (): boolean => {
   const now = new Date();
-  const day = now.getDay(); // 0 = Domingo, 1 = Segunda, ..., 5 = Sexta, 6 = Sábado
+  const day = now.getDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
   const hour = now.getHours();
 
-  if (day === 0) return hour >= 20; // Domingo: apenas >= 20h
-  if (day >= 1 && day <= 4) return hour < 17 || hour >= 20; // Seg a Qui: antes das 17h ou após 20h
-  if (day === 5) return hour < 17; // Sexta: apenas antes das 17h
-  return false; // Sábado: bloqueado
+  // Bloqueio de fim de semana: bloqueia Sexta às 18h até Domingo às 19:59
+  if (day === 5 && hour >= 18) return false; // Sexta a partir das 18:00
+  if (day === 6) return false;               // Sábado o dia todo
+  if (day === 0 && hour < 20) return false;  // Domingo antes das 20:00
+
+  return true;
 };
 
 const supabase = createClient(
@@ -193,11 +195,11 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // Dynamically calculate daily profit target as 2% of starting daily balance
+      // Dynamically calculate daily profit target as 10% of starting daily balance
       if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
-        state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
+        state.dailyProfitTarget = Number((startingDailyBalance * 0.10).toFixed(2));
       }
-      const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+      const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
       res.json({
         botRunning: state.botRunning,
@@ -220,10 +222,10 @@ async function startServer() {
         preferredSession: state.preferredSession,
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
-        systemBlocked: false, // temporarily bypassed
+        systemBlocked: state.systemBlocked,
         accountType: state.accountType,
         currentSessionTag: state.currentSessionTag || '',
-        blockedUntil: null // temporarily bypassed
+        blockedUntil: state.blockedUntil
       });
     } catch (error) {
       res.status(500).json({ error: "Internal Server Error" });
@@ -1213,7 +1215,7 @@ async function startServer() {
              state.systemBlocked = false;
              state.blockedUntil = null;
              state.dailyProfit = 0;
-             addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/21h). Bot pronto para operar.");
+             addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/20h). Bot pronto para operar.");
           }
         }
 
@@ -1269,14 +1271,6 @@ async function startServer() {
                       }
                     }
 
-                    // REGRA DE LATERALIZAÇÃO: Se a ordem continuar aberta no MT5 por mais de 10 minutos, fecha a mercado!
-                    const tradeTime = new Date(t.time).getTime();
-                    const nowTime = new Date().getTime();
-                    if (nowTime - tradeTime > 10 * 60 * 1000) {
-                      t.status = 'CLOSED'; // Marca fechado no painel para não repetir o comando
-                      addUserLog(uId, `⏳ [PROTEÇÃO] Ordem ${t.id} (${t.symbol}) presa por mais de 10 min em lateralização. Fechando a mercado!`);
-                      exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                    }
                   }
                 }
               });
@@ -1301,6 +1295,9 @@ async function startServer() {
               const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
               const symbolOpenTrades = currentOpenTrades.filter((t: any) => t.symbol.includes(symbol));
               const openCount = symbolOpenTrades.length;
+
+              // BLOQUEIO: Se a meta diária foi batida, não abre mais nenhuma nova ordem (nem DCA)
+              if (state.stopOpeningNewOrders) return;
 
               // BLOQUEIO 1: Horário de Operação
               if (!isTradingTime()) return;
@@ -1428,57 +1425,59 @@ async function startServer() {
         state.dailyProfit = (realizedProfit + floatingProfit) - (state.dailyProfitOffset || 0);
         
         const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
-        const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+        const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
         if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
-          state.dailyProfitTarget = Number((startingDailyBalance * 0.02).toFixed(2));
+          state.dailyProfitTarget = Number((startingDailyBalance * 0.10).toFixed(2));
         }
 
         // Check if target is met and system isn't already blocked
         if (!state.systemBlocked) {
-           if (state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget) {
-             // BYPASSED: Usuário está testando estratégia DCA e precisa que o robô continue operando.
-             // state.systemBlocked = true;
-             // state.botRunning = false;
-             // const now = new Date();
-             // const target = new Date(now);
-             // if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-             // else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-             // else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-             // state.blockedUntil = target.toISOString();
-                      
-             // const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
-             // addUserLog(uId, `🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA! ($${state.dailyProfit.toFixed(2)})`);
-             // addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteger lucro. ${nextSessionMsg}`);
-                      
-             // Fechar todas as ordens abertas para garantir o lucro!
-             // const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-             // openTrades.forEach((t: any) => {
-             //    exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-             // });
+           const hitProfit = state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget;
+           const hitLoss = dailyLossLimit > 0 && state.dailyProfit <= -dailyLossLimit;
 
-           } else if (dailyLossLimit > 0 && state.dailyProfit <= -dailyLossLimit) {
-                      // BYPASSED: Usuário quer testar e já ultrapassou o limite diário de 5%.
-                      // state.systemBlocked = true;
-                      // state.botRunning = false;
-                      // const now = new Date();
-                      // const target = new Date(now);
-                      // if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-                      // else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-                      // else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-                      // state.blockedUntil = target.toISOString();
-                      
-                      // const nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Abertura NY)" : "Próxima sessão: 21:00 GMT-3 (Abertura Ásia)";
-                      // addUserLog(uId, `🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO! ($${state.dailyProfit.toFixed(2)})`);
-                      // addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Sinais automáticos encerrados para proteção. ${nextSessionMsg}`);
-                      
-                      // Fechar todas as ordens abertas para estancar a perda!
-                      // const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-                      // openTrades.forEach((t: any) => {
-                      //    exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                      // });
-                    }
+           if (hitProfit || hitLoss) {
+             const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+             
+             if (openTrades.length > 0) {
+               if (!state.stopOpeningNewOrders) {
+                 state.stopOpeningNewOrders = true;
+                 const msg = hitProfit ? "META DIÁRIA" : "LIMITE DE PERDA";
+                 addUserLog(uId, `⚠️ [${msg} ATINGIDO] Parando abertura de novas ordens. Aguardando as atuais fecharem para bloquear o sistema...`);
+               }
+             } else {
+               // Todas as ordens já fecharam, agora bloqueamos o sistema!
+               state.systemBlocked = true;
+               state.botRunning = false;
+               state.stopOpeningNewOrders = false; // reset
+               
+               const now = new Date();
+               const target = new Date(now);
+               if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+               else if (now.getHours() < 20) target.setHours(20, 0, 0, 0);
+               else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+               
+               // Se o próximo alvo cair no bloqueio de fim de semana, empurra para Domingo às 20h
+               if (target.getDay() === 5 && target.getHours() >= 18) {
+                   target.setDate(target.getDate() + 2);
+                   target.setHours(20, 0, 0, 0);
+               } else if (target.getDay() === 6) {
+                   target.setDate(target.getDate() + 1);
+                   target.setHours(20, 0, 0, 0);
+               } else if (target.getDay() === 0 && target.getHours() < 20) {
+                   target.setHours(20, 0, 0, 0);
+               }
 
-                 }
+               state.blockedUntil = target.toISOString();
+               
+               let nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Manhã)" : "Próxima sessão: 20:00 GMT-3 (Noite)";
+               if (target.getDay() === 0) nextSessionMsg = "Próxima sessão: Domingo às 20:00 GMT-3";
+               const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
+               
+               addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
+               addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Todas as ordens fechadas. Bot bloqueado para proteção. ${nextSessionMsg}`);
+             }
+           }
+        }
       });
     } catch (e) {
       console.error("Error in trading loop:", e);

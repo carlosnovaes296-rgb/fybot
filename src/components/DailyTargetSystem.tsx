@@ -45,8 +45,8 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (2% da Banca)",
-    lossValue: "Limite de Perda (5% da Banca)",
+    targetValue: "Meta Diária (10% da Banca)",
+    lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
     resetDesc: "Liberar operações e zerar ciclo diário",
@@ -61,7 +61,7 @@ const targetTranslations = {
     blockedMsgHeader: "META DIÁRIA BATIDA",
     lossMsgHeader: "LIMITE DE PERDA ATINGIDO",
     congratsMsg: "Parabéns! Meta diária atingida. O sistema bloqueou novas operações automaticamente para proteger seu lucro consolidado.",
-    lossCongratsMsg: "Atenção: O limite de perda diária de 10% foi alcançado. O sistema interrompeu todas as ordens ativas automaticamente para proteger seu capital restante.",
+    lossCongratsMsg: "Atenção: O limite de perda diária de 20% foi alcançado. O sistema interrompeu todas as ordens ativas automaticamente para proteger seu capital restante.",
     successProtected: "Lucro protegido com sucesso no VPS.",
     lossProtected: "Capital protegido com sucesso no VPS.",
     nextSession: "Próxima sessão em:",
@@ -95,7 +95,7 @@ const targetTranslations = {
     blockedMsgHeader: "DAILY TARGET REACHED",
     lossMsgHeader: "LOSS LIMIT REACHED",
     congratsMsg: "Congratulations! Daily profit target reached. The system automatically locked new entries to secure your consolidated gains.",
-    lossCongratsMsg: "Attention: The maximum daily loss limit of 10% has been reached. The system automatically terminated all open trades and halted further activity to preserve your capital.",
+    lossCongratsMsg: "Attention: The maximum daily loss limit of 20% has been reached. The system automatically terminated all open trades and halted further activity to preserve your capital.",
     successProtected: "Profit successfully secured on VPS.",
     lossProtected: "Capital successfully secured on VPS.",
     nextSession: "Next session in:",
@@ -129,7 +129,7 @@ const targetTranslations = {
     blockedMsgHeader: "META DIARIA ALCANZADA",
     lossMsgHeader: "LÍMITE DE PÉRDIDA ALCANZADO",
     congratsMsg: "¡Felicidades! Meta diaria de ganancias lograda. El sistema ha bloqueado nuevas entradas de forma automática para asegurar sus ganancias.",
-    lossCongratsMsg: "Atención: Se ha alcanzado el límite de pérdida diaria del 10%. El sistema ha cerrado todas las operaciones abiertas automáticamente para proteger su capital restante.",
+    lossCongratsMsg: "Atención: Se ha alcanzado el límite de pérdida diaria del 20%. El sistema ha cerrado todas las operaciones abiertas automáticamente para proteger su capital restante.",
     successProtected: "Ganancia protegida con éxito en el VPS.",
     lossProtected: "Capital protegido con éxito en el VPS.",
     nextSession: "Próxima sesión en:",
@@ -150,7 +150,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.10) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -314,7 +314,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;
   const realTimeProfit = totalDailyProfit;
-  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.10) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -408,7 +408,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                           <div className="text-right">
                             <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.lossValue}</p>
                             <span className="text-xl font-bold text-white/80 font-mono tracking-tight">
-                              ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ${(stats.dailyLossLimit || (stats.balance * 0.20))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                         )}
@@ -540,13 +540,13 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
                           <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyProfitTarget || (stats.balance * 0.10) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
                           <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1 font-bold">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
-                            ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyLossLimit || (stats.balance * 0.20))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </>
@@ -616,7 +616,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       onChange={(e) => setTargetVal(parseInt(e.target.value) || 0)}
                       min="10"
                       max="100000"
-                      placeholder={String(Math.round(stats.balance * 0.02))}
+                      placeholder={String(Math.round(stats.balance * 0.10))}
                       className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white focus:outline-none focus:border-yellow-500/50 transition-colors"
                     />
                   </div>
