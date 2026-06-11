@@ -1260,15 +1260,13 @@ async function startServer() {
                     const currentProfit = getProfit(t.id.toString());
                     t.maxProfit = Math.max(t.maxProfit || 0, currentProfit);
 
-                    // REGRA DA TRAVA DE RETRAÇÃO (Retracement Lock)
-                    if (t.maxProfit >= 4.00) {
-                      const retractionLimit = t.maxProfit * 0.10;
-                      if (currentProfit <= retractionLimit) {
-                        t.status = 'CLOSED';
-                        addUserLog(uId, `🛡️ [TRAVA DE RETRAÇÃO] Ordem ${t.id} (${t.symbol}) fechada para garantir lucro! Pico: $${t.maxProfit.toFixed(2)}, Atual: $${currentProfit.toFixed(2)}`);
-                        exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
-                        return; // Pula a próxima regra para não executar duas vezes
-                      }
+                    // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss Fixo de $22)
+                    const maxLossLimit = -22.00;
+                    if (currentProfit <= maxLossLimit) {
+                      t.status = 'CLOSED';
+                      addUserLog(uId, `🛑 [STOP LOSS FIXO] Ordem ${t.id} (${t.symbol}) fechada! Atingiu limite de $22 de perda: $${currentProfit.toFixed(2)}`);
+                      exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
+                      return;
                     }
 
                   }

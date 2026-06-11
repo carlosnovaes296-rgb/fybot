@@ -49,8 +49,8 @@ def execute_trade(symbol, action, lot):
             price = mt5.symbol_info_tick(symbol).ask
             
             if base_symbol == "XAUUSD":
-                # TP 0.02%, SL 0.50%
-                raw_sl = price - (price * 0.0050)
+                # TP 0.02%, SL 0.80%
+                raw_sl = price - (price * 0.0080)
                 raw_tp = price + (price * 0.0002)
             else:
                 raw_sl = price - (25 * 10 * point)
@@ -67,8 +67,8 @@ def execute_trade(symbol, action, lot):
             price = mt5.symbol_info_tick(symbol).bid
             
             if base_symbol == "XAUUSD":
-                # TP 0.02%, SL 0.50%
-                raw_sl = price + (price * 0.0050)
+                # TP 0.02%, SL 0.80%
+                raw_sl = price + (price * 0.0080)
                 raw_tp = price - (price * 0.0002)
             else:
                 raw_sl = price + (25 * 10 * point)
@@ -113,6 +113,10 @@ def execute_trade(symbol, action, lot):
         
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             error_msg = f"Trade failed. Error code: {result.retcode}. Comment: {result.comment}"
+            if result.retcode == 10027:
+                error_msg = "Botão 'Algo Trading' está desativado no seu MT5. Por favor, ative-o (o botão na barra superior do MT5 deve ficar verde) para permitir operações automáticas."
+            elif result.retcode == 10026:
+                error_msg = "Sua corretora bloqueou operações automatizadas para esta conta (AutoTrading desativado pelo servidor)."
             mt5.shutdown()
             return {"success": False, "error": error_msg}
             
