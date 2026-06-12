@@ -1150,9 +1150,6 @@ export default function App() {
             <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
-          <div className="pt-4 mt-4 border-t border-white/5">
-            <NavItem icon={<LogOut size={20} />} label={t.sidebar.logout} onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); }} />
-          </div>
 
         </nav>
 
@@ -1214,6 +1211,14 @@ export default function App() {
               <p className="text-[10px] text-yellow-500/70 font-semibold">{currentUser?.role === 'ADMIN' ? 'Administrator' : t.common.proAccount}</p>
             </div>
           </div>
+          
+          <button
+            onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); }}
+            className="mt-6 w-full flex items-center justify-start gap-4 px-4 py-3 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all"
+          >
+            <LogOut size={26} />
+            <span className="font-bold text-xl uppercase tracking-wider">{t.sidebar.logout}</span>
+          </button>
         </div>
       </div>
 

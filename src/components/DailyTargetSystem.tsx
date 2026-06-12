@@ -31,6 +31,7 @@ interface Stats {
   timezone?: string;
   antiOvertrading?: boolean;
   systemBlocked?: boolean;
+  blockedUntil?: string | number | Date;
 }
 
 interface DailyTargetSystemProps {
@@ -45,7 +46,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (10% da Banca)",
+    targetValue: "Meta Diária (2% da Banca)",
     lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
@@ -150,7 +151,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.10) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -314,7 +315,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;
   const realTimeProfit = totalDailyProfit;
-  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.10) || 200)) * 100));
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -373,8 +374,9 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  className="space-y-6 py-4 flex flex-col justify-between h-full relative z-10"
+                  className="relative z-10 h-full flex flex-col lg:flex-row gap-6"
                 >
+                  <div className="flex-1 flex flex-col justify-between space-y-6 py-4">
                   {realTimeProfit < 0 ? (
                     // DRAWDOWN / DAILY LOSS HIT RED WARNING STATE
                     <>
@@ -501,6 +503,18 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       </span>
                     </div>
                   </div>
+                  </div>
+                  {/* DIREITA: FOTO DO BOT DORMINDO */}
+                  <div className="hidden lg:flex w-1/3 flex-col items-center justify-center pointer-events-none gap-6">
+                    <img 
+                      src="/sleeping_bot.png" 
+                      alt="Bot Dormindo" 
+                      className="w-full max-w-[500px] object-contain drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
+                    />
+                    <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                      Silêncio, é hora de sono profundo para o Fybot
+                    </p>
+                  </div>
                 </motion.div>
               ) : (
                 // ACTIVE OPERATIONAL MODE WITH TARGET TARGET MOCK / ACTIVE PROGRESS
@@ -509,8 +523,9 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  className="space-y-6 py-2 flex flex-col justify-between h-full relative z-10"
+                  className="relative z-10 h-full flex flex-col lg:flex-row gap-6"
                 >
+                  <div className="flex-1 space-y-6 py-2 flex flex-col justify-between">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-[10px] text-white/30 uppercase tracking-widest font-black mb-1">{t.systemStatus}</p>
@@ -527,8 +542,8 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
 
                   {/* Standard Values read-out */}
                   <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
-                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
-                      <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.currentProfit}</p>
+                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
+                      <p className="text-[10px] text-white/40 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
                       <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
                         {realTimeProfit >= 0 ? '+' : '-'}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -537,14 +552,14 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
 
                     {isAdmin && (
                       <>
-                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-1">{t.targetValue}</p>
+                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
+                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.10) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10">
-                          <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-1 font-bold">{t.lossValue}</p>
+                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10 flex flex-col justify-between h-full">
+                          <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-2 font-bold min-h-[32px] flex items-start">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
                             ${(stats.dailyLossLimit || (stats.balance * 0.20))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
@@ -585,6 +600,18 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
                       <span> Proteção contra Over-Trading Operacional</span>
                     </div>
+                  </div>
+                  </div>
+                  {/* DIREITA: FOTO DO BOT ACORDADO */}
+                  <div className="hidden lg:flex w-1/2 flex-col items-center justify-between pointer-events-none py-2 gap-8">
+                    <img 
+                      src="/awake_bot.png" 
+                      alt="Bot Acordado" 
+                      className="w-full max-w-[600px] rounded-2xl object-cover drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
+                    />
+                    <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] mt-auto pb-4">
+                      Olá, tô de volta! Vamos ao trabalho e boa sorte!
+                    </p>
                   </div>
                 </motion.div>
               )}

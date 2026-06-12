@@ -200,9 +200,11 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // Dynamically calculate daily profit target as 10% of starting daily balance
-      if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
-        state.dailyProfitTarget = Number((startingDailyBalance * 0.10).toFixed(2));
+      // Dynamically calculate session profit target as 2% of starting daily balance (4% on Friday morning)
+      if (!state.isCustomTarget) {
+        const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
+        const targetPercent = isFridayMorning ? 0.04 : 0.02;
+        state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       }
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
@@ -1220,6 +1222,7 @@ async function startServer() {
              state.systemBlocked = false;
              state.blockedUntil = null;
              state.dailyProfit = 0;
+             state.customStartingBalance = null;
              addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/20h). Bot pronto para operar.");
           }
         }
@@ -1239,8 +1242,11 @@ async function startServer() {
               if (sigRes.account.today_realized_profit !== undefined) {
                 state.trueRealizedProfit = sigRes.account.today_realized_profit;
               }
-              // Trava a banca inicial para o cálculo exato de 2% e 5% na primeira leitura
+              // Trava a banca inicial para o cálculo exato de 2% na primeira leitura
               if (!state.customStartingBalance && state.balance > 0) {
+                state.customStartingBalance = state.balance;
+              } else if (state.customStartingBalance && Math.abs(state.customStartingBalance - state.balance) > state.balance * 0.5) {
+                // Força atualização se houver discrepância absurda (ex: troca de conta ou reset de banca)
                 state.customStartingBalance = state.balance;
               }
             }
@@ -1429,8 +1435,10 @@ async function startServer() {
         
         const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
         const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
-        if (!state.isCustomTarget || state.dailyProfitTarget === 0) {
-          state.dailyProfitTarget = Number((startingDailyBalance * 0.10).toFixed(2));
+        if (!state.isCustomTarget) {
+          const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
+          const targetPercent = isFridayMorning ? 0.04 : 0.02;
+          state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
         }
 
         // Check if target is met and system isn't already blocked
@@ -1460,7 +1468,7 @@ async function startServer() {
                else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
                
                // Se o próximo alvo cair no bloqueio de fim de semana, empurra para Domingo às 20h
-               if (target.getDay() === 5 && target.getHours() >= 18) {
+               if (target.getDay() === 5 && target.getHours() >= 20) {
                    target.setDate(target.getDate() + 2);
                    target.setHours(20, 0, 0, 0);
                } else if (target.getDay() === 6) {
