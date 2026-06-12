@@ -290,7 +290,7 @@ export default function App() {
     activeLicense: null,
     pendingPayment: null,
     dailyProfit: 0.00,
-    dailyProfitTarget: 200.00, // 2% of initial balance ($10,000)
+    dailyProfitTarget: 160.00, // 1.6% of initial balance ($10,000)
     dailyLossLimit: 1000.00, // 10% of initial balance
     dailyResetHour: "08:00",
     preferredSession: "London/NY",

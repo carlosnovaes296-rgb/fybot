@@ -46,7 +46,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (2% da Banca)",
+    targetValue: "Meta Diária (1.6% da Banca)",
     lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
@@ -80,7 +80,7 @@ const targetTranslations = {
   en: {
     title: "SMART DAILY TARGET",
     subtitle: "V8 PRO SAFETY GATE - Advanced Capital Protection",
-    targetValue: "Daily Target (2% of Bankroll)",
+    targetValue: "Daily Target (1.6% of Bankroll)",
     lossValue: "Loss Limit (5% of Bankroll)",
     currentProfit: "Today's Profit (Real-time)",
     resetManual: "Operational Reset",
@@ -114,7 +114,7 @@ const targetTranslations = {
   es: {
     title: "META DIARIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Protección de Capital Avanzada",
-    targetValue: "Meta Diaria (2% de la Banca)",
+    targetValue: "Meta Diaria (1.6% de la Banca)",
     lossValue: "Límite de Pérdida (5% de la Banca)",
     currentProfit: "Ganancia de Hoy (En Tiempo Real)",
     resetManual: "Reajuste Operativo",
@@ -151,7 +151,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.02) || 200);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.016) || 160);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -315,7 +315,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;
   const realTimeProfit = totalDailyProfit;
-  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -505,11 +505,11 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   </div>
                   </div>
                   {/* DIREITA: FOTO DO BOT DORMINDO */}
-                  <div className="hidden lg:flex w-1/3 flex-col items-center justify-center pointer-events-none gap-6">
+                  <div className="hidden lg:flex w-[40%] flex-col items-center justify-between pointer-events-none gap-4">
                     <img 
                       src="/sleeping_bot.png" 
                       alt="Bot Dormindo" 
-                      className="w-full max-w-[500px] object-contain drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
+                      className="w-full h-full object-cover rounded-3xl drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-[1.02] transition-transform duration-700"
                     />
                     <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
                       Silêncio, é hora de sono profundo para o Fybot

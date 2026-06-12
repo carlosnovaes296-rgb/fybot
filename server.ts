@@ -203,7 +203,7 @@ async function startServer() {
       // Dynamically calculate session profit target as 2% of starting daily balance (4% on Friday morning)
       if (!state.isCustomTarget) {
         const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
-        const targetPercent = isFridayMorning ? 0.04 : 0.02;
+        const targetPercent = isFridayMorning ? 0.032 : 0.016;
         state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       }
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
@@ -267,11 +267,16 @@ async function startServer() {
       
       const todayStr = new Date().toISOString().split('T')[0];
       const todayClosedTrades = (state.trades || []).filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
-      const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-      const floatingProfit = (state.equity || 0) - (state.balance || 0);
-      
-      state.dailyProfitOffset = realizedProfit + floatingProfit;
-      state.dailyProfit = 0; // Zera imediatamente para o frontend
+        const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : 0;
+        const floatingProfit = (state.equity || 0) - (state.balance || 0);
+        const rawDailyProfit = realizedProfit + floatingProfit;
+        
+        // Define o offset na primeira leitura para que o bot sempre inicie o painel em $0.00
+        if (state.startupProfitOffset === undefined) {
+           state.startupProfitOffset = rawDailyProfit;
+        }
+        
+        state.dailyProfit = rawDailyProfit - state.startupProfitOffset; // Zera imediatamente para o frontend
       state.customStartingBalance = state.balance; // Define a nova base de cálculo para os limites 5% e 2%
       state.systemBlocked = false;
       addUserLog(userId, "🔄 [RESET MANUAL] Lucro diário zerado. Perdas/ganhos e flutuantes atuais se tornaram a nova base $0.00.");
@@ -1427,17 +1432,15 @@ async function startServer() {
         
         // Verifica se a meta diária foi batida baseado nos lucros já registrados
         const todayStr = new Date().toISOString().split('T')[0];
-        const todayClosedTrades = state.trades.filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
-        const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : todayClosedTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-        const floatingProfit = state.equity - state.balance;
-        
-        state.dailyProfit = (realizedProfit + floatingProfit) - (state.dailyProfitOffset || 0);
-        
         const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
+        
+        // Lucro real da sessão é puramente o Capital Atual (Equity) menos a Banca Inicial da sessão
+        state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
+        
         const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
         if (!state.isCustomTarget) {
           const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
-          const targetPercent = isFridayMorning ? 0.04 : 0.02;
+          const targetPercent = isFridayMorning ? 0.032 : 0.016;
           state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
         }
 
