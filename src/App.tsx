@@ -54,7 +54,7 @@ import DailyTargetSystem from './components/DailyTargetSystem';
 // @ts-ignore
 import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
 // @ts-ignore
-import fybotLoginBg from './assets/images/fybot_robot_bg_v3.jpg';
+import fybotLoginBg from './assets/images/imagem.png';
 import {
   AreaChart,
   Area,
@@ -1007,7 +1007,7 @@ export default function App() {
           <img
             src={fybotLoginBg}
             alt="Futuristic Robot Background"
-            className="w-full h-full object-cover object-top select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
+            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
           />
         </div>
