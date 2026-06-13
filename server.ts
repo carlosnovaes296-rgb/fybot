@@ -28,10 +28,28 @@ const isTradingTime = (): boolean => {
   return true;
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
-);
+// Resolve Supabase credentials from the most common env var names so the
+// integration works regardless of how they were configured on Netlify.
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.SUPABASE_PROJECT_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  '';
+const SUPABASE_KEY =
+  process.env.SUPABASE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  '';
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  console.warn(
+    'IABOT: SUPABASE_URL/SUPABASE_KEY are not set. The app will fall back to ' +
+    'local data/db.json and in-memory data. Set these variables to connect your Supabase database.'
+  );
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,6 +162,8 @@ async function startServer() {
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
+        withdrawals = dbData.withdrawals || withdrawals;
+        referralEarnings = dbData.referralEarnings || referralEarnings;
         config = { ...config, ...(dbData.config || {}) };
         
         // Ensure strategyWeights exists
@@ -161,6 +181,8 @@ async function startServer() {
           users = localData.users || users;
           licenses = localData.licenses || licenses;
           payments = localData.payments || payments;
+          withdrawals = localData.withdrawals || withdrawals;
+          referralEarnings = localData.referralEarnings || referralEarnings;
           config = { ...config, ...(localData.config || {}) };
           if (!config.strategyWeights) {
             config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
@@ -179,7 +201,7 @@ async function startServer() {
 
   const saveDB = async () => {
     try {
-      const dbData = { users, licenses, payments, config };
+      const dbData = { users, licenses, payments, withdrawals, referralEarnings, config };
       const { error } = await supabase.from('fybot_db').upsert({ id: 1, data: dbData });
       if (error) {
         console.error('IABOT: Failed to save to Supabase:', error.message);
