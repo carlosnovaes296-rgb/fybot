@@ -217,7 +217,7 @@ export const translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diária (1.6% da Banca)",
+      dailyTargetLabel: "Meta Diária em cada sessão 1.6%",
       dailyLossLabel: "Limite de Perda Diária (20% da Banca)",
       dailyProfitLabel: "Lucro de Hoje",
       activeTrades: "Posições Ativas",

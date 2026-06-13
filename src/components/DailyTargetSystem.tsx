@@ -46,11 +46,11 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária (1.6% da Banca)",
+    targetValue: "Meta Diária em cada sessão 1.6%",
     lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
-    resetDesc: "Liberar operações e zerar ciclo diário",
+    resetDesc: "Liberar operações 24 horas por dia de Domingo 20 horas até sexta feira 15 horas",
     simulateProfit: "Testar Ganho (+$50)",
     simulateLoss: "Testar Perda (-$150/x)",
     simulateGoal: "Simular Meta",
@@ -401,14 +401,14 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       {/* Profit value readout with clean styling */}
                       <div className="bg-red-500/[0.02] border border-red-500/10 rounded-2xl p-4 flex justify-between items-center bg-gradient-to-r from-red-500/[0.03] to-transparent">
                         <div>
-                          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.currentProfit}</p>
+                          <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-red-400 tracking-tight">
                             -${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </h4>
                         </div>
                         {isAdmin && (
                           <div className="text-right">
-                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.lossValue}</p>
+                            <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.lossValue}</p>
                             <span className="text-xl font-bold text-white/80 font-mono tracking-tight">
                               ${(stats.dailyLossLimit || (stats.balance * 0.20))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
@@ -456,14 +456,14 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       {/* Profit value readout with clean styling */}
                       <div className="bg-emerald-500/[0.02] border border-emerald-500/10 rounded-2xl p-4 flex justify-between items-center bg-gradient-to-r from-emerald-500/[0.03] to-transparent">
                         <div>
-                          <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.currentProfit}</p>
+                          <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-emerald-400 tracking-tight">
                             {realTimeProfit >= 0 ? '+' : ''}${realTimeProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </h4>
                         </div>
                         {isAdmin && (
                           <div className="text-right">
-                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">{t.targetValue}</p>
+                            <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.targetValue}</p>
                             <h5 className="text-xl font-mono font-bold text-white/80">
                               ${stats.dailyProfitTarget?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h5>
@@ -543,7 +543,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   {/* Standard Values read-out */}
                   <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
                     <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
-                      <p className="text-[10px] text-white/40 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
+                      <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
                       <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
                         {realTimeProfit >= 0 ? '+' : '-'}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -553,13 +553,13 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                     {isAdmin && (
                       <>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
-                          <p className="text-[10px] text-white/40 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.targetValue}</p>
+                          <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.targetValue}</p>
                           <span className="text-2xl font-mono font-black text-white">
                             ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10 flex flex-col justify-between h-full">
-                          <p className="text-[10px] text-red-400/60 uppercase tracking-wider mb-2 font-bold min-h-[32px] flex items-start">{t.lossValue}</p>
+                          <p className="text-xs text-red-400/90 uppercase tracking-wider mb-2 font-bold min-h-[32px] flex items-start">{t.lossValue}</p>
                           <span className="text-2xl font-mono font-black text-red-400">
                             ${(stats.dailyLossLimit || (stats.balance * 0.20))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
@@ -603,13 +603,13 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   </div>
                   </div>
                   {/* DIREITA: FOTO DO BOT ACORDADO */}
-                  <div className="hidden lg:flex w-1/2 flex-col items-center justify-between pointer-events-none py-2 gap-8">
+                  <div className="hidden lg:flex w-1/2 flex-col items-center justify-center pointer-events-none gap-4">
                     <img 
                       src="/awake_bot.png" 
                       alt="Bot Acordado" 
-                      className="w-full max-w-[600px] rounded-2xl object-cover drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
+                      className="w-[70%] h-auto object-contain rounded-3xl drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
                     />
-                    <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] mt-auto pb-4">
+                    <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] mt-4">
                       Olá, tô de volta! Vamos ao trabalho e boa sorte!
                     </p>
                   </div>
@@ -621,6 +621,22 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
         </div>
 
         {/* CONTROLS AND OP SETUP PANEL */}
+        {(!isAdmin && stats.activeLicense?.expiryDate && new Date(stats.activeLicense.expiryDate).getFullYear() > 2090) && (
+          <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center mt-8">
+            <button
+              onClick={handleResetManual}
+              disabled={resetting}
+              className="w-fit mx-auto px-12 py-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl hover:bg-emerald-500/20 hover:border-emerald-500/40 active:scale-95 transition-all flex items-center justify-center gap-4 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+            >
+              <RefreshCw size={28} className={resetting ? 'animate-spin text-[#00ff9d]' : 'text-[#00ff9d] drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]'} />
+              <div className="text-left">
+                <p className="font-black text-xl uppercase tracking-wider leading-none mb-1.5 text-[#00ff9d] drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]">{t.resetManual}</p>
+                <p className="text-[14px] text-[#00ff9d]/80 font-bold uppercase tracking-widest leading-none">{t.resetDesc}</p>
+              </div>
+            </button>
+          </div>
+        )}
+
         {isAdmin && (
           <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-between">
             <div className="space-y-4">
@@ -725,20 +741,22 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
               </form>
             </div>
 
-            {/* OPERATIONAL RESET CONTROL */}
-            <div className="border-t border-white/5 pt-5 mt-5">
-              <button
-                onClick={handleResetManual}
-                disabled={resetting}
-                className="w-full py-2.5 bg-white/5 border border-white/5 text-white/70 rounded-xl text-xs font-bold hover:bg-yellow-500/10 hover:text-yellow-400 active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <RefreshCw size={12} className={resetting ? 'animate-spin' : ''} />
-                <div className="text-left">
-                  <p className="font-bold text-[10px] leading-none mb-0.5">{t.resetManual}</p>
-                  <p className="text-[8px] text-white/30 leading-none">{t.resetDesc}</p>
-                </div>
-              </button>
-            </div>
+            {/* OPERATIONAL RESET CONTROL (ONLY FOR LIFETIME) */}
+            {(stats.activeLicense?.expiryDate && new Date(stats.activeLicense.expiryDate).getFullYear() > 2090) && (
+              <div className="border-t border-white/5 pt-5 mt-5">
+                <button
+                  onClick={handleResetManual}
+                  disabled={resetting}
+                  className="w-fit mx-auto px-12 py-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl hover:bg-emerald-500/20 hover:border-emerald-500/40 active:scale-95 transition-all flex items-center justify-center gap-4 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                >
+                  <RefreshCw size={28} className={resetting ? 'animate-spin text-[#00ff9d]' : 'text-[#00ff9d] drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]'} />
+                  <div className="text-left">
+                    <p className="font-black text-xl uppercase tracking-wider leading-none mb-1.5 text-[#00ff9d] drop-shadow-[0_0_8px_rgba(0,255,157,0.5)]">{t.resetManual}</p>
+                    <p className="text-[14px] text-[#00ff9d]/80 font-bold uppercase tracking-widest leading-none">{t.resetDesc}</p>
+                  </div>
+                </button>
+              </div>
+            )}
 
 
 

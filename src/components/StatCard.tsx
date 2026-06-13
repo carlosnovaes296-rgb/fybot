@@ -8,6 +8,7 @@ export interface StatCardProps {
   delta: string;
   icon: React.ReactNode;
   valueClassName?: string;
+  labelClassName?: string;
   trend?: number[]; // sparkline data points
   trendPositive?: boolean;
 }
@@ -83,7 +84,7 @@ function useAnimatedValue(target: string | number) {
   return display;
 }
 
-export function StatCard({ label, value, delta, icon, valueClassName, trend, trendPositive }: StatCardProps) {
+export function StatCard({ label, value, delta, icon, valueClassName, labelClassName, trend, trendPositive }: StatCardProps) {
   const isPositiveTrend = trendPositive !== undefined ? trendPositive : !String(value).startsWith('-');
   const glowColor = isPositiveTrend ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
   const borderGlow = isPositiveTrend ? 'hover:border-emerald-500/20' : 'hover:border-red-500/20';
@@ -117,7 +118,7 @@ export function StatCard({ label, value, delta, icon, valueClassName, trend, tre
               ? <TrendingUp size={9} className="text-emerald-400" />
               : <TrendingDown size={9} className="text-red-400" />
             }
-            <span className="text-[10px] font-black text-white uppercase tracking-tighter">{delta}</span>
+            <span className="text-[15px] font-black text-white uppercase tracking-tighter">{delta}</span>
           </div>
           {/* Sparkline */}
           <div className="opacity-60 group-hover:opacity-100 transition-opacity">
@@ -128,8 +129,8 @@ export function StatCard({ label, value, delta, icon, valueClassName, trend, tre
 
       {/* Label & value */}
       <div className="relative z-10">
-        <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1">{label}</p>
-        <h3 className={`text-2xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>
+        <p className={`text-[15px] font-black uppercase tracking-widest mb-1 ${labelClassName || 'text-white/40'}`}>{label}</p>
+        <h3 className={`text-4xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>
           {value}
         </h3>
       </div>

@@ -200,10 +200,8 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // Dynamically calculate session profit target as 2% of starting daily balance (4% on Friday morning)
       if (!state.isCustomTarget) {
-        const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
-        const targetPercent = isFridayMorning ? 0.032 : 0.016;
+        const targetPercent = 0.016; // Meta fixa de 1.6%
         state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       }
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
@@ -927,7 +925,9 @@ async function startServer() {
       // Liberar acesso: Create license
       const expiryDate = new Date();
       const amount = parseFloat(payment.amount) || 0;
-      if (Math.abs(amount - 50) < 0.1) {
+      if (Math.abs(amount - 500) < 0.1 || Math.abs(amount - 100) < 0.1) {
+        expiryDate.setFullYear(2099); // Acesso vitalício para $500 (MEU BOT) e $100 (Licença Parceria)
+      } else if (Math.abs(amount - 50) < 0.1) {
         expiryDate.setDate(expiryDate.getDate() + 90); // 90 dias para $50
       } else if (Math.abs(amount - 20) < 0.1) {
         expiryDate.setDate(expiryDate.getDate() + 60); // 60 dias para $20
@@ -1276,11 +1276,12 @@ async function startServer() {
                     const currentProfit = getProfit(t.id.toString());
                     t.maxProfit = Math.max(t.maxProfit || 0, currentProfit);
 
-                    // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss Fixo de $22)
-                    const maxLossLimit = -22.00;
+                    // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss de 20% da banca por ordem)
+                    const startingDailyBalanceForStop = state.customStartingBalance ? state.customStartingBalance : state.balance;
+                    const maxLossLimit = -Number((startingDailyBalanceForStop * 0.20).toFixed(2));
                     if (currentProfit <= maxLossLimit) {
                       t.status = 'CLOSED';
-                      addUserLog(uId, `🛑 [STOP LOSS FIXO] Ordem ${t.id} (${t.symbol}) fechada! Atingiu limite de $22 de perda: $${currentProfit.toFixed(2)}`);
+                      addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${t.symbol}) fechada! Atingiu limite de 20% de perda: $${currentProfit.toFixed(2)}`);
                       exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
                       return;
                     }
@@ -1319,7 +1320,7 @@ async function startServer() {
               // 1. VERIFICAÇÃO DE DCA (RECUPERAÇÃO E PREÇO MÉDIO)
               let isDCATrade = false;
 
-              if (openCount > 0 && openCount < 7) {
+              if (openCount > 0 && openCount < 2) {
                 const currentPrice = symData.price;
                 if (currentPrice) {
                   const newestOrder = symbolOpenTrades[symbolOpenTrades.length - 1];
@@ -1371,7 +1372,7 @@ async function startServer() {
 
               // 3. LIMITES FINAIS
               if (currentOpenTrades.length >= 10) return;
-              if (openCount >= 7) return;
+              if (openCount >= 2) return;
               if (state.pendingOrders.has(symbol)) return;
 
           if (direction) {
@@ -1439,8 +1440,7 @@ async function startServer() {
         
         const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
         if (!state.isCustomTarget) {
-          const isFridayMorning = new Date().getDay() === 5 && new Date().getHours() >= 10;
-          const targetPercent = isFridayMorning ? 0.032 : 0.016;
+          const targetPercent = 0.016; // Meta fixa de 1.6% por sessão
           state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
         }
 

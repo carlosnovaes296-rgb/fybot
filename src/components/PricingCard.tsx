@@ -14,10 +14,11 @@ export interface PricingCardProps {
   customPriceText?: string;
   titleColor?: string;
   descColor?: string;
+  descSize?: string;
   onBuy?: () => void;
 }
 
-export function PricingCard({ title, price, recommended, desc, features, language, image, hideButton, largeFeatures, customPriceText, titleColor, descColor, onBuy }: PricingCardProps) {
+export function PricingCard({ title, price, recommended, desc, features, language, image, hideButton, largeFeatures, customPriceText, titleColor, descColor, descSize, onBuy }: PricingCardProps) {
   return (
     <div className={`relative flex flex-col p-8 rounded-[40px] border transition-all ${
       recommended 
@@ -38,7 +39,7 @@ export function PricingCard({ title, price, recommended, desc, features, languag
 
       <div className="mb-8">
         <h3 className={`text-xl font-bold ${titleColor || ''}`}>{title}</h3>
-        <p className={`text-xs mt-2 ${descColor || 'text-white/40'}`}>{desc}</p>
+        <p className={`${descSize || 'text-xs'} mt-2 ${descColor || 'text-white/40'}`}>{desc}</p>
       </div>
 
       <div className="mb-8">

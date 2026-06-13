@@ -1478,16 +1478,20 @@ export default function App() {
                     label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
                     value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
-                    icon={<Wallet className="text-blue-400" />}
+                    icon={<Wallet className="text-emerald-400" />}
                     trendPositive={true}
+                    labelClassName="text-emerald-400"
+                    valueClassName="text-emerald-400"
                     trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="2.0%"
-                    icon={<Target className="text-yellow-400" />}
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="1.6%"
+                    icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
+                    labelClassName="text-emerald-400"
+                    valueClassName="text-emerald-400"
                     trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
                   />
                   {(() => {
@@ -1496,9 +1500,10 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
+                        labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         trendPositive={realTimeProfit >= 0}
                       />
                     );
@@ -2250,7 +2255,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
@@ -2291,6 +2296,17 @@ export default function App() {
                     largeFeatures={true}
                     titleColor="text-emerald-400"
                     descColor="text-emerald-400"
+                  />
+                  <PricingCard
+                    title="MEU BOT"
+                    price={500}
+                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Seu Bot Livre 24 Horas'}
+                    descSize="text-base font-bold"
+                    descColor="text-emerald-400"
+                    features={[]}
+                    language={language}
+                    image="/awake_bot.png"
+                    onBuy={() => setShowPaymentModal({ title: "MEU BOT", price: 500 })}
                   />
                 </div>
 
