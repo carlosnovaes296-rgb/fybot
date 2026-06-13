@@ -52,9 +52,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
 // @ts-ignore
-import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
+import iabotLogo from './assets/images/iabot_new_logo_1779835693847.png';
 // @ts-ignore
-import fybotLoginBg from './assets/images/imagem.png';
+import iabotLoginBg from './assets/images/imagem.png';
 import {
   AreaChart,
   Area,
@@ -116,8 +116,8 @@ const _unused_translations = {
       active: "Motor Activo",
       idle: "Motor Inactivo",
       equity: "Capital Total",
-      stop: "PARAR FYBOT",
-      start: "INICIAR FYBOT",
+      stop: "PARAR IABOT",
+      start: "INICIAR IABOT",
       locked: "🔒 SISTEMA BLOQUEADO",
       broker: "Corredor: MetaTrader 5 Cloud"
     },
@@ -206,7 +206,7 @@ const _unused_translations = {
       viewFullAnalysis: "VER ANÁLISE COMPLETO"
     },
     plans: {
-      title: "Elija su Licencia FYBOT",
+      title: "Elija su Licencia IABOT",
       subTitle: "Active su robot y comience a operar automáticamente en el mercado internacional Forex.",
       card1Title: "Licencia Básica",
       card1Desc: "Ideal para principiantes que desean probar la tecnología SMC.",
@@ -252,7 +252,7 @@ const _unused_translations = {
     },
     admin: {
       userManagement: "Gestión de Usuarios",
-      userManagementDesc: "Administre los usuarios de FYBOT y el estado de sus cuentas",
+      userManagementDesc: "Administre los usuarios de IABOT y el estado de sus cuentas",
       licenseRegistry: "Registro de Licencias",
       pendingVerification: "Verificación Pendiente",
       noPendingPayments: "No hay pagos pendientes para aprobación.",
@@ -1005,7 +1005,7 @@ export default function App() {
         {/* Background Image with Full Realism and Visibility */}
         <div className="absolute inset-0 z-0 overflow-hidden">
           <img
-            src={fybotLoginBg}
+            src={iabotLoginBg}
             alt="Futuristic Robot Background"
             className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
@@ -1118,11 +1118,11 @@ export default function App() {
         <div className="py-6 flex items-center justify-center gap-3 border-b border-white/5">
           {/* Expanded (Desktop): Brand Logo */}
           <div className="hidden md:flex items-center justify-center select-none">
-            <img src="/fybot-logo.png.png" alt="Fybot Logo" className="h-28 object-contain scale-110" />
+            <img src="/iabot-logo.png.png" alt="IAbot Logo" className="h-28 object-contain scale-110" />
           </div>
           {/* Collapsed (Mobile/Tablet): Brand Logo */}
           <div className="md:hidden flex items-center justify-center select-none">
-            <img src="/fybot-logo.png.png" alt="Fybot Logo" className="h-20 object-contain scale-110" />
+            <img src="/iabot-logo.png.png" alt="IAbot Logo" className="h-20 object-contain scale-110" />
           </div>
         </div>
 
@@ -1155,7 +1155,7 @@ export default function App() {
 
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-col items-center gap-4">
-            <a href="https://t.me/fybotpro_bot"
+            <a href="https://t.me/iabotpro_bot"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1175,10 +1175,10 @@ export default function App() {
                 textAlign: 'center'
               }}>
               <img src="/logo telegram.png" alt="Telegram" className="w-14 h-14 object-contain drop-shadow-md" />
-              <span className="whitespace-nowrap">Fybot pro Telegram</span>
+              <span className="whitespace-nowrap">IAbot pro Telegram</span>
             </a>
 
-            <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
+            <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20IABOT%20PRO%20e%20preciso%20de%20ajuda."
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1198,7 +1198,7 @@ export default function App() {
                 textAlign: 'center'
               }}>
               <img src="/logo zap.webp" alt="WhatsApp" className="w-14 h-14 object-contain drop-shadow-md" />
-              <span className="whitespace-nowrap">Grupo Fybot WhatsApp</span>
+              <span className="whitespace-nowrap">Grupo IAbot WhatsApp</span>
             </a>
           </div>
 
@@ -1674,7 +1674,7 @@ export default function App() {
                             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
                           </div>
                           <Terminal size={13} className="text-emerald-500/60" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">IABOT Live Console</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5">
@@ -2262,7 +2262,7 @@ export default function App() {
                     desc={t.plans.card1Desc}
                     features={t.plans.card1Features}
                     language={language}
-                    image="/fybot-logo.png.png"
+                    image="/iabot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card1Title, price: 10 })}
                   />
                   <PricingCard
@@ -2272,7 +2272,7 @@ export default function App() {
                     desc={t.plans.card2Desc}
                     features={t.plans.card2Features}
                     language={language}
-                    image="/fybot-logo.png.png"
+                    image="/iabot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card2Title, price: 20 })}
                   />
                   <PricingCard
@@ -2281,7 +2281,7 @@ export default function App() {
                     desc={t.plans.card3Desc}
                     features={t.plans.card3Features}
                     language={language}
-                    image="/fybot-logo.png.png"
+                    image="/iabot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
                   <PricingCard

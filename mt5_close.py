@@ -28,7 +28,7 @@ def close_trade(ticket):
             "tp": 0.0,
             "deviation": 20,
             "magic": 234000,
-            "comment": "Fybot close",
+            "comment": "IAbot close",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }

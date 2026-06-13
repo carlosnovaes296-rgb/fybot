@@ -104,7 +104,7 @@ def execute_trade(symbol, action, lot):
             "tp": tp,
             "deviation": 20,
             "magic": 234000,
-            "comment": "Fybot",
+            "comment": "IAbot",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC, # Usually IOC is required by Exness
         }

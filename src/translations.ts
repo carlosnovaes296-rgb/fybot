@@ -22,8 +22,8 @@ export const translations = {
       active: "Engine Active",
       idle: "Engine Idle",
       equity: "Total Equity",
-      stop: "STOP FYBOT",
-      start: "START FYBOT",
+      stop: "STOP IABOT",
+      start: "START IABOT",
       locked: "🔒 SYSTEM LOCKED",
       broker: "Broker: MetaTrader 5 Cloud"
     },
@@ -112,7 +112,7 @@ export const translations = {
       viewFullAnalysis: "VIEW FULL ANALYSIS"
     },
     plans: {
-      title: "Choose your FYBOT License",
+      title: "Choose your IABOT License",
       subTitle: "Activate your robot and start trading automatically in the international Forex market.",
       card1Title: "Basic License",
       card1Desc: "Ideal for beginners looking to test SMC technology.",
@@ -161,7 +161,7 @@ export const translations = {
     },
     admin: {
       userManagement: "User Management",
-      userManagementDesc: "Manage FYBOT users and their account status",
+      userManagementDesc: "Manage IABOT users and their account status",
       licenseRegistry: "License Registry",
       pendingVerification: "Pending Verification",
       noPendingPayments: "No pending payments for approval.",
@@ -197,8 +197,8 @@ export const translations = {
       active: "Motor Ativo",
       idle: "Motor Inativo",
       equity: "Capital Total",
-      stop: "PARAR FYBOT",
-      start: "INICIAR FYBOT",
+      stop: "PARAR IABOT",
+      start: "INICIAR IABOT",
       locked: "🔒 SISTEMA BLOQUEADO",
       broker: "Corretora: MetaTrader 5 Cloud"
     },
@@ -287,7 +287,7 @@ export const translations = {
       viewFullAnalysis: "VER ANÁLISE COMPLETA"
     },
     plans: {
-      title: "Escolha sua Licença FYBOT",
+      title: "Escolha sua Licença IABOT",
       subTitle: "Ative seu robô e comece a operar automaticamente no mercado internacional Forex.",
       card1Title: "Licença Básica",
       card1Desc: "Ideal para iniciantes que desejam testar a tecnologia SMC.",
@@ -336,7 +336,7 @@ export const translations = {
     },
     admin: {
       userManagement: "Gerenciamento de Usuários",
-      userManagementDesc: "Gerencie os usuários do FYBOT e o status de suas contas",
+      userManagementDesc: "Gerencie os usuários do IABOT e o status de suas contas",
       licenseRegistry: "Registro de Licenças",
       pendingVerification: "Verificação Pendente",
       noPendingPayments: "Nenhum pagamento pendente para aprovação.",
@@ -372,8 +372,8 @@ export const translations = {
       active: "Motor Activo",
       idle: "Motor Inactivo",
       equity: "Capital Total",
-      stop: "PARAR FYBOT",
-      start: "INICIAR FYBOT",
+      stop: "PARAR IABOT",
+      start: "INICIAR IABOT",
       locked: "🔒 SISTEMA BLOQUEADO",
       broker: "Corredor: MetaTrader 5 Cloud"
     },
@@ -462,7 +462,7 @@ export const translations = {
       viewFullAnalysis: "VER ANÁLISE COMPLETO"
     },
     plans: {
-      title: "Elija su Licencia FYBOT",
+      title: "Elija su Licencia IABOT",
       subTitle: "Active su robot y comience a operar automáticamente en el mercado internacional Forex.",
       card1Title: "Licencia Básica",
       card1Desc: "Ideal para principiantes que desean probar la tecnología SMC.",
@@ -511,7 +511,7 @@ export const translations = {
     },
     admin: {
       userManagement: "Gestión de Usuarios",
-      userManagementDesc: "Administre los usuarios de FYBOT y el estado de sus cuentas",
+      userManagementDesc: "Administre los usuarios de IABOT y el estado de sus cuentas",
       licenseRegistry: "Registro de Licencias",
       pendingVerification: "Verificación Pendiente",
       noPendingPayments: "No hay pagos pendientes para aprobación.",
