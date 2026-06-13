@@ -27,12 +27,12 @@ files.forEach(file => {
   let originalContent = content;
 
   // Replacement logic:
-  // We want to replace Fybot -> IAbot, FYBOT -> IABOT, fybot -> iabot
-  // Exclude 'fybot_db' because it's the database table
+  // We want to replace IAbot -> Fybot, IABOT -> FYBOT, iabot -> fybot
+  // Exclude 'iabot_db' because it's the database table
   
-  content = content.replace(/FYBOT(?!_DB|_db)/g, 'IABOT');
-  content = content.replace(/Fybot/g, 'IAbot');
-  content = content.replace(/fybot(?!_db)/g, 'iabot');
+  content = content.replace(/IABOT(?!_DB|_db)/g, 'FYBOT');
+  content = content.replace(/IAbot/g, 'Fybot');
+  content = content.replace(/iabot(?!_db)/g, 'fybot');
 
   if (content !== originalContent) {
     fs.writeFileSync(file, content);
@@ -53,11 +53,11 @@ const renameFiles = (dir) => {
     }
     
     const basename = path.basename(fullPath);
-    if (basename.toLowerCase().includes('fybot')) {
-      const newBasename = basename.replace(/fybot/gi, (match) => {
-        if (match === 'FYBOT') return 'IABOT';
-        if (match === 'Fybot') return 'IAbot';
-        return 'iabot';
+    if (basename.toLowerCase().includes('iabot')) {
+      const newBasename = basename.replace(/iabot/gi, (match) => {
+        if (match === 'IABOT') return 'FYBOT';
+        if (match === 'IAbot') return 'Fybot';
+        return 'fybot';
       });
       const newFullPath = path.join(dir, newBasename);
       fs.renameSync(fullPath, newFullPath);

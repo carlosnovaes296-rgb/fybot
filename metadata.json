@@ -1,5 +1,5 @@
 {
-  "name": "IABOT PRO Forex",
+  "name": "FYBOT PRO Forex",
   "description": "Professional Forex trading dashboard with real-time SMC and Momentum strategy simulation, integrated control panel, and metrics tracking.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

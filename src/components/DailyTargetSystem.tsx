@@ -512,7 +512,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       className="w-full h-full object-cover rounded-3xl drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-[1.02] transition-transform duration-700"
                     />
                     <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                      Silêncio, é hora de sono profundo para o IAbot
+                      Silêncio, é hora de sono profundo para o Fybot
                     </p>
                   </div>
                 </motion.div>

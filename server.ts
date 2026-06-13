@@ -151,9 +151,9 @@ async function startServer() {
           config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
         }
         
-        console.log('IABOT: Loaded data from Supabase Cloud');
+        console.log('FYBOT: Loaded data from Supabase Cloud');
       } else {
-        if (error) console.log(`IABOT: Note from Supabase (${error.message}). Attempting migration fallback...`);
+        if (error) console.log(`FYBOT: Note from Supabase (${error.message}). Attempting migration fallback...`);
         // Fallback migration: If Supabase table is empty, load from local db.json and push to cloud
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         if (fs.existsSync(DB_PATH)) {
@@ -165,14 +165,14 @@ async function startServer() {
           if (!config.strategyWeights) {
             config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
           }
-          console.log('IABOT: Loaded data from local db.json and pushed to Cloud');
+          console.log('FYBOT: Loaded data from local db.json and pushed to Cloud');
           saveDB(); // Push to cloud
         } else {
-          console.log('IABOT: Initialized with empty default data, waiting for inputs.');
+          console.log('FYBOT: Initialized with empty default data, waiting for inputs.');
         }
       }
     } catch (e) {
-      console.error('IABOT: Failed to load DB', e);
+      console.error('FYBOT: Failed to load DB', e);
     }
   };
   loadDB();
@@ -182,10 +182,10 @@ async function startServer() {
       const dbData = { users, licenses, payments, config };
       const { error } = await supabase.from('fybot_db').upsert({ id: 1, data: dbData });
       if (error) {
-        console.error('IABOT: Failed to save to Supabase:', error.message);
+        console.error('FYBOT: Failed to save to Supabase:', error.message);
       }
     } catch (e) {
-      console.error('IABOT: Exception saving DB', e);
+      console.error('FYBOT: Exception saving DB', e);
     }
   };
 
@@ -454,10 +454,10 @@ async function startServer() {
         // return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
       }
       state.botRunning = true;
-      addUserLog(userId, "IABOT PRO STARTED - Listening to Markets...");
+      addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
     } else {
       state.botRunning = false;
-      addUserLog(userId, "IABOT PRO STOPPED - Safety mode active.");
+      addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
     }
     res.json({ success: true, botRunning: state.botRunning });
   });
@@ -1197,7 +1197,7 @@ async function startServer() {
       const buffer = zip.toBuffer();
       
       res.set('Content-Type', 'application/zip');
-      res.set('Content-Disposition', 'attachment; filename=IABOT_V8_INSTALLATION_PACKAGE.zip');
+      res.set('Content-Disposition', 'attachment; filename=FYBOT_V8_INSTALLATION_PACKAGE.zip');
       res.send(buffer);
       */
       res.status(501).json({ error: "Download service temporarily disabled" });
@@ -1514,7 +1514,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`IABOT Server running on http://0.0.0.0:${PORT}`);
+    console.log(`FYBOT Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

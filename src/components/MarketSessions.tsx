@@ -110,11 +110,11 @@ export function MarketSessions({ language, stats }: MarketSessionsProps) {
         )}
       </div>
 
-      {/* IABOT Brazil Windows */}
+      {/* FYBOT Brazil Windows */}
       <div className="space-y-3">
         <p className="text-[9px] uppercase tracking-widest font-bold text-white/30 flex items-center gap-1.5">
           <Zap size={10} className="text-yellow-500" />
-          {isEn ? 'IABOT Operation Windows (Smart Mode)' : isEs ? 'Ventanas de Operación IABOT (Modo Inteligente)' : 'Janelas de Operação IABOT (Modo Inteligente)'}
+          {isEn ? 'FYBOT Operation Windows (Smart Mode)' : isEs ? 'Ventanas de Operación FYBOT (Modo Inteligente)' : 'Janelas de Operação FYBOT (Modo Inteligente)'}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {sessions.map((s) => (
@@ -168,10 +168,10 @@ export function MarketSessions({ language, stats }: MarketSessionsProps) {
       {/* Footer note */}
       <p className="text-[14px] text-emerald-400 font-medium leading-relaxed mt-4 bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/10">
         {isEn
-          ? '⚡ IABOT V8 automatically opens sessions at 10:00 BRT and 21:00 BRT, and will auto-close as soon as the daily target is reached. You can still manually click to toggle.'
+          ? '⚡ FYBOT V8 automatically opens sessions at 10:00 BRT and 21:00 BRT, and will auto-close as soon as the daily target is reached. You can still manually click to toggle.'
           : isEs
-          ? '⚡ IABOT V8 abre automáticamente las sesiones a las 10:00 BRT y 21:00 BRT, y se cerrará en cuanto se alcance la meta diaria. Aún puedes activarlas o desactivarlas manualmente.'
-          : '⚡ O IABOT V8 ativa as janelas automaticamente às 10:00 BRT e 21:00 BRT, e desativa assim que a meta do dia for concluída. Você ainda pode clicar nos painéis para controle manual.'}
+          ? '⚡ FYBOT V8 abre automáticamente las sesiones a las 10:00 BRT y 21:00 BRT, y se cerrará en cuanto se alcance la meta diaria. Aún puedes activarlas o desactivarlas manualmente.'
+          : '⚡ O FYBOT V8 ativa as janelas automaticamente às 10:00 BRT e 21:00 BRT, e desativa assim que a meta do dia for concluída. Você ainda pode clicar nos painéis para controle manual.'}
       </p>
     </div>
   );
