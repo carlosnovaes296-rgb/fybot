@@ -1355,9 +1355,9 @@ async function startServer() {
                     stepDrawdownPct = (currentPrice - newestPrice) / newestPrice;
                   }
 
-                  let threshold = 0.0010; // Para a segunda ordem (openCount === 1)
+                  let threshold = 0.005; // 0.5% de recuo para a segunda ordem (openCount === 1)
                   if (openCount === 2) {
-                    threshold = 0.0015; // Para a terceira ordem
+                    threshold = 0.008; // 0.8% de recuo da segunda para a terceira ordem
                   }
 
                   if (stepDrawdownPct >= threshold) {
