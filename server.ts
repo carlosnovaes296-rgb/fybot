@@ -6,9 +6,11 @@ import { fileURLToPath } from 'url';
 // import AdmZip from 'adm-zip';
 import fs from 'node:fs';
 import { exec } from 'child_process';
-import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
+
+const { Pool } = pg;
 
 const isTradingTime = (): boolean => {
   const now = new Date();
@@ -28,10 +30,12 @@ const isTradingTime = (): boolean => {
   return true;
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_KEY || ''
-);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -134,13 +138,27 @@ async function startServer() {
     allowSell: true
   };
 
-  // Load from Supabase DB
+  // Load from PostgreSQL DB
   const loadDB = async () => {
     try {
-      const { data, error } = await supabase.from('fybot_db').select('data').eq('id', 1).single();
+      if (!process.env.DATABASE_URL) {
+          console.log('FYBOT: No DATABASE_URL provided. Falling back to local db.json');
+          const DB_PATH = path.join(__dirname, 'data', 'db.json');
+          if (fs.existsSync(DB_PATH)) {
+            const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+            users = localData.users || users;
+            licenses = localData.licenses || licenses;
+            payments = localData.payments || payments;
+            config = { ...config, ...(localData.config || {}) };
+            if (!config.strategyWeights) config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
+          }
+          return;
+      }
+
+      const { rows } = await pool.query('SELECT data FROM fybot_db WHERE id = 1');
       
-      if (!error && data && data.data) {
-        const dbData = data.data;
+      if (rows.length > 0 && rows[0].data) {
+        const dbData = rows[0].data;
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
@@ -151,10 +169,10 @@ async function startServer() {
           config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
         }
         
-        console.log('FYBOT: Loaded data from Supabase Cloud');
+        console.log('FYBOT: Loaded data from PostgreSQL Database');
       } else {
-        if (error) console.log(`FYBOT: Note from Supabase (${error.message}). Attempting migration fallback...`);
-        // Fallback migration: If Supabase table is empty, load from local db.json and push to cloud
+        console.log('FYBOT: Note from Postgres (Empty Table). Attempting migration fallback...');
+        // Fallback migration: If Postgres table is empty, load from local db.json and push to DB
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         if (fs.existsSync(DB_PATH)) {
           const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
@@ -165,8 +183,8 @@ async function startServer() {
           if (!config.strategyWeights) {
             config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
           }
-          console.log('FYBOT: Loaded data from local db.json and pushed to Cloud');
-          saveDB(); // Push to cloud
+          console.log('FYBOT: Loaded data from local db.json and pushed to PostgreSQL');
+          saveDB(); // Push to DB
         } else {
           console.log('FYBOT: Initialized with empty default data, waiting for inputs.');
         }
@@ -179,13 +197,17 @@ async function startServer() {
 
   const saveDB = async () => {
     try {
+      if (!process.env.DATABASE_URL) return;
       const dbData = { users, licenses, payments, config };
-      const { error } = await supabase.from('fybot_db').upsert({ id: 1, data: dbData });
-      if (error) {
-        console.error('FYBOT: Failed to save to Supabase:', error.message);
-      }
-    } catch (e) {
-      console.error('FYBOT: Exception saving DB', e);
+      const query = `
+        INSERT INTO fybot_db (id, data) 
+        VALUES (1, $1) 
+        ON CONFLICT (id) 
+        DO UPDATE SET data = EXCLUDED.data;
+      `;
+      await pool.query(query, [JSON.stringify(dbData)]);
+    } catch (e: any) {
+      console.error('FYBOT: Exception saving DB:', e.message);
     }
   };
 
