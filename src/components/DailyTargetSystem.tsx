@@ -151,7 +151,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const t = targetTranslations[language] || targetTranslations['pt'];
 
   // Form states local fallback
-  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.016) || 160);
+  const [targetVal, setTargetVal] = useState(stats.dailyProfitTarget || (stats.balance * 0.013) || 160);
   const [resetHour, setResetHour] = useState(stats.dailyResetHour || "08:00");
   const [session, setSession] = useState(stats.preferredSession || "Brasil 10h/21h");
   const [tz, setTz] = useState(stats.timezone || "GMT-3");
@@ -315,7 +315,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;
   const realTimeProfit = totalDailyProfit;
-  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100));
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.013) || 160)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (

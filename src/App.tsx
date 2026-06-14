@@ -1486,8 +1486,8 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="1.6%"
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.013)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="1.3%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
@@ -1500,7 +1500,7 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.013)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.013) || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}

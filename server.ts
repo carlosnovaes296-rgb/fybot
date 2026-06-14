@@ -17,14 +17,14 @@ const isTradingTime = (): boolean => {
   const day = now.getDay(); // 0 = Domingo, 1 = Segunda ... 5 = Sexta, 6 = Sábado
   const hour = now.getHours();
 
-  // Bloqueio de Fim de Semana (Sexta 17h até Domingo 19:59)
+  // Bloqueio de Fim de Semana (Sexta 17h até Domingo 20:59)
   if (day === 6) return false;               // Sábado o dia todo
-  if (day === 0 && hour < 20) return false;  // Domingo antes das 20h
+  if (day === 0 && hour < 21) return false;  // Domingo antes das 21h
   if (day === 5 && hour >= 17) return false; // Sexta a partir das 17h
 
-  // Pausa Diária: Segunda a Quinta das 17h às 19:59
+  // Pausa Diária: Segunda a Quinta das 17h às 20:59
   if (day >= 1 && day <= 4) {
-    if (hour >= 17 && hour < 20) return false;
+    if (hour >= 17 && hour < 21) return false;
   }
 
   return true;
@@ -223,7 +223,7 @@ async function startServer() {
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
       if (!state.isCustomTarget) {
-        const targetPercent = 0.016; // Meta fixa de 1.6%
+        const targetPercent = 0.013; // Meta fixa de 1.3%
         state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       }
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
@@ -1250,7 +1250,7 @@ async function startServer() {
              state.blockedUntil = null;
              state.dailyProfit = 0;
              state.customStartingBalance = null;
-             addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/20h). Bot pronto para operar.");
+             addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/21h). Bot pronto para operar.");
           }
         }
 
@@ -1466,7 +1466,7 @@ async function startServer() {
         
         const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
         if (!state.isCustomTarget) {
-          const targetPercent = 0.016; // Meta fixa de 1.6% por sessão
+          const targetPercent = 0.013; // Meta fixa de 1.3% por sessão
           state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
         }
 
@@ -1490,27 +1490,31 @@ async function startServer() {
                state.botRunning = false;
                state.stopOpeningNewOrders = false; // reset
                
-               const now = new Date();
-               const target = new Date(now);
-               if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-               else if (now.getHours() < 20) target.setHours(20, 0, 0, 0);
-               else { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
+               let target = new Date();
+               // O alvo primário é o próximo horário de liberação (10h ou 21h)
+               if (now.getHours() >= 10 && now.getHours() < 21) target.setHours(21, 0, 0, 0);
+               else if (now.getHours() >= 21) {
+                   target.setDate(target.getDate() + 1);
+                   target.setHours(10, 0, 0, 0);
+               }
+               else if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
+               else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
                
-               // Se o próximo alvo cair no bloqueio de fim de semana, empurra para Domingo às 20h
-               if (target.getDay() === 5 && target.getHours() >= 20) {
+               // Se o próximo alvo cair no bloqueio de fim de semana, empurra para Domingo às 21h
+               if (target.getDay() === 5 && target.getHours() >= 21) {
                    target.setDate(target.getDate() + 2);
-                   target.setHours(20, 0, 0, 0);
+                   target.setHours(21, 0, 0, 0);
                } else if (target.getDay() === 6) {
                    target.setDate(target.getDate() + 1);
-                   target.setHours(20, 0, 0, 0);
-               } else if (target.getDay() === 0 && target.getHours() < 20) {
-                   target.setHours(20, 0, 0, 0);
+                   target.setHours(21, 0, 0, 0);
+               } else if (target.getDay() === 0 && target.getHours() < 21) {
+                   target.setHours(21, 0, 0, 0);
                }
 
                state.blockedUntil = target.toISOString();
                
-               let nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Manhã)" : "Próxima sessão: 20:00 GMT-3 (Noite)";
-               if (target.getDay() === 0) nextSessionMsg = "Próxima sessão: Domingo às 20:00 GMT-3";
+               let nextSessionMsg = target.getHours() === 10 ? "Próxima sessão: 10:00 GMT-3 (Manhã)" : "Próxima sessão: 21:00 GMT-3 (Noite)";
+               if (target.getDay() === 0) nextSessionMsg = "Próxima sessão: Domingo às 21:00 GMT-3";
                const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
                
                addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
