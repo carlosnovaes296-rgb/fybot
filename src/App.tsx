@@ -1506,6 +1506,7 @@ export default function App() {
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         trendPositive={realTimeProfit >= 0}
+                        subLabel={language === "en" ? "Morning session 10:00 AM / Night session 9:00 PM" : language === "es" ? "Sesión de mañana 10:00 AM / Sesión de noche 9:00 PM" : "Horario de operação pela manhã 10:00 horas / pela noite as 21:00 horas"}
                       />
                     );
                   })()}
