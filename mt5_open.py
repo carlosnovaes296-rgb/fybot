@@ -49,8 +49,8 @@ def execute_trade(symbol, action, lot):
             price = mt5.symbol_info_tick(symbol).ask
             
             if base_symbol == "XAUUSD":
-                # TP 0.02%, SL 0.80%
-                raw_sl = price - (price * 0.0080)
+                # TP 0.02%, SL 0.20%
+                raw_sl = price - (price * 0.0020)
                 raw_tp = price + (price * 0.0002)
             else:
                 raw_sl = price - (25 * 10 * point)
@@ -67,8 +67,8 @@ def execute_trade(symbol, action, lot):
             price = mt5.symbol_info_tick(symbol).bid
             
             if base_symbol == "XAUUSD":
-                # TP 0.02%, SL 0.80%
-                raw_sl = price + (price * 0.0080)
+                # TP 0.02%, SL 0.20%
+                raw_sl = price + (price * 0.0020)
                 raw_tp = price - (price * 0.0002)
             else:
                 raw_sl = price + (25 * 10 * point)

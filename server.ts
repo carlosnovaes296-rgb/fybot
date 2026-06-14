@@ -1320,7 +1320,7 @@ async function startServer() {
               // 1. VERIFICAÇÃO DE DCA (RECUPERAÇÃO E PREÇO MÉDIO)
               let isDCATrade = false;
 
-              if (openCount > 0 && openCount < 2) {
+              if (openCount > 0 && openCount < 3) {
                 const currentPrice = symData.price;
                 if (currentPrice) {
                   const newestOrder = symbolOpenTrades[symbolOpenTrades.length - 1];
@@ -1333,12 +1333,16 @@ async function startServer() {
                     stepDrawdownPct = (currentPrice - newestPrice) / newestPrice;
                   }
 
-                  // A cada recuo de 0.04% da ÚLTIMA ordem (o que acumula a grade 0.04, 0.08, 0.12, 0.16, 0.20, 0.24)
-                  if (stepDrawdownPct >= 0.0004) {
+                  let threshold = 0.0010; // Para a segunda ordem (openCount === 1)
+                  if (openCount === 2) {
+                    threshold = 0.0015; // Para a terceira ordem
+                  }
+
+                  if (stepDrawdownPct >= threshold) {
                     isDCATrade = true;
                     direction = state.symbolTrend[symbol]; // Força a mesma direção da primeira
-                    const accumulatedDist = (openCount * 0.04).toFixed(2);
-                    addUserLog(uId, `⚠️ [DCA] Preço recuou -0.04% do degrau anterior (Distanciamento Acumulado: -${accumulatedDist}%). Abrindo a ${openCount + 1}ª ordem para ${symbol}.`);
+                    const recuoStr = (threshold * 100).toFixed(2);
+                    addUserLog(uId, `⚠️ [DCA] Preço recuou -${recuoStr}% da ordem anterior. Abrindo a ${openCount + 1}ª ordem para ${symbol}.`);
                   }
                 }
               }
@@ -1372,7 +1376,7 @@ async function startServer() {
 
               // 3. LIMITES FINAIS
               if (currentOpenTrades.length >= 10) return;
-              if (openCount >= 2) return;
+              if (openCount >= 3) return;
               if (state.pendingOrders.has(symbol)) return;
 
           if (direction) {
