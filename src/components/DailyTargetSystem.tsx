@@ -46,7 +46,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária em cada sessão 1.6%",
+    targetValue: "Meta Diária em cada sessão 1.3%",
     lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
@@ -80,7 +80,7 @@ const targetTranslations = {
   en: {
     title: "SMART DAILY TARGET",
     subtitle: "V8 PRO SAFETY GATE - Advanced Capital Protection",
-    targetValue: "Daily Target (1.6% of Bankroll)",
+    targetValue: "Daily Target (1.3% of Bankroll)",
     lossValue: "Loss Limit (5% of Bankroll)",
     currentProfit: "Today's Profit (Real-time)",
     resetManual: "Operational Reset",
@@ -114,7 +114,7 @@ const targetTranslations = {
   es: {
     title: "META DIARIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Protección de Capital Avanzada",
-    targetValue: "Meta Diaria (1.6% de la Banca)",
+    targetValue: "Meta Diaria (1.3% de la Banca)",
     lossValue: "Límite de Pérdida (5% de la Banca)",
     currentProfit: "Ganancia de Hoy (En Tiempo Real)",
     resetManual: "Reajuste Operativo",
