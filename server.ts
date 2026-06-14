@@ -226,7 +226,7 @@ async function startServer() {
         const targetPercent = 0.013; // Meta fixa de 1.3%
         state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       }
-      const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
+      const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
 
       res.json({
         botRunning: state.botRunning,
@@ -1298,12 +1298,12 @@ async function startServer() {
                     const currentProfit = getProfit(t.id.toString());
                     t.maxProfit = Math.max(t.maxProfit || 0, currentProfit);
 
-                    // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss de 20% da banca por ordem)
+                    // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss de 10% da banca por ordem)
                     const startingDailyBalanceForStop = state.customStartingBalance ? state.customStartingBalance : state.balance;
-                    const maxLossLimit = -Number((startingDailyBalanceForStop * 0.20).toFixed(2));
+                    const maxLossLimit = -Number((startingDailyBalanceForStop * 0.10).toFixed(2));
                     if (currentProfit <= maxLossLimit) {
                       t.status = 'CLOSED';
-                      addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${t.symbol}) fechada! Atingiu limite de 20% de perda: $${currentProfit.toFixed(2)}`);
+                      addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${t.symbol}) fechada! Atingiu limite de 10% de perda: $${currentProfit.toFixed(2)}`);
                       exec(`python mt5_close.py "{\\"ticket\\": \\"${t.id}\\"}"`, () => {});
                       return;
                     }
@@ -1464,7 +1464,7 @@ async function startServer() {
         // Lucro real da sessão é puramente o Capital Atual (Equity) menos a Banca Inicial da sessão
         state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
         
-        const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
+        const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
         if (!state.isCustomTarget) {
           const targetPercent = 0.013; // Meta fixa de 1.3% por sessão
           state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
