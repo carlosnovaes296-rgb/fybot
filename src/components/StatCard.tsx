@@ -11,6 +11,7 @@ export interface StatCardProps {
   labelClassName?: string;
   trend?: number[]; // sparkline data points
   trendPositive?: boolean;
+  subLabel?: React.ReactNode;
 }
 
 // Sparkline mini SVG chart
@@ -84,7 +85,7 @@ function useAnimatedValue(target: string | number) {
   return display;
 }
 
-export function StatCard({ label, value, delta, icon, valueClassName, labelClassName, trend, trendPositive }: StatCardProps) {
+export function StatCard({ label, value, delta, icon, valueClassName, labelClassName, trend, trendPositive, subLabel }: StatCardProps) {
   const isPositiveTrend = trendPositive !== undefined ? trendPositive : !String(value).startsWith('-');
   const glowColor = isPositiveTrend ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
   const borderGlow = isPositiveTrend ? 'hover:border-emerald-500/20' : 'hover:border-red-500/20';
@@ -133,6 +134,7 @@ export function StatCard({ label, value, delta, icon, valueClassName, labelClass
         <h3 className={`text-4xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>
           {value}
         </h3>
+        {subLabel && <p className="text-[11px] text-white/30 uppercase tracking-widest font-bold mt-1.5">{subLabel}</p>}
       </div>
 
       {/* Bottom glow line */}

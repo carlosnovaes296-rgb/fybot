@@ -1493,6 +1493,7 @@ export default function App() {
                     labelClassName="text-emerald-400"
                     valueClassName="text-emerald-400"
                     trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
+                    subLabel={language === "en" ? "Morning / NY | Night / Asia / Europe" : language === "es" ? "Mañana / NY | Noche / Asia / Europa" : "Sessão da Manhã / Nova York | Sessão da Noite / Ásia / Europa"}
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
