@@ -967,7 +967,7 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-end lg:items-center lg:pr-20 xl:pr-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
+      <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-start lg:items-center lg:pl-20 xl:pl-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
         {/* Floating Language Switcher for Login Screen */}
         <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-[#050508]/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <button
