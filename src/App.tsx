@@ -1007,7 +1007,7 @@ export default function App() {
           <img
             src="/fybot_neon_dubai.png.png"
             alt="Futuristic Robot Background"
-            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
+            className="w-full h-full object-cover object-[20%_center] select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
           />
         </div>
