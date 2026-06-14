@@ -134,7 +134,7 @@ export function StatCard({ label, value, delta, icon, valueClassName, labelClass
         <h3 className={`text-4xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>
           {value}
         </h3>
-        {subLabel && <p className="text-[11px] text-emerald-400/80 uppercase tracking-widest font-bold mt-1.5">{subLabel}</p>}
+        {subLabel && <p className="text-[11px] text-white uppercase tracking-widest font-black mt-1.5 [text-shadow:0_0_8px_rgba(255,255,255,0.8)]">{subLabel}</p>}
       </div>
 
       {/* Bottom glow line */}
