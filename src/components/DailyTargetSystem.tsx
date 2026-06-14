@@ -46,7 +46,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária em cada sessão 1.3%",
+    targetValue: "Meta 1.3% em cada sessão",
     lossValue: "Limite de Perda (20% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
