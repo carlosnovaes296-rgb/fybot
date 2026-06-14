@@ -10,7 +10,9 @@
       "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "referralCode": "CARLOS296",
-      "createdAt": "2026-05-06T00:58:22.149Z"
+      "createdAt": "2026-05-06T00:58:22.149Z",
+      "dailyProfitTarget": null,
+      "isCustomTarget": false
     },
     {
       "id": "2",
@@ -22,7 +24,9 @@
       "wallet": "",
       "paymentWallet": "",
       "referralCode": "JOHNDOE12",
-      "createdAt": "2026-05-11T00:58:22.150Z"
+      "createdAt": "2026-05-11T00:58:22.150Z",
+      "dailyProfitTarget": null,
+      "isCustomTarget": false
     },
     {
       "id": "3",
@@ -34,7 +38,9 @@
       "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "referralCode": "CARLOS296C",
-      "createdAt": "2026-05-08T00:58:22.150Z"
+      "createdAt": "2026-05-08T00:58:22.150Z",
+      "dailyProfitTarget": null,
+      "isCustomTarget": false
     }
   ],
   "licenses": [
