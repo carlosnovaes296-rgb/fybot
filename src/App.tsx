@@ -1161,20 +1161,20 @@ export default function App() {
               style={{
                 background: '#0088cc',
                 color: '#fff',
-                padding: '18px 35px',
+                padding: '10px 20px',
                 textDecoration: 'none',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 fontWeight: 'bold',
-                fontSize: '18px',
+                fontSize: '13px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 alignItems: 'center',
-                gap: '12px',
+                gap: '8px',
                 width: '100%',
                 textAlign: 'center'
               }}>
-              <img src="/logo telegram.png" alt="Telegram" className="w-14 h-14 object-contain drop-shadow-md" />
+              <img src="/logo telegram.png" alt="Telegram" className="w-9 h-9 object-contain drop-shadow-md" />
               <span className="whitespace-nowrap">Fybot pro Telegram</span>
             </a>
 
@@ -1184,20 +1184,20 @@ export default function App() {
               style={{
                 background: '#25D366',
                 color: '#fff',
-                padding: '18px 35px',
+                padding: '10px 20px',
                 textDecoration: 'none',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 fontWeight: 'bold',
-                fontSize: '18px',
+                fontSize: '13px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 alignItems: 'center',
-                gap: '12px',
+                gap: '8px',
                 width: '100%',
                 textAlign: 'center'
               }}>
-              <img src="/logo zap.webp" alt="WhatsApp" className="w-14 h-14 object-contain drop-shadow-md" />
+              <img src="/logo zap.webp" alt="WhatsApp" className="w-9 h-9 object-contain drop-shadow-md" />
               <span className="whitespace-nowrap">Grupo Fybot WhatsApp</span>
             </a>
           </div>
