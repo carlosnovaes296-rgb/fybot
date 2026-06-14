@@ -1005,9 +1005,9 @@ export default function App() {
         {/* Background Image with Full Realism and Visibility */}
         <div className="absolute inset-0 z-0 overflow-hidden">
           <img
-            src="/fybot_neon_dubai.png.png"
+            src="/fybot_neon_small.png"
             alt="Futuristic Robot Background"
-            className="w-full h-full object-cover select-none pointer-events-none transition-all duration-1000 ease-out opacity-100 scale-[1.15] translate-x-[7%]"
+            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
             referrerPolicy="no-referrer"
           />
         </div>
