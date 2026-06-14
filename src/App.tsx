@@ -1015,7 +1015,7 @@ export default function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-12 mb-6 md:mt-32 lg:mt-48 mx-2 sm:mx-0"
+          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[15vh] md:mt-[25vh] lg:mt-[35vh] mx-2 sm:mx-0 transform scale-[0.7] origin-top"
         >
           <div className="text-center space-y-2 pb-1">
             <p className="text-white text-base font-extrabold tracking-wide [text-shadow:_0_2px_6px_rgba(0,0,0,1)]">{isSignUp ? (language === 'en' ? 'Create your professional account' : language === 'pt' ? 'Crie sua conta profissional' : 'Crea tu cuenta profesional') : t.login.subTitle}</p>
