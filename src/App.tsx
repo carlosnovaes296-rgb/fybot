@@ -1151,6 +1151,14 @@ export default function App() {
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
+          <div className="px-4 mt-8 mb-4">
+            <a href="/Fybot.ex5" download className="relative w-full py-3.5 bg-gradient-to-r from-yellow-600/20 via-yellow-500/20 to-yellow-600/20 text-yellow-400 border border-yellow-500/30 rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:border-yellow-400/50 hover:shadow-[0_0_30px_rgba(234,179,8,0.4)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-400/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+              <Download size={18} className="drop-shadow-[0_0_8px_rgba(234,179,8,0.8)] animate-bounce" />
+              <span className="drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]">DOWNLOAD ROBÔ (EA)</span>
+            </a>
+          </div>
+
         </nav>
 
         <div className="p-4 md:p-6 pb-10">
@@ -3355,42 +3363,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* MT5 Configs */}
-                    <div className="pt-4 border-t border-white/5 mt-4">
-                      <h3 className="text-sm font-bold text-white/80 mb-4 uppercase tracking-widest">Credenciais MT5</h3>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Login</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Login}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
-                            placeholder="Ex: 12345678"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Senha</label>
-                          <input
-                            type="password"
-                            value={profileForm.mt5Password}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
-                            placeholder="Sua senha do MT5"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Servidor</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Server}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
-                            placeholder="Ex: Exness-MT5Trial6"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
+
                   </div>
 
                   <div className="pt-4 flex gap-4">
