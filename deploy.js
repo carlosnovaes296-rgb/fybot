@@ -4,25 +4,26 @@ import fs from 'fs';
 const conn = new Client();
 
 const config = {
-  host: '143.198.173.250',
+  host: '209.97.163.75',
   port: 22,
   username: 'root',
-  password: 'BJPkXYBRk2026@26H',
+  password: '1BJPkXYBRk2026@26H',
   readyTimeout: 20000
 };
 
 const commands = [
-  'apt-get update',
+  'export DEBIAN_FRONTEND=noninteractive; dpkg --configure -a --force-confdef --force-confold || true',
+  'export DEBIAN_FRONTEND=noninteractive; apt-get update -y',
   'curl -fsSL https://deb.nodesource.com/setup_20.x | bash -',
   'apt-get install -y nodejs git',
   'npm install -g pm2',
   'rm -rf /root/fybot', // Clean up just in case
   'git clone https://github.com/carlosnovaes296-rgb/fybot.git /root/fybot',
+  'echo \'MONGO_URI=\"mongodb+srv://admin:1BJPkXYBRk2026%4026H@db-mdb-nyc1-44873-366e470d.mongo.ondigitalocean.com/fybot?tls=true&authSource=admin\"\' > /root/fybot/.env',
   'cd /root/fybot && npm install',
   'cd /root/fybot && npm run build',
   'cd /root/fybot && pm2 start server.ts --name fybot --interpreter ./node_modules/.bin/tsx',
-  'pm2 save',
-  'pm2 startup'
+  'pm2 save'
 ];
 
 conn.on('ready', () => {
