@@ -6,11 +6,16 @@ import { fileURLToPath } from 'url';
 // import AdmZip from 'adm-zip';
 import fs from 'node:fs';
 import { exec } from 'child_process';
-import pg from 'pg';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 dotenv.config();
 
-const { Pool } = pg;
+// MongoDB Schema definitions
+const FybotSchema = new mongoose.Schema({
+  id: { type: Number, default: 1, unique: true },
+  data: mongoose.Schema.Types.Mixed
+});
+const FybotDB = mongoose.models.FybotDB || mongoose.model('FybotDB', FybotSchema);
 
 const isTradingTime = (): boolean => {
   const now = new Date();
@@ -30,12 +35,7 @@ const isTradingTime = (): boolean => {
   return true;
 };
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL
-});
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-});
+// Remove PG pool logic
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,11 +138,18 @@ async function startServer() {
     allowSell: true
   };
 
-  // Load from PostgreSQL DB
+  // Connect to MongoDB
+  if (process.env.MONGO_URI) {
+    mongoose.connect(process.env.MONGO_URI)
+      .then(() => console.log('FYBOT: Connected to MongoDB DigitalOcean'))
+      .catch(e => console.error('FYBOT: MongoDB connection error', e));
+  }
+
+  // Load from MongoDB
   const loadDB = async () => {
     try {
-      if (!process.env.DATABASE_URL) {
-          console.log('FYBOT: No DATABASE_URL provided. Falling back to local db.json');
+      if (!process.env.MONGO_URI) {
+          console.log('FYBOT: No MONGO_URI provided. Falling back to local db.json');
           const DB_PATH = path.join(__dirname, 'data', 'db.json');
           if (fs.existsSync(DB_PATH)) {
             const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
@@ -150,44 +157,35 @@ async function startServer() {
             licenses = localData.licenses || licenses;
             payments = localData.payments || payments;
             config = { ...config, ...(localData.config || {}) };
-            if (!config.strategyWeights) config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
+            if (localData.userStates) {
+              for (const [k, v] of Object.entries(localData.userStates)) {
+                const stateData = v as any;
+                userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
+              }
+            }
           }
           return;
       }
 
-      const { rows } = await pool.query('SELECT data FROM fybot_db WHERE id = 1');
+      const doc = await FybotDB.findOne({ id: 1 });
       
-      if (rows.length > 0 && rows[0].data) {
-        const dbData = rows[0].data;
+      if (doc && doc.data) {
+        const dbData: any = doc.data;
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
         config = { ...config, ...(dbData.config || {}) };
-        
-        // Ensure strategyWeights exists
-        if (!config.strategyWeights) {
-          config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
-        }
-        
-        console.log('FYBOT: Loaded data from PostgreSQL Database');
-      } else {
-        console.log('FYBOT: Note from Postgres (Empty Table). Attempting migration fallback...');
-        // Fallback migration: If Postgres table is empty, load from local db.json and push to DB
-        const DB_PATH = path.join(__dirname, 'data', 'db.json');
-        if (fs.existsSync(DB_PATH)) {
-          const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-          users = localData.users || users;
-          licenses = localData.licenses || licenses;
-          payments = localData.payments || payments;
-          config = { ...config, ...(localData.config || {}) };
-          if (!config.strategyWeights) {
-            config.strategyWeights = { smc: 0.5, momentum: 0.3, ai: 0.2 };
+        if (dbData.userStates) {
+          for (const [k, v] of Object.entries(dbData.userStates)) {
+            const stateData = v as any;
+            userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
           }
-          console.log('FYBOT: Loaded data from local db.json and pushed to PostgreSQL');
-          saveDB(); // Push to DB
-        } else {
-          console.log('FYBOT: Initialized with empty default data, waiting for inputs.');
         }
+        
+        console.log('FYBOT: Loaded data from MongoDB Database');
+      } else {
+        console.log('FYBOT: MongoDB is empty. Pushing default data...');
+        saveDB(); // Push to DB
       }
     } catch (e) {
       console.error('FYBOT: Failed to load DB', e);
@@ -197,21 +195,24 @@ async function startServer() {
 
   const saveDB = async () => {
     try {
-      const dbData = { users, licenses, payments, config };
-      if (!process.env.DATABASE_URL) {
-        // Salva localmente em db.json
+      // Prepare userStates for saving by converting Sets to Arrays
+      const serializedStates: any = {};
+      for (const [k, v] of Object.entries(userStates)) {
+        serializedStates[k] = { ...v, pendingOrders: Array.from(v.pendingOrders) };
+      }
+
+      const dbData = { users, licenses, payments, config, userStates: serializedStates };
+      if (!process.env.MONGO_URI) {
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         fs.writeFileSync(DB_PATH, JSON.stringify(dbData, null, 2), 'utf-8');
         return;
       }
       
-      const query = `
-        INSERT INTO fybot_db (id, data) 
-        VALUES (1, $1) 
-        ON CONFLICT (id) 
-        DO UPDATE SET data = EXCLUDED.data;
-      `;
-      await pool.query(query, [JSON.stringify(dbData)]);
+      await FybotDB.findOneAndUpdate(
+        { id: 1 },
+        { data: dbData },
+        { upsert: true, new: true }
+      );
     } catch (e: any) {
       console.error('FYBOT: Exception saving DB:', e.message);
     }
