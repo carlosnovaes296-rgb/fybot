@@ -3364,6 +3364,57 @@ export default function App() {
                     </div>
 
 
+                    {/* MT5 Broker Connection Section */}
+                    <div className="pt-2 border-t border-white/5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-white">Conexão com a Corretora</p>
+                          <p className="text-[10px] text-white/40">Credenciais do MetaTrader 5 para sincronização automática</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Login MT5</label>
+                          <input
+                            type="text"
+                            value={profileForm.mt5Login}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
+                            placeholder="Ex: 12345678"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Senha MT5</label>
+                          <input
+                            type="password"
+                            value={profileForm.mt5Password}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
+                            placeholder="••••••••"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Servidor</label>
+                          <input
+                            type="text"
+                            value={profileForm.mt5Server}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
+                            placeholder="Ex: Exness-MT5Real"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+                      {profileForm.mt5Login && (
+                        <div className="mt-3 flex items-center gap-2 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-2">
+                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                          <span className="text-[11px] text-green-400">Login MT5 configurado: <strong>{profileForm.mt5Login}</strong> — Salve o perfil para aplicar</span>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
                   <div className="pt-4 flex gap-4">
