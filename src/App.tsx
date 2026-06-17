@@ -2398,8 +2398,31 @@ export default function App() {
                         <button
                           onClick={() => {
                             const code = currentUser?.referralCode || 'CARLOS296';
-                            navigator.clipboard.writeText(code);
-                            alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                            
+                            // Função robusta para copiar (funciona em HTTP e HTTPS)
+                            if (navigator.clipboard && window.isSecureContext) {
+                              navigator.clipboard.writeText(code).then(() => {
+                                alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                              });
+                            } else {
+                              // Fallback para HTTP (como http://209.97.163.75)
+                              const textArea = document.createElement("textarea");
+                              textArea.value = code;
+                              textArea.style.position = "fixed";
+                              textArea.style.left = "-999999px";
+                              textArea.style.top = "-999999px";
+                              document.body.appendChild(textArea);
+                              textArea.focus();
+                              textArea.select();
+                              try {
+                                document.execCommand('copy');
+                                alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                              } catch (err) {
+                                console.error('Fallback: Oops, unable to copy', err);
+                                alert("Erro ao copiar o código. Por favor copie manualmente.");
+                              }
+                              document.body.removeChild(textArea);
+                            }
                           }}
                           className="px-3 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                         >
