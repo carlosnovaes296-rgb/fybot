@@ -1174,9 +1174,9 @@ async function startServer() {
       user.email = email || user.email;
       user.wallet = wallet || user.wallet;
       user.paymentWallet = paymentWallet !== undefined ? paymentWallet : user.paymentWallet;
-      user.mt5Login = mt5Login || user.mt5Login;
-      user.mt5Password = mt5Password || user.mt5Password;
-      user.mt5Server = mt5Server || user.mt5Server;
+      user.mt5Login = mt5Login !== undefined ? mt5Login : user.mt5Login;
+      user.mt5Password = mt5Password !== undefined ? mt5Password : user.mt5Password;
+      user.mt5Server = mt5Server !== undefined ? mt5Server : user.mt5Server;
       if (password && password !== '••••••••') {
         user.password = password;
       }
