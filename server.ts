@@ -829,14 +829,7 @@ async function startServer() {
   });
 
   app.post('/api/register', (req, res) => {
-    const { name, email, password, referredBy, adminKey } = req.body;
-    
-    // 🔒 REGISTRO BLOQUEADO: Apenas o Admin pode criar novas contas
-    // Para abrir o registro, o adminKey correto precisa ser enviado
-    const ADMIN_REGISTER_KEY = 'fybot-admin-2026';
-    if (adminKey !== ADMIN_REGISTER_KEY) {
-      return res.status(403).json({ error: 'Registro de novas contas está desativado. Entre em contato com o administrador.' });
-    }
+    const { name, email, password, referredBy } = req.body;
     
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: 'User already exists' });
