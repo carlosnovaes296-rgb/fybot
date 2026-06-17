@@ -142,8 +142,27 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
             </code>
             <button 
               onClick={() => {
-                navigator.clipboard.writeText(licenseKey);
-                alert("Licença copiada para a área de transferência!");
+                if (navigator.clipboard && window.isSecureContext) {
+                  navigator.clipboard.writeText(licenseKey).then(() => {
+                    alert("Licença copiada para a área de transferência!");
+                  });
+                } else {
+                  const textArea = document.createElement("textarea");
+                  textArea.value = licenseKey;
+                  textArea.style.position = "fixed";
+                  textArea.style.left = "-999999px";
+                  textArea.style.top = "-999999px";
+                  document.body.appendChild(textArea);
+                  textArea.focus();
+                  textArea.select();
+                  try {
+                    document.execCommand('copy');
+                    alert("Licença copiada para a área de transferência!");
+                  } catch (err) {
+                    alert("Erro ao copiar. Por favor copie manualmente.");
+                  }
+                  document.body.removeChild(textArea);
+                }
               }}
               className="bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             >

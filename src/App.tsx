@@ -3638,8 +3638,27 @@ export default function App() {
                       <button
                         onClick={() => {
                           const addr = targetPaymentWallet || config?.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585';
-                          navigator.clipboard.writeText(addr);
-                          alert(language === 'en' ? 'Wallet copied!' : 'Carteira copiada!');
+                          if (navigator.clipboard && window.isSecureContext) {
+                            navigator.clipboard.writeText(addr).then(() => {
+                              alert(language === 'en' ? 'Wallet copied!' : 'Carteira copiada!');
+                            });
+                          } else {
+                            const textArea = document.createElement("textarea");
+                            textArea.value = addr;
+                            textArea.style.position = "fixed";
+                            textArea.style.left = "-999999px";
+                            textArea.style.top = "-999999px";
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            try {
+                              document.execCommand('copy');
+                              alert(language === 'en' ? 'Wallet copied!' : 'Carteira copiada!');
+                            } catch (err) {
+                              alert("Erro ao copiar. Por favor copie manualmente.");
+                            }
+                            document.body.removeChild(textArea);
+                          }
                         }}
                         className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all flex items-center justify-center shrink-0 cursor-pointer"
                         title={language === 'en' ? 'Copy Wallet' : 'Copiar Carteira'}
