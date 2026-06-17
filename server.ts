@@ -7,15 +7,10 @@ import { fileURLToPath } from 'url';
 import fs from 'node:fs';
 import { exec } from 'child_process';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
+import mysql from 'mysql2/promise';
 dotenv.config();
 
-// MongoDB Schema definitions
-const FybotSchema = new mongoose.Schema({
-  id: { type: Number, default: 1, unique: true },
-  data: mongoose.Schema.Types.Mixed
-});
-const FybotDB = mongoose.models.FybotDB || mongoose.model('FybotDB', FybotSchema);
+let mysqlPool: mysql.Pool | null = null;
 
 const isTradingTime = (): boolean => {
   const now = new Date();
@@ -138,39 +133,50 @@ async function startServer() {
     allowSell: true
   };
 
-  // Connect to MongoDB
-  if (process.env.MONGO_URI) {
-    mongoose.connect(process.env.MONGO_URI)
-      .then(() => console.log('FYBOT: Connected to MongoDB DigitalOcean'))
-      .catch(e => console.error('FYBOT: MongoDB connection error', e));
+  // Connect to MySQL DigitalOcean
+  if (process.env.MYSQL_URL) {
+    try {
+      mysqlPool = mysql.createPool(process.env.MYSQL_URL + '?ssl={"rejectUnauthorized":false}');
+      // Initialize the table if it doesn't exist
+      const conn = await mysqlPool.getConnection();
+      await conn.execute(`CREATE TABLE IF NOT EXISTS fybot_data (
+        id INT PRIMARY KEY DEFAULT 1,
+        data LONGTEXT NOT NULL
+      )`);
+      conn.release();
+      console.log('FYBOT: Connected to MySQL DigitalOcean ✅');
+    } catch (e: any) {
+      console.error('FYBOT: MySQL connection error', e.message);
+      mysqlPool = null;
+    }
   }
 
-  // Load from MongoDB
+  // Load from MySQL
   const loadDB = async () => {
     try {
-      if (!process.env.MONGO_URI) {
-          console.log('FYBOT: No MONGO_URI provided. Falling back to local db.json');
-          const DB_PATH = path.join(__dirname, 'data', 'db.json');
-          if (fs.existsSync(DB_PATH)) {
-            const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-            users = localData.users || users;
-            licenses = localData.licenses || licenses;
-            payments = localData.payments || payments;
-            config = { ...config, ...(localData.config || {}) };
-            if (localData.userStates) {
-              for (const [k, v] of Object.entries(localData.userStates)) {
-                const stateData = v as any;
-                userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
-              }
+      if (!mysqlPool) {
+        console.log('FYBOT: No MYSQL_URL. Using local db.json');
+        const DB_PATH = path.join(__dirname, 'data', 'db.json');
+        if (fs.existsSync(DB_PATH)) {
+          const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+          users = localData.users || users;
+          licenses = localData.licenses || licenses;
+          payments = localData.payments || payments;
+          config = { ...config, ...(localData.config || {}) };
+          if (localData.userStates) {
+            for (const [k, v] of Object.entries(localData.userStates)) {
+              const stateData = v as any;
+              userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
             }
           }
-          return;
+        }
+        return;
       }
 
-      const doc = await FybotDB.findOne({ id: 1 });
+      const [rows]: any = await mysqlPool.execute('SELECT data FROM fybot_data WHERE id = 1');
       
-      if (doc && doc.data) {
-        const dbData: any = doc.data;
+      if (rows.length > 0 && rows[0].data) {
+        const dbData = JSON.parse(rows[0].data);
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
@@ -181,11 +187,10 @@ async function startServer() {
             userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
           }
         }
-        
-        console.log('FYBOT: Loaded data from MongoDB Database');
+        console.log('FYBOT: Loaded data from MySQL DigitalOcean ✅');
       } else {
-        console.log('FYBOT: MongoDB is empty. Pushing default data...');
-        saveDB(); // Push to DB
+        console.log('FYBOT: MySQL empty. Saving default data...');
+        saveDB();
       }
     } catch (e) {
       console.error('FYBOT: Failed to load DB', e);
@@ -195,23 +200,23 @@ async function startServer() {
 
   const saveDB = async () => {
     try {
-      // Prepare userStates for saving by converting Sets to Arrays
       const serializedStates: any = {};
       for (const [k, v] of Object.entries(userStates)) {
         serializedStates[k] = { ...v, pendingOrders: Array.from(v.pendingOrders) };
       }
 
       const dbData = { users, licenses, payments, config, userStates: serializedStates };
-      if (!process.env.MONGO_URI) {
+      const jsonStr = JSON.stringify(dbData);
+
+      if (!mysqlPool) {
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         fs.writeFileSync(DB_PATH, JSON.stringify(dbData, null, 2), 'utf-8');
         return;
       }
-      
-      await FybotDB.findOneAndUpdate(
-        { id: 1 },
-        { data: dbData },
-        { upsert: true, new: true }
+
+      await mysqlPool.execute(
+        'INSERT INTO fybot_data (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = ?',
+        [jsonStr, jsonStr]
       );
     } catch (e: any) {
       console.error('FYBOT: Exception saving DB:', e.message);
