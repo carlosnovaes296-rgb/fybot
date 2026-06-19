@@ -11,7 +11,7 @@
 
 //--- Inputs
 input string LICENSE_KEY = "SEU-UUID-AQUI"; // Sua chave pessoal
-input string API_URL = "http://localhost:3000/api/mt5/update"; // Endereço do servidor
+input string API_URL = "http://209.97.163.75:3000/api/mt5/auth"; // Endereço do servidor
 input double RiskPercent = 1.0; // % do saldo por trade
 input double TP_RR = 2.0; // Take Profit = 2x o SL
 input int    StopLossPoints = 100; // Stop Loss em pontos
@@ -32,8 +32,8 @@ int OnInit()
 
    initialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
-   // Cria um timer para enviar dados para a API a cada 5 segundos
-   EventSetTimer(5);
+   // Cria um timer para enviar dados para a API a cada 1 segundo
+   EventSetTimer(1);
 
    Print("FYBOT V8 Inicializado com sucesso!");
    return(INIT_SUCCEEDED);

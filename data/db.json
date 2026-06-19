@@ -10,23 +10,10 @@
       "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "referralCode": "CARLOS296",
-      "createdAt": "2026-05-06T00:58:22.149Z",
-      "dailyProfitTarget": null,
-      "isCustomTarget": false
-    },
-    {
-      "id": "2",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "password": "password123",
-      "status": "INACTIVE",
-      "role": "USER",
-      "wallet": "",
-      "paymentWallet": "",
-      "referralCode": "JOHNDOE12",
-      "createdAt": "2026-05-11T00:58:22.150Z",
-      "dailyProfitTarget": null,
-      "isCustomTarget": false
+      "createdAt": "2026-05-18T20:08:16.660Z",
+      "mt5Login": "196478549",
+      "mt5Password": "JPKXYBRk2026@",
+      "mt5Server": "Exness-MT5Real11"
     },
     {
       "id": "3",
@@ -38,9 +25,7 @@
       "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
       "referralCode": "CARLOS296C",
-      "createdAt": "2026-05-08T00:58:22.150Z",
-      "dailyProfitTarget": null,
-      "isCustomTarget": false
+      "createdAt": "2026-05-20T20:08:16.661Z"
     }
   ],
   "licenses": [
@@ -49,32 +34,218 @@
       "userId": "1",
       "key": "FY-PRO-99",
       "type": "PRO",
-      "status": "ACTIVE",
+      "status": "UPGRADED",
       "hwid": "BFEBFBFF000906E3",
-      "expiryDate": "2026-07-05T00:58:22.150Z"
+      "expiryDate": "2026-07-17T20:08:16.661Z"
     },
     {
-      "id": "L_TEST",
-      "userId": "",
-      "key": "FY-PRO-V8",
+      "id": "Lowxl",
+      "userId": "1",
+      "key": "131feb73-0bea-457d-bd15-e8fd9c6ae46a",
+      "type": "VITALICIO",
+      "status": "ACTIVE",
+      "expiryDate": "2099-12-31T23:59:59.999Z"
+    },
+    {
+      "id": "Lix61",
+      "userId": "1",
+      "key": "FY-PRO-JW6N7P",
       "type": "PRO",
-      "status": "PENDING",
-      "hwid": ""
+      "status": "ACTIVE",
+      "expiryDate": "2099-06-17T23:31:38.326Z"
+    },
+    {
+      "id": "Ly875",
+      "userId": "3",
+      "key": "22dfc06c-1f34-4bf0-bacf-97b7fb364335",
+      "type": "VITALICIO",
+      "status": "UPGRADED",
+      "expiryDate": "2099-12-31T23:59:59.999Z"
+    },
+    {
+      "id": "Lxtvk",
+      "userId": "3",
+      "key": "2367bfaa-0694-43fb-b13f-840ee1127df4",
+      "type": "VITALICIO",
+      "status": "ACTIVE",
+      "expiryDate": "2099-12-31T23:59:59.999Z"
     }
   ],
-  "payments": [],
+  "payments": [
+    {
+      "id": "Posb4",
+      "userId": "1",
+      "amount": 500,
+      "method": "USDT BEP20",
+      "status": "APPROVED",
+      "hash": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    }
+  ],
   "config": {
-    "riskLevel": "CONSERVATIVE",
-    "lotMultiplier": 0.0001,
-    "minScore": 55,
+    "riskLevel": "MEDIUM",
+    "lotMultiplier": 0.001,
+    "minScore": 40,
     "symbols": [
-      "XAUUSDm"
+      "XAUUSD"
     ],
     "strategyWeights": {
-      "smc": 0.4,
-      "momentum": 0.4,
+      "smc": 0.5,
+      "momentum": 0.3,
       "ai": 0.2
     },
-    "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585"
+    "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+    "allowBuy": true,
+    "allowSell": true
+  },
+  "userStates": {
+    "1": {
+      "botRunning": false,
+      "balance": 9578.5,
+      "equity": 9578.5,
+      "accountType": "REAL",
+      "pendingOrders": [],
+      "symbolTrend": {},
+      "lastOrderTime": {},
+      "dailyProfit": 0,
+      "dailyProfitOffset": 0,
+      "dailyProfitTarget": 124.52,
+      "isCustomTarget": false,
+      "dailyResetHour": "10:00",
+      "preferredSession": "Brasil 10h/21h",
+      "timezone": "GMT-3",
+      "antiOvertrading": true,
+      "systemBlocked": false,
+      "currentSessionTag": "",
+      "trades": [],
+      "logs": [
+        "[20:04:47] 🟢 [CONEXÃO MT5] Sincronizado com a corretora via Nuvem.",
+        "[20:19:06] FYBOT PRO STOPPED - Safety mode active.",
+        "[20:25:30] FYBOT PRO STARTED - Listening to Markets...",
+        "[20:35:34] FYBOT PRO STOPPED - Safety mode active."
+      ],
+      "pnlHistory": [
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9509.801766697992
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9505.181111683682
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9509.344334420493
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9537.011464620164
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9534.479731917203
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9514.234945995613
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9526.042282977849
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9522.636847388198
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9570.003152425319
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9517.693006227373
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9574.855661505184
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9577.218505559318
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9501.391801566077
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9577.287897267726
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9556.347719199734
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9546.261050720128
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9513.24254385357
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9529.01753155618
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9550.583823213268
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9576.020256545497
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9559.163906101927
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9508.816533322622
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9536.108998926264
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9523.93549743174
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9508.692168132622
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9534.10051975916
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9550.819759022912
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9550.757372860626
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9557.341221739594
+        },
+        {
+          "time": "2026-06-17T23:04:47.514Z",
+          "balance": 9560.38216557443
+        }
+      ],
+      "customStartingBalance": 9578.5
+    }
   }
 }
