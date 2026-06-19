@@ -807,7 +807,7 @@ async function startServer() {
     }
 
     const userObj = users.find(u => u.id === uId);
-    const isAdmin = true; // Forçar ADMIN para ignorar travas de horário e bloqueios de sistema!
+    const isAdmin = userObj && userObj.role === 'ADMIN'; // Apenas Admins ignoram as travas de horário e bloqueios de meta
     if (!state.pendingOrders || !(state.pendingOrders instanceof Set)) state.pendingOrders = new Set();
     if (!state.pendingCommands) state.pendingCommands = [];
     console.log(`[HEARTBEAT-DEBUG] data=${!!data} botRunning=${state.botRunning} isAdmin=${isAdmin} systemBlocked=${state.systemBlocked} stopNewOrders=${state.stopOpeningNewOrders} isTradingTime=${isTradingTime()} symbols=${JSON.stringify(config.symbols)}`);
@@ -834,6 +834,23 @@ async function startServer() {
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
+        // 0. VERIFICAÇÃO DE SL / TP (0.02%)
+        symbolOpenTrades.forEach((t: any) => {
+          if (t.status === 'OPEN') {
+            let profitPct = 0;
+            if (t.type === 'BUY') profitPct = (price - t.openPrice) / t.openPrice;
+            else if (t.type === 'SELL') profitPct = (t.openPrice - price) / t.openPrice;
+
+            if (profitPct >= 0.0002 || profitPct <= -0.004) {
+              t.status = 'CLOSED';
+              const reason = profitPct >= 0.0002 ? 'TAKE PROFIT' : 'STOP LOSS';
+              addUserLog(uId, `🎯 [${reason}] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
+              if (!state.pendingCommands) state.pendingCommands = [];
+              state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+            }
+          }
+        });
+
         console.log(`[DEBUG] symbol=${symbol} score=${score} dir=${direction} isDCATrade=${isDCATrade} openCount=${openCount}`);
         console.log(`[DEBUG] config.minScore=${config.minScore} state.symbolTrend=${state.symbolTrend[symbol]} pendingOrders.has=${state.pendingOrders.has(symbol)}`);
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
@@ -847,10 +864,7 @@ async function startServer() {
           if (firstOrder.type === 'BUY') totalDrawdownPct = (firstPrice - price) / firstPrice;
           else if (firstOrder.type === 'SELL') totalDrawdownPct = (price - firstPrice) / firstPrice;
 
-          let threshold = 0.0002; // Ordem 2: 0.02%
-          if (openCount === 2) threshold = 0.0004; // Ordem 3: 0.04%
-          else if (openCount === 3) threshold = 0.0006; // Ordem 4: 0.06%
-          else if (openCount === 4) threshold = 0.0008; // Ordem 5: 0.08%
+          let threshold = 0.00001; // Ordem DCA fixa de 0.001%
           if (totalDrawdownPct >= threshold) {
             isDCATrade = true;
             direction = state.symbolTrend[symbol]; // Força mesma direção
