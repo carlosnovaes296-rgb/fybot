@@ -113,22 +113,23 @@ void OnTimer()
    
    string headers = "Content-Type: application/json\r\n";
 
-   // Dispara WebRequest
-   res = WebRequest("POST", API_URL, headers, 3000, postData, resultData, resultHeaders);
-   
-   if(res == 200 || res == 201) {
-      // Envio Ok
-   } else {
-      int err = GetLastError();
-      if(res == 401) {
-         Print("ERRO DE LICENÇA (401). Verifique sua chave ou validade no painel.");
-      } else if (err == 4064 || err == 4014) {
-         Print("ERRO DE PERMISSÃO (" + IntegerToString(err) + "): Vá no MT5 em Ferramentas -> Opções -> Expert Advisors -> Marque 'Permitir WebRequest' e adicione a URL: ", API_URL);
+   if(!MQLInfoInteger(MQL_TESTER)) {
+      // Dispara WebRequest
+      res = WebRequest("POST", API_URL, headers, 3000, postData, resultData, resultHeaders);
+      
+      if(res == 200 || res == 201) {
+         // Envio Ok
       } else {
-         Print("Erro WebRequest. Res: ", res, " | Erro MT5: ", err, " | Detalhes: ", CharArrayToString(resultData));
+         int err = GetLastError();
+         if(res == 401) {
+            Print("ERRO DE LICENÇA (401). Verifique sua chave ou validade no painel.");
+         } else if (err == 4064 || err == 4014) {
+            Print("ERRO DE PERMISSÃO (" + IntegerToString(err) + "): Vá no MT5 em Ferramentas -> Opções -> Expert Advisors -> Marque 'Permitir WebRequest' e adicione a URL: ", API_URL);
+         } else {
+            Print("Erro WebRequest. Res: ", res, " | Erro MT5: ", err, " | Detalhes: ", CharArrayToString(resultData));
+         }
       }
    }
-  }
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |

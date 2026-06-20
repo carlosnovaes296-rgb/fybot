@@ -1162,51 +1162,21 @@ export default function App() {
         </nav>
 
         <div className="p-4 md:p-6 pb-10">
-          <div className="mb-6 flex flex-col items-center gap-4">
+          <div className="mb-6 flex flex-row justify-center items-center gap-8">
             <a href="https://t.me/fybotpro_bot"
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                background: '#0088cc',
-                color: '#fff',
-                padding: '10px 20px',
-                textDecoration: 'none',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                fontSize: '13px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '8px',
-                width: '100%',
-                textAlign: 'center'
-              }}>
-              <img src="/logo telegram.png" alt="Telegram" className="w-9 h-9 object-contain drop-shadow-md" />
-              <span className="whitespace-nowrap">Fybot pro Telegram</span>
+              className="hover:scale-110 transition-transform duration-200"
+              title="Fybot pro Telegram">
+              <img src="/telegram-logo.png.png" alt="Telegram" className="w-20 h-20 object-contain drop-shadow-md" />
             </a>
 
             <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                background: '#25D366',
-                color: '#fff',
-                padding: '10px 20px',
-                textDecoration: 'none',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                fontSize: '13px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '8px',
-                width: '100%',
-                textAlign: 'center'
-              }}>
-              <img src="/logo zap.webp" alt="WhatsApp" className="w-9 h-9 object-contain drop-shadow-md" />
-              <span className="whitespace-nowrap">Grupo Fybot WhatsApp</span>
+              className="hover:scale-110 transition-transform duration-200"
+              title="Grupo Fybot WhatsApp">
+              <img src="/whatsapp-logo.webp.webp" alt="WhatsApp" className="w-20 h-20 object-contain drop-shadow-md" />
             </a>
           </div>
 
