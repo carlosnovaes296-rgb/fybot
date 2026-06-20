@@ -701,6 +701,55 @@ async function startServer() {
     }
   });
 
+  app.post('/api/register', (req, res) => {
+    const { name, email, password, referredBy } = req.body;
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email and password are required' });
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    
+    // Check if email already exists
+    const existingUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Generate referral code for new user
+    const pfx = name.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase() || 'REF';
+    const sfx = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const referralCode = `${pfx}${sfx}`;
+    
+    // Check if referrer exists
+    let referrerId = '';
+    if (referredBy) {
+      const referrer = users.find(u => u.referralCode === referredBy.toUpperCase());
+      if (referrer) {
+        referrerId = referrer.id;
+      }
+    }
+
+    const newUser = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      email: normalizedEmail,
+      password,
+      status: 'INACTIVE', // Default to inactive until they get a license
+      role: 'USER',
+      wallet: '',
+      paymentWallet: '',
+      referralCode,
+      referredBy: referrerId,
+      createdAt: new Date().toISOString()
+    };
+    
+    users.push(newUser);
+    saveDB();
+    
+    res.json({ success: true, user: newUser });
+  });
+
   // Endpoint for MT5 Expert Advisor heartbeat (authenticate + sync state + receive commands)
   app.post(['/api/mt5/auth', '/api/ea/heartbeat'], (req, res) => {
     const { account, data, open_tickets, open_positions } = req.body;
