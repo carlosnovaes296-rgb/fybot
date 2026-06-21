@@ -1530,8 +1530,8 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.013)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="1.3%"
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.01)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="1%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
