@@ -117,7 +117,7 @@ async function startServer() {
     { id: '3', name: 'Carlos Novaes', email: 'carlosnovaecs296@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'CARLOS296C', createdAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
-  let licenses = [
+  let licenses: any[] = [
     { id: 'L1', userId: '1', key: 'FY-PRO-99', type: 'PRO', status: 'ACTIVE', hwid: 'BFEBFBFF000906E3', expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
     { id: 'L_TEST', userId: '', key: 'FY-PRO-V8', type: 'PRO', status: 'PENDING', hwid: '' }
   ];
@@ -172,6 +172,7 @@ async function startServer() {
           users = localData.users || users;
           licenses = localData.licenses || licenses;
           payments = localData.payments || payments;
+          withdrawals = localData.withdrawals || withdrawals;
           config = { ...config, ...(localData.config || {}) };
           if (localData.userStates) {
             for (const [k, v] of Object.entries(localData.userStates)) {
@@ -190,6 +191,7 @@ async function startServer() {
         users = dbData.users || users;
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
+        withdrawals = dbData.withdrawals || withdrawals;
         config = { ...config, ...(dbData.config || {}) };
         if (dbData.userStates) {
           for (const [k, v] of Object.entries(dbData.userStates)) {
@@ -215,7 +217,7 @@ async function startServer() {
         serializedStates[k] = { ...v, pendingOrders: Array.from(v.pendingOrders) };
       }
 
-      const dbData = { users, licenses, payments, config, userStates: serializedStates };
+      const dbData = { users, licenses, payments, withdrawals, config, userStates: serializedStates };
       const jsonStr = JSON.stringify(dbData);
 
       if (!mysqlPool) {
@@ -606,9 +608,126 @@ async function startServer() {
   });
 
   app.delete('/api/admin/users/:id', adminAuth, (req, res) => {
-    users = users.filter(u => u.id !== req.params.id);
+    users = users.filter((u: any) => u.id !== req.params.id);
     saveDB();
     res.json({ success: true });
+  });
+
+  app.get('/api/referrals/history', (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      const stored: any[] = [];
+      const networkMembers: any[] = [];
+      const visited = new Set<string>();
+
+      const traverseNetwork = (uId: string, currentLevel: number) => {
+        if (currentLevel > 5) return;
+        const descendants = users.filter((u: any) => u.referredBy === uId);
+        descendants.forEach((desc: any) => {
+          if (!visited.has(desc.id)) {
+            visited.add(desc.id);
+            networkMembers.push({ user: desc, level: currentLevel });
+            traverseNetwork(desc.id, currentLevel + 1);
+          }
+        });
+      };
+      traverseNetwork(userId as string, 1);
+
+      const dynamicEntries: any[] = [];
+      networkMembers.forEach(({ user: member, level }) => {
+        const hasEntry = stored.some(s => s.referredEmail === member.email && s.level === level);
+        if (!hasEntry) {
+          dynamicEntries.push({
+            id: 'dyn_re_' + member.id + '_' + level,
+            referrerId: userId,
+            referredName: member.name,
+            referredEmail: member.email,
+            level: level,
+            amount: 0.0,
+            type: `Cadastro na Rede (Nível ${level})`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+
+      // Combine and show in chronological order
+      const combined = [...stored, ...dynamicEntries].sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      res.json(combined);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Error fetching referrals' });
+    }
+  });
+
+  app.get('/api/referrals/network', (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      const networkMembers: any[] = [];
+      const visited = new Set<string>();
+
+      const traverseNetwork = (uId: string, currentLevel: number) => {
+        if (currentLevel > 5) return;
+        const descendants = users.filter(u => u.referredBy === uId);
+        descendants.forEach(desc => {
+          if (!visited.has(desc.id)) {
+            visited.add(desc.id);
+            const hasLicense = licenses.some(l => l.userId === desc.id && l.status === 'ACTIVE');
+            networkMembers.push({
+              id: desc.id,
+              name: desc.name,
+              email: desc.email,
+              level: currentLevel,
+              status: desc.status || 'ACTIVE',
+              hasActiveLicense: hasLicense,
+              createdAt: desc.createdAt || new Date(Date.now() - (currentLevel * 3 + Math.random() * 2) * 24 * 60 * 60 * 1000).toISOString()
+            });
+            traverseNetwork(desc.id, currentLevel + 1);
+          }
+        });
+      };
+
+      traverseNetwork(userId as string, 1);
+      res.json(networkMembers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Error fetching network' });
+    }
+  });
+
+  app.post('/api/config', (req, res) => {
+    config = { ...config, ...req.body };
+    addLog("⚙️ CONFIG UPDATED via Dashboard");
+    saveDB();
+    res.json({ success: true, config });
+  });
+
+  app.post('/api/control', (req, res) => {
+    const { action, userId } = req.body;
+    const state = getUserState(userId);
+
+    if (action === 'start') {
+      const user = users.find(u => u.id === userId);
+      const isAdmin = user && user.role === 'ADMIN';
+      const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
+      if (!isAdmin && !hasActiveLicense) {
+        return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
+      }
+      state.botRunning = true;
+      addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
+    } else {
+      state.botRunning = false;
+      addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
+    }
+    res.json({ success: true, botRunning: state.botRunning });
   });
 
   app.get('/api/admin/licenses', adminAuth, (req, res) => res.json(licenses));
@@ -626,6 +745,7 @@ async function startServer() {
     }
     res.json({ success: true, license });
   });
+
   app.delete('/api/admin/licenses/:id', adminAuth, (req, res) => {
     licenses = licenses.filter(l => l.id !== req.params.id);
     saveDB();
@@ -634,6 +754,122 @@ async function startServer() {
 
   app.get('/api/admin/payments', adminAuth, (req, res) => res.json(payments));
 
+  app.get('/api/withdrawals', (req, res) => {
+    const userId = req.query.userId;
+    if (userId) {
+      res.json(withdrawals.filter(w => w.userId === userId));
+    } else {
+      res.json(withdrawals);
+    }
+  });
+
+  app.post('/api/withdrawals', (req, res) => {
+    const { userId, userName, userEmail, amount, wallet } = req.body;
+    if (!amount || !wallet || !userId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const newWithdrawal: any = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId,
+      userName,
+      userEmail,
+      amount,
+      wallet,
+      status: 'PENDING',
+      timestamp: new Date().toISOString()
+    };
+    withdrawals.push(newWithdrawal);
+    saveDB();
+    res.json({ success: true, withdrawal: newWithdrawal });
+  });
+
+  app.post('/api/admin/withdrawals/:id/approve', adminAuth, (req, res) => {
+    const w = withdrawals.find((x: any) => x.id === req.params.id);
+    if (w && w.status === 'PENDING') {
+      w.status = 'APPROVED';
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Not found or not pending' });
+    }
+  });
+
+  app.post('/api/admin/withdrawals/:id/reject', adminAuth, (req, res) => {
+    const w = withdrawals.find((x: any) => x.id === req.params.id);
+    if (w && w.status === 'PENDING') {
+      w.status = 'REJECTED';
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+
+  app.post('/api/admin/payments/:id/approve', adminAuth, (req, res) => {
+    const payment = payments.find((p: any) => p.id === req.params.id);
+    if (payment && payment.status === 'PENDING') {
+      payment.status = 'APPROVED';
+      const user = users.find(u => u.id === payment.userId);
+      if (user) {
+        user.status = 'ACTIVE';
+        const expiryDate = new Date();
+        let days = 30;
+        let type = 'PRO';
+        if (payment.amount >= 500) { days = 90; type = 'INSTITUTIONAL'; }
+        else if (payment.amount >= 250) { days = 60; type = 'PRO_PLUS'; }
+        expiryDate.setDate(expiryDate.getDate() + days);
+
+        licenses.forEach(l => {
+          if (l.userId === user.id && l.status === 'ACTIVE') {
+            l.status = 'UPGRADED';
+          }
+        });
+
+        licenses.push({
+          id: 'L' + Math.random().toString(36).substr(2, 4),
+          userId: user.id,
+          key: generateUUID(),
+          type: type,
+          status: 'ACTIVE',
+          expiryDate: expiryDate.toISOString()
+        });
+      }
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Payment not found or not pending' });
+    }
+  });
+
+  app.post('/api/admin/payments/:id/reject', adminAuth, (req, res) => {
+    const payment = payments.find((p: any) => p.id === req.params.id);
+    if (payment && payment.status === 'PENDING') {
+      payment.status = 'REJECTED';
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Payment not found' });
+    }
+  });
+
+  app.post('/api/payments', (req, res) => {
+    const { amount, method, hash, userId } = req.body;
+    if (!amount || !method || !hash || !userId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    const newPayment: any = {
+      id: Math.random().toString(36).substr(2, 9),
+      userId,
+      amount,
+      method,
+      hash,
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+    payments.push(newPayment);
+    saveDB();
+    res.json({ success: true, payment: newPayment });
+  });
 
   app.post('/api/license/activate', (req, res) => {
     const { userId, key } = req.body;
@@ -677,8 +913,8 @@ async function startServer() {
     console.log('LOGIN ATTEMPT:', normalizedEmail);
     
     // MASTER BYPASS: Always return a valid admin user!
-    const user = { 
-      id: 1, 
+    const user: any = { 
+      id: '1', 
       name: 'Admin', 
       email: normalizedEmail, 
       license: '131feb73-0bea-457d-bd15-e8fd9c6ae46a', 
@@ -730,13 +966,16 @@ async function startServer() {
       }
     }
 
+    // Determine if this is the first user
+    const isFirstUser = users.length === 0;
+
     const newUser = {
       id: Math.random().toString(36).substr(2, 9),
       name,
       email: normalizedEmail,
       password,
       status: 'INACTIVE', // Default to inactive until they get a license
-      role: 'USER',
+      role: isFirstUser ? 'ADMIN' : 'USER',
       wallet: '',
       paymentWallet: '',
       referralCode,

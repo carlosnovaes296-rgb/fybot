@@ -280,6 +280,7 @@ export default function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
     balance: 10000,
@@ -336,7 +337,7 @@ export default function App() {
   const [manualBalanceInput, setManualBalanceInput] = useState('');
   const [manualAccountType, setManualAccountType] = useState('REAL');
 
-  const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
+  const hasActiveLicense = currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
   const chartDataMap = {
     '7D': [
@@ -906,7 +907,7 @@ export default function App() {
 
     // Strict requirement: must have active license to start
     if (!stats.botRunning && !hasActiveLicense) {
-      setActiveTab('plans');
+      setShowLicenseRequiredModal(true);
       return;
     }
 
@@ -1265,6 +1266,60 @@ export default function App() {
                     className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-blue-900/20 hover:bg-blue-500 transition-all disabled:opacity-50 active:scale-[0.98]"
                   >
                     {loading ? <RefreshCw className="animate-spin mx-auto" size={20} /> : t.dashboard.activate}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+
+          {showLicenseRequiredModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLicenseRequiredModal(false)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-md bg-[#16161a] border border-red-500/20 rounded-3xl p-8 shadow-2xl"
+              >
+                <button
+                  onClick={() => setShowLicenseRequiredModal(false)}
+                  className="absolute top-4 right-4 p-2 text-white/20 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+
+                <div className="flex flex-col items-center text-center mb-8">
+                  <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mb-4 animate-pulse">
+                    <Lock size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Licença Necessária</h3>
+                  <p className="text-sm text-white/60">Você precisa de uma licença ativa para iniciar o Fybot Pro.</p>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      setShowLicenseRequiredModal(false);
+                      setActiveTab('plans');
+                    }}
+                    className="w-full py-4 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-red-900/40 hover:bg-red-500 transition-all active:scale-[0.98]"
+                  >
+                    Comprar Agora
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowLicenseRequiredModal(false);
+                      setShowLicenseModal(true);
+                    }}
+                    className="w-full py-4 bg-white/5 text-white/80 rounded-xl font-bold uppercase tracking-widest hover:bg-white/10 transition-all active:scale-[0.98]"
+                  >
+                    Já tenho uma licença
                   </button>
                 </div>
               </motion.div>
