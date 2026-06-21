@@ -3620,9 +3620,9 @@ export default function App() {
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8">
                       <h3 className="text-lg font-bold mb-6">{t.settings.strategyWeights}</h3>
                       <div className="space-y-10">
-                        <WeightControl label={t.dashboard.smc} value={config.strategyWeights.smc * 100} color="#3b82f6" />
-                        <WeightControl label={t.dashboard.momentum} value={config.strategyWeights.momentum * 100} color="#10b981" />
-                        <WeightControl label={t.dashboard.aiBias} value={config.strategyWeights.ai} color="#8b5cf6" max={50} />
+                        <WeightControl label={t.dashboard.smc} value={config.strategyWeights.smc * 100} color="#3b82f6" onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, smc: v / 100 } })} />
+                        <WeightControl label={t.dashboard.momentum} value={config.strategyWeights.momentum * 100} color="#10b981" onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, momentum: v / 100 } })} />
+                        <WeightControl label={t.dashboard.aiBias} value={config.strategyWeights.ai} color="#8b5cf6" max={50} onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, ai: v } })} />
 
                         <div className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex gap-4">
                           <AlertTriangle className="text-amber-500 shrink-0" />
@@ -3859,20 +3859,30 @@ function BenefitCard({ title, desc, icon }: { title: string, desc: string, icon:
 
 
 
-function WeightControl({ label, value, color, max = 100 }: { label: string, value: number, color: string, max?: number }) {
+function WeightControl({ label, value, color, max = 100, onChange }: { label: string, value: number, color: string, max?: number, onChange?: (val: number) => void }) {
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest pl-1">
         <span className="text-white/40">{label}</span>
-        <span style={{ color }}>{value}%</span>
+        <span style={{ color }}>{Math.round(value)}%</span>
       </div>
-      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+      <div className="relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${(value / max) * 100}%` }}
-          className="h-full rounded-full"
+          className="absolute left-0 top-0 h-full rounded-full pointer-events-none"
           style={{ backgroundColor: color }}
         />
+        {onChange && (
+          <input 
+            type="range" 
+            min="0" 
+            max={max} 
+            value={value} 
+            onChange={(e) => onChange(parseFloat(e.target.value))} 
+            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" 
+          />
+        )}
       </div>
     </div>
   );

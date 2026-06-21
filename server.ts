@@ -131,12 +131,12 @@ async function startServer() {
   let config = {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.001,
-    minScore: 40,
+    minScore: 70,
     symbols: ["XAUUSD"],
     strategyWeights: {
-      smc: 0.5,
-      momentum: 0.3,
-      ai: 0.20
+      smc: 0.6,
+      momentum: 0.1,
+      ai: 0.30
     },
     paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
     allowBuy: true,
