@@ -278,7 +278,9 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('pt');
   const t = translations[language];
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
@@ -320,7 +322,14 @@ export default function App() {
   const [showPaymentModal, setShowPaymentModal] = useState<any>(null);
   const [paymentHash, setPaymentHash] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const savedUser = localStorage.getItem('currentUser');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [loginEmail, setLoginEmail] = useState('carlosnovaes296@gmail.com');
   const [loginPassword, setLoginPassword] = useState('password123');
   const [registerName, setRegisterName] = useState('');
@@ -843,6 +852,8 @@ export default function App() {
       if (data.success) {
         setCurrentUser(data.user);
         setIsLoggedIn(true);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        localStorage.setItem('isLoggedIn', 'true');
       } else {
         alert(data.error);
       }
@@ -1192,7 +1203,7 @@ export default function App() {
           </div>
           
           <button
-            onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); }}
+            onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); localStorage.removeItem('isLoggedIn'); localStorage.removeItem('currentUser'); }}
             className="mt-6 w-full flex items-center justify-start gap-4 px-4 py-3 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all"
           >
             <LogOut size={26} />
@@ -1218,7 +1229,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-md bg-[#16161a] border border-white/10 rounded-3xl p-8 shadow-2xl"
+                className="relative w-full max-w-md bg-[#16161a] border border-white/10 rounded-3xl p-5 sm:p-8 shadow-2xl"
               >
                 <button
                   onClick={() => setShowLicenseModal(false)}
@@ -1285,7 +1296,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-md bg-[#16161a] border border-red-500/20 rounded-3xl p-8 shadow-2xl"
+                className="relative w-full max-w-md bg-[#16161a] border border-red-500/20 rounded-3xl p-5 sm:p-8 shadow-2xl"
               >
                 <button
                   onClick={() => setShowLicenseRequiredModal(false)}
@@ -1339,7 +1350,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-md bg-[#16161a] border border-red-500/15 rounded-3xl p-8 shadow-2xl shadow-red-950/20"
+                className="relative w-full max-w-md bg-[#16161a] border border-red-500/15 rounded-3xl p-5 sm:p-8 shadow-2xl shadow-red-950/20"
               >
                 <button
                   onClick={() => setDeleteConfirmModal(null)}
@@ -1412,10 +1423,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden lg:flex flex-col items-end mr-2">
-              <span className="text-[10px] uppercase tracking-tighter text-white/30">{t.header.equity}</span>
-              <span className="text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex flex-col items-end mr-1 md:mr-2">
+              <span className="hidden sm:inline text-[10px] uppercase tracking-tighter text-white/30">{t.header.equity}</span>
+              <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
             <button
@@ -1438,15 +1449,15 @@ export default function App() {
                 finally { setLoading(false); }
               }}
               disabled={loading}
-              className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-2 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-xs md:text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-1 md:mr-2 disabled:opacity-50"
             >
-              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-              <span className="hidden sm:inline">SYNC MT5</span>
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              <span className="hidden md:inline">SYNC MT5</span>
             </button>
             <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
-              className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-xl ${stats.systemBlocked
+              className={`flex items-center justify-center gap-2 px-3 py-2 md:px-6 md:py-2.5 rounded-xl transition-all duration-300 font-bold text-xs md:text-sm shadow-xl ${stats.systemBlocked
                 ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
                 : stats.botRunning
                   ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
@@ -1454,16 +1465,16 @@ export default function App() {
                 }`}
             >
               {loading ? (
-                <RefreshCw className="animate-spin" size={18} />
+                <RefreshCw className="animate-spin" size={16} />
               ) : stats.systemBlocked ? (
                 <>
-                  <Lock size={18} className="text-yellow-500 animate-pulse" />
+                  <Lock size={16} className="text-yellow-500 animate-pulse" />
                   <span className="hidden sm:inline">{t.header.locked}</span>
                 </>
               ) : stats.botRunning ? (
-                <><Pause size={18} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
+                <><Pause size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
               ) : (
-                <><Play size={18} fill="currentColor" /> <span className="hidden sm:inline">{t.header.start}</span></>
+                <><Play size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.start}</span></>
               )}
             </button>
           </div>
@@ -1639,7 +1650,7 @@ export default function App() {
                       {/* Main chart area */}
                       <div className="flex-1 min-h-[200px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={stats.pnlHistory.length > 1 ? stats.pnlHistory : [
+                          <AreaChart data={stats.pnlHistory?.length > 1 ? stats.pnlHistory : [
                             { time: '', balance: stats.balance * 0.95 },
                             { time: '', balance: stats.balance * 0.97 },
                             { time: '', balance: stats.balance * 0.96 },

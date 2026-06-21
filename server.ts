@@ -169,10 +169,22 @@ async function startServer() {
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         if (fs.existsSync(DB_PATH)) {
           const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-          users = localData.users || users;
+          const loadedUsers = localData.users || users;
+          const uniqueUsers = new Map();
+          loadedUsers.forEach((u: any) => {
+            if (!u.email) return;
+            const key = u.email.toLowerCase();
+            const existing = uniqueUsers.get(key);
+            if (!existing || (existing.role !== 'ADMIN' && u.role === 'ADMIN')) {
+              uniqueUsers.set(key, u);
+            }
+          });
+          users = Array.from(uniqueUsers.values());
+          if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
           licenses = localData.licenses || licenses;
           payments = localData.payments || payments;
           withdrawals = localData.withdrawals || withdrawals;
+          referralEarnings = localData.referralEarnings || referralEarnings;
           config = { ...config, ...(localData.config || {}) };
           if (localData.userStates) {
             for (const [k, v] of Object.entries(localData.userStates)) {
@@ -188,10 +200,22 @@ async function startServer() {
       
       if (rows.length > 0 && rows[0].data) {
         const dbData = JSON.parse(rows[0].data);
-        users = dbData.users || users;
+        const loadedUsers = dbData.users || users;
+        const uniqueUsers = new Map();
+        loadedUsers.forEach((u: any) => {
+          if (!u.email) return;
+          const key = u.email.toLowerCase();
+          const existing = uniqueUsers.get(key);
+          if (!existing || (existing.role !== 'ADMIN' && u.role === 'ADMIN')) {
+            uniqueUsers.set(key, u);
+          }
+        });
+        users = Array.from(uniqueUsers.values());
+        if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
         withdrawals = dbData.withdrawals || withdrawals;
+        referralEarnings = dbData.referralEarnings || referralEarnings;
         config = { ...config, ...(dbData.config || {}) };
         if (dbData.userStates) {
           for (const [k, v] of Object.entries(dbData.userStates)) {
@@ -208,7 +232,7 @@ async function startServer() {
       console.error('FYBOT: Failed to load DB', e);
     }
   };
-  loadDB();
+  await loadDB();
 
   const saveDB = async () => {
     try {
@@ -217,7 +241,7 @@ async function startServer() {
         serializedStates[k] = { ...v, pendingOrders: Array.from(v.pendingOrders) };
       }
 
-      const dbData = { users, licenses, payments, withdrawals, config, userStates: serializedStates };
+      const dbData = { users, licenses, payments, withdrawals, referralEarnings, config, userStates: serializedStates };
       const jsonStr = JSON.stringify(dbData);
 
       if (!mysqlPool) {
@@ -256,14 +280,14 @@ async function startServer() {
         botRunning: state.botRunning,
         balance: Number(state.balance.toFixed(2)),
         equity: Number(state.equity.toFixed(2)),
-        activeTrades: state.trades.filter((t: any) => t.status === 'OPEN').length,
-        winrate: state.trades.filter((t: any) => t.status === 'CLOSED').length > 0
-          ? (state.trades.filter((t: any) => t.status === 'CLOSED' && t.profit > 0).length / state.trades.filter((t: any) => t.status === 'CLOSED').length * 100).toFixed(1)
+        activeTrades: (state.trades || []).filter((t: any) => t.status === 'OPEN').length,
+        winrate: (state.trades || []).filter((t: any) => t.status === 'CLOSED').length > 0
+          ? ((state.trades || []).filter((t: any) => t.status === 'CLOSED' && t.profit > 0).length / (state.trades || []).filter((t: any) => t.status === 'CLOSED').length * 100).toFixed(1)
           : 0,
-        pnlHistory: state.pnlHistory,
+        pnlHistory: state.pnlHistory || [],
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
-        logs: state.logs.slice(-20),
-        trades: [...state.trades].reverse().slice(0, 50),
+        logs: (state.logs || []).slice(-20),
+        trades: [...(state.trades || [])].reverse().slice(0, 50),
         activeLicense,
         pendingPayment,
         dailyProfit: Number(state.dailyProfit.toFixed(2)),
@@ -542,6 +566,40 @@ async function startServer() {
     res.json({ success: true, user });
   });
 
+  const payCommissions = (buyer: any, licenseValue: number = 100) => {
+    let currentUserId = buyer.referredBy;
+    let level = 1;
+    while (currentUserId && level <= 5) {
+      const sponsor = users.find(u => u.id === currentUserId);
+      if (!sponsor) break;
+      
+      const hasEntry = referralEarnings.some(re => re.referrerId === sponsor.id && re.referredEmail === buyer.email && re.level === level);
+      if (!hasEntry) {
+        let percentage = 0;
+        if (level === 1) percentage = 0.20;
+        else if (level === 2) percentage = 0.15;
+        else if (level === 3) percentage = 0.10;
+        else if (level === 4) percentage = 0.03;
+        else if (level === 5) percentage = 0.02;
+
+        let amount = Number((licenseValue * percentage).toFixed(2));
+
+        referralEarnings.push({
+          id: 're_' + Math.random().toString(36).substr(2, 9),
+          referrerId: sponsor.id,
+          referredName: buyer.name,
+          referredEmail: buyer.email,
+          level: level,
+          amount: amount,
+          type: `Comissão de Licença PRO (Nível ${level})`,
+          timestamp: new Date().toISOString()
+        });
+      }
+      currentUserId = sponsor.referredBy;
+      level++;
+    }
+  };
+
   app.post('/api/admin/users/:id/grant-access', adminAuth, (req, res) => {
     const user = users.find(u => u.id === req.params.id);
     if (user) {
@@ -568,6 +626,7 @@ async function startServer() {
       };
 
       licenses.push(newLicense);
+      payCommissions(user);
       saveDB();
       res.json({ success: true, user, license: newLicense });
     } else {
@@ -600,6 +659,7 @@ async function startServer() {
       };
 
       licenses.push(newLicense);
+      payCommissions(user);
       saveDB();
       res.json({ success: true, user, license: newLicense });
     } else {
@@ -834,6 +894,7 @@ async function startServer() {
           expiryDate: expiryDate.toISOString()
         });
       }
+      payCommissions(user, payment.amount);
       saveDB();
       res.json({ success: true });
     } else {
@@ -912,17 +973,7 @@ async function startServer() {
     
     console.log('LOGIN ATTEMPT:', normalizedEmail);
     
-    // MASTER BYPASS: Always return a valid admin user!
-    const user: any = { 
-      id: '1', 
-      name: 'Admin', 
-      email: normalizedEmail, 
-      license: '131feb73-0bea-457d-bd15-e8fd9c6ae46a', 
-      role: 'ADMIN',
-      isAdmin: true, 
-      config: { maxDrawdown: 10, maxDailyLoss: 5, lotSize: 0.01, riskRewardRatio: 1.5, useSMC: true, useNewsFilter: true, stopLossMode: 'atr', trailingStop: true, takeProfitMode: 'fixed' }, 
-      state: { isRunning: true } 
-    };
+    const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
     
     if (user) {
       // Backfill referral code if missing
@@ -930,6 +981,7 @@ async function startServer() {
         const pfx = user.name.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase() || 'REF';
         const sfx = Math.random().toString(36).substring(2, 6).toUpperCase();
         user.referralCode = `${pfx}${sfx}`;
+        saveDB();
       }
       res.json({ success: true, user });
     } else {
