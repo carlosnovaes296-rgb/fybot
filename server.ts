@@ -1278,7 +1278,7 @@ async function startServer() {
     
     const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
     if (!state.isCustomTarget) {
-      const targetPercent = 0.013;
+      const targetPercent = 0.01;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
     }
 
