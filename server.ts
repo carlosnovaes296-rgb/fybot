@@ -1177,14 +1177,14 @@ async function startServer() {
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
-        // 0. VERIFICAÇÃO DE SL / TP (0.02%)
+        // 0. VERIFICAÇÃO DE SL / TP
         symbolOpenTrades.forEach((t: any) => {
           if (t.status === 'OPEN') {
             let profitPct = 0;
             if (t.type === 'BUY') profitPct = (price - t.openPrice) / t.openPrice;
             else if (t.type === 'SELL') profitPct = (t.openPrice - price) / t.openPrice;
 
-            if (profitPct >= 0.0002 || profitPct <= -0.004) {
+            if (profitPct >= 0.0002 || profitPct <= -0.0040) {
               t.status = 'CLOSED';
               const reason = profitPct >= 0.0002 ? 'TAKE PROFIT' : 'STOP LOSS';
               addUserLog(uId, `🎯 [${reason}] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
@@ -1207,7 +1207,9 @@ async function startServer() {
           if (firstOrder.type === 'BUY') totalDrawdownPct = (firstPrice - price) / firstPrice;
           else if (firstOrder.type === 'SELL') totalDrawdownPct = (price - firstPrice) / firstPrice;
 
-          let threshold = 0.00001; // Ordem DCA fixa de 0.001%
+          const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010];
+          let threshold = dcaThresholds[openCount] || 0.0010;
+          
           if (totalDrawdownPct >= threshold) {
             isDCATrade = true;
             direction = state.symbolTrend[symbol]; // Força mesma direção

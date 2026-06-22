@@ -10,7 +10,7 @@
 #include <Trade\Trade.mqh>
 
 input string   InpLicenseKey = "";         // Licença do Painel Web
-input string   InpServerUrl  = "http://209.97.163.75:3000/api/ea/heartbeat"; // URL da API de produção
+input string   InpServerUrl  = "https://fybot.life/api/ea/heartbeat"; // URL da API de produção
 input int      InpHeartbeatMs = 2000;      // Frequência (ms)
 input string   InpSymbols    = "EURUSD,GBPUSD,XAUUSD"; // Símbolos
 input int      InpStopLossPoints  = 200;   // Stop Loss em pontos (backtest)

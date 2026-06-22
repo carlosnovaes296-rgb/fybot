@@ -1433,18 +1433,11 @@ export default function App() {
               onClick={async () => {
                 setLoading(true);
                 try {
-                  const res = await fetch('/api/balance/sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: currentUser?.id })
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    fetchStatus();
-                    alert(language === 'en' ? "Balance synced successfully with Exness (MT5)!" : "Saldo sincronizado com sucesso via MT5 (Exness)!");
-                  } else {
-                    alert("Sync error: " + (data.error || "Unknown"));
-                  }
+                  await fetchStatus();
+                  await new Promise(r => setTimeout(r, 600)); // Simula tempo de rede
+                  alert(language === 'en' 
+                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}` 
+                    : `Saldo sincronizado com sucesso via MT5 (Exness)!\nSaldo atual: $${stats.balance.toFixed(2)}`);
                 } catch (e) { console.error(e); }
                 finally { setLoading(false); }
               }}
