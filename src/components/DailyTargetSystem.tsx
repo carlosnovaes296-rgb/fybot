@@ -403,7 +403,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div>
                           <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-red-400 tracking-tight">
-                            -${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            -{Math.abs(realTimeProfit).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
                           </h4>
                         </div>
                         {isAdmin && (
@@ -458,7 +458,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                         <div>
                           <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.currentProfit}</p>
                           <h4 className="text-3xl font-mono font-black text-emerald-400 tracking-tight">
-                            {realTimeProfit >= 0 ? '+' : ''}${realTimeProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {realTimeProfit >= 0 ? '+' : '-'}{Math.abs(realTimeProfit).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
                           </h4>
                         </div>
                         {isAdmin && (
@@ -546,7 +546,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                       <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
                       <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
                         }`}>
-                        {realTimeProfit >= 0 ? '+' : '-'}${Math.abs(realTimeProfit).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {realTimeProfit >= 0 ? '+' : '-'}{Math.abs(realTimeProfit).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
                       </span>
                     </div>
 

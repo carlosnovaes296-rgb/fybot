@@ -11,7 +11,7 @@
 
 //--- Inputs
 input string LICENSE_KEY = "SEU-UUID-AQUI"; // Sua chave pessoal
-input string API_URL = "https://fybot.life/api/mt5/auth"; // Endereço do servidor
+input string API_URL = "https://fybot.life/api/ea/heartbeat"; // Endereço do servidor
 input double RiskPercent = 1.0; // % do saldo por trade
 input double TP_RR = 2.0; // Take Profit = 2x o SL
 input int    StopLossPoints = 100; // Stop Loss em pontos
@@ -130,6 +130,7 @@ void OnTimer()
          }
       }
    }
+  }
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |

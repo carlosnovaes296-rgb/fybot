@@ -129,7 +129,7 @@ async function startServer() {
   let config = {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.001,
-    minScore: 70,
+    minScore: 10,
     symbols: ["XAUUSD"],
     strategyWeights: {
       smc: 0.6,
@@ -1160,9 +1160,9 @@ async function startServer() {
     else if (!isAdmin && state.stopOpeningNewOrders) { console.log(`[HEARTBEAT-SKIP] stopOpeningNewOrders is true`); }
     else if (!isAdmin && !isTradingTime()) { console.log(`[HEARTBEAT-SKIP] Outside trading hours`); }
     if (data && state.botRunning && (isAdmin || (!state.systemBlocked && !state.stopOpeningNewOrders && isTradingTime()))) {
-      config.symbols.forEach(symbol => {
+      Object.keys(data).forEach(symbol => {
         const symData = data[symbol];
-        if (!symData) return;
+        if (!symData || typeof symData !== 'object') return;
 
         const { smcScore, momScore, smcDir, momDir, price } = symData;
         const aiBias = Math.random() > 0.7 ? (Math.random() > 0.5 ? "BULLISH" : "BEARISH") : "NEUTRAL";
