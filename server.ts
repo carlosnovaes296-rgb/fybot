@@ -112,9 +112,7 @@ async function startServer() {
   };
 
   let users: any[] = [
-    { id: '1', name: 'Carlos Novaes', email: 'carlosnovaes296@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'CARLOS296', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() },
-    { id: '2', name: 'John Doe', email: 'john@example.com', password: 'password123', status: 'INACTIVE', role: 'USER', wallet: '', paymentWallet: '', referralCode: 'JOHNDOE12', createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString() },
-    { id: '3', name: 'Carlos Novaes', email: 'carlosnovaecs296@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'CARLOS296C', createdAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
+    { id: '1', name: 'Carlos Novaes', email: 'carlosnovaes296@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'CARLOS296', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
   let licenses: any[] = [
@@ -199,7 +197,12 @@ async function startServer() {
       const [rows]: any = await mysqlPool.execute('SELECT data FROM fybot_data WHERE id = 1');
       
       if (rows.length > 0 && rows[0].data) {
-        const dbData = JSON.parse(rows[0].data);
+        let dbData;
+        try {
+          dbData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
+        } catch(e) {
+          throw new Error("Falha ao fazer parse dos dados. Tipo recebido: " + typeof rows[0].data);
+        }
         const loadedUsers = dbData.users || users;
         const uniqueUsers = new Map();
         loadedUsers.forEach((u: any) => {
@@ -229,12 +232,16 @@ async function startServer() {
         saveDB();
       }
     } catch (e) {
-      console.error('FYBOT: Failed to load DB', e);
+      console.error('FYBOT: CRITICAL ERROR - Failed to load DB', e);
+      console.error('FYBOT: Shutting down to prevent data overwrite.');
+      process.exit(1); // MATA O SERVIDOR PARA NÃO SOBRESCREVER OS DADOS
     }
   };
   await loadDB();
 
   const saveDB = async () => {
+    // PROTEÇÃO EXTRA: Nunca salve se os usuários estiverem vazios ou com erro
+    if (!users || users.length === 0) return;
     try {
       const serializedStates: any = {};
       for (const [k, v] of Object.entries(userStates)) {
@@ -270,10 +277,9 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      if (!state.isCustomTarget) {
-        const targetPercent = 0.013; // Meta fixa de 1.3%
-        state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
-      }
+      // SEMPRE força a meta para 1% do saldo base
+      const targetPercent = 0.01;
+      state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
 
       res.json({
@@ -312,10 +318,7 @@ async function startServer() {
     try {
       const { target, resetHour, session, tz, overtrading, userId } = req.body;
       const state = getUserState(userId);
-      if (typeof target === 'number') {
-        state.dailyProfitTarget = target;
-        state.isCustomTarget = true;
-      }
+      // Ignora o valor de `target` enviado para forçar o sistema a sempre calcular 1% da banca dinamicamente
       if (typeof resetHour === 'string') state.dailyResetHour = resetHour;
       if (typeof session === 'string') state.preferredSession = session;
       if (typeof tz === 'string') state.timezone = tz;
@@ -1277,10 +1280,9 @@ async function startServer() {
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
     const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
-    if (!state.isCustomTarget) {
-      const targetPercent = 0.01;
-      state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
-    }
+    // SEMPRE força a meta para 1% do saldo base, sem exceção
+    const targetPercent = 0.01;
+    state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
     if (!state.systemBlocked) {
        const hitProfit = state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget;

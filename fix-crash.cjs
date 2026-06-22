@@ -1,14 +1,35 @@
-const { Client } = require('ssh2');
-const conn = new Client();
-conn.on('ready', () => {
-  conn.exec(`cd /root/fybot && sed -i "s/if (typeof state !== 'undefined' && state.role === 'ADMIN') return true;//g" server.ts && pm2 restart fybot`, (err, stream) => {
-    stream.on('data', d => console.log(d.toString()))
-          .on('close', () => conn.end())
-          .stderr.on('data', d => console.error(d.toString()));
-  });
-}).connect({
-  host: '209.97.163.75',
-  port: 22,
-  username: 'root',
-  password: '1BJPkXYBRk2026@26H'
-});
+const mysql = require('mysql2/promise');
+const fs = require('fs');
+
+async function run() {
+  try {
+    console.log("Conectando ao banco de dados...");
+    const conn = await mysql.createConnection({
+      host: 'fybot-do-user-15875883-0.c.db.ondigitalocean.com',
+      user: 'doadmin',
+      password: 'AVNS_Q4N7wH9jQ8z0L20rD1S',
+      database: 'fybot_db',
+      port: 25060,
+      ssl: { rejectUnauthorized: false }
+    });
+
+    const localData = fs.readFileSync('./data/db.json', 'utf8');
+    
+    // Validate JSON to make sure we don't upload [object Object] again
+    JSON.parse(localData);
+
+    console.log("JSON validado. Substituindo dados corrompidos...");
+    
+    await conn.execute(
+      'UPDATE fybot_data SET data = ? WHERE id = 1',
+      [localData]
+    );
+
+    console.log("Dados corrigidos com sucesso! Pode reiniciar o servidor agora.");
+    await conn.end();
+  } catch (err) {
+    console.error("Erro:", err);
+  }
+}
+
+run();

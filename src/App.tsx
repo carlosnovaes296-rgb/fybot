@@ -1164,7 +1164,7 @@ export default function App() {
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
           <div className="px-4 mt-8 mb-4">
-            <a href="/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
+            <a href="/downloads/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
               <Download size={18} className="animate-bounce" />
               <span>DOWNLOAD ROBÔ (EA)</span>
@@ -1545,7 +1545,7 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.013)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.013) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.01)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.01) || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
