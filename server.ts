@@ -280,7 +280,7 @@ async function startServer() {
       // SEMPRE força a meta para 1% do saldo base
       const targetPercent = 0.01;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
-      const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+      const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
       res.json({
         botRunning: state.botRunning,
@@ -1134,16 +1134,8 @@ async function startServer() {
             const currentProfit = pos ? pos.profit : 0;
             t.maxProfit = Math.max(t.maxProfit || 0, currentProfit);
 
-            // REGRA DE PROTEÇÃO CONTRA PERDA (Stop Loss de 10% da banca)
-            const startingDailyBalanceForStop = state.customStartingBalance ? state.customStartingBalance : state.balance;
-            const maxLossLimit = -Number((startingDailyBalanceForStop * 0.10).toFixed(2));
-            if (currentProfit <= maxLossLimit) {
-               t.status = 'CLOSED';
-               addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${t.symbol}) fechada! Limite atingido: ${currentProfit.toFixed(2)}`);
-               
-               if (!state.pendingCommands) state.pendingCommands = [];
-               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-            }
+            // A regra de proteção contra perda por ordem isolada foi removida a pedido do usuário.
+            // O robô agora vai respeitar apenas o Stop Loss em % no gráfico ou o Stop Global de todos os ativos.
           }
         }
       });
@@ -1289,7 +1281,7 @@ async function startServer() {
 
         // 3. LIMITES
         const currentOpenTradesLength = state.trades.filter((t: any) => t.status === 'OPEN').length;
-        if (currentOpenTradesLength >= 20 || openCount >= 8 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 8 || openCount >= 8 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
@@ -1335,7 +1327,7 @@ async function startServer() {
     const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
-    const dailyLossLimit = Number((startingDailyBalance * 0.10).toFixed(2));
+    const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
     // SEMPRE força a meta para 1% do saldo base, sem exceção
     const targetPercent = 0.01;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
