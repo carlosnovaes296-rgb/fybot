@@ -279,9 +279,10 @@ void RunBacktestLogic()
    if(!IsNewBar())
       return;
 
-   // 2. Não abre se já tiver posição
-   if(PositionsTotal() > 0)
-      return;
+   // 2. Verifica se precisamos limitar a direção se já houver ordens no backtest
+   // Para permitir HEDGE, removemos o return imediato.
+   // if(PositionsTotal() > 0) return;
+
 
    // 3. Verifica cooldown
    if(!IsCooldownOver())
@@ -369,21 +370,59 @@ void RunBacktestLogic()
      {
       double slPrice = NormalizeDouble(ask - slDist, digits);
       double tpPrice = NormalizeDouble(ask + tpDist, digits);
-      if(trade.Buy(InpLotSize, sym, ask, slPrice, tpPrice, "Fybot BUY"))
+      
+      // PASSO 1: Abre a ordem SEM SL/TP
+      if(trade.Buy(InpLotSize, sym, ask, 0.0, 0.0, "Fybot BUY"))
+        {
+         // PASSO 2: Modifica a posição para inserir SL e TP
+         Sleep(500);
+         ulong deal = trade.ResultDeal();
+         if(HistoryDealSelect(deal))
+           {
+            ulong posTicket = HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+            if(posTicket > 0 && PositionSelectByTicket(posTicket))
+              {
+               if(slPrice > 0 || tpPrice > 0)
+                  if(!trade.PositionModify(posTicket, slPrice, tpPrice))
+                     Print("Falha ao adicionar SL/TP no backtest (BUY): ", trade.ResultRetcodeDescription());
+              }
+           }
          PrintFormat("► BUY %s @ %.5f | SL: %.5f | TP: %.5f | ATR: %.5f | RSI: %.1f",
                      sym, ask, slPrice, tpPrice, atrVal[0], rsiVal[0]);
+        }
       else
+        {
          PrintFormat("✖ ERRO BUY: %d - %s", trade.ResultRetcode(), trade.ResultRetcodeDescription());
+        }
      }
    else // SELL
      {
       double slPrice = NormalizeDouble(bid + slDist, digits);
       double tpPrice = NormalizeDouble(bid - tpDist, digits);
-      if(trade.Sell(InpLotSize, sym, bid, slPrice, tpPrice, "Fybot SELL"))
+      
+      // PASSO 1: Abre a ordem SEM SL/TP
+      if(trade.Sell(InpLotSize, sym, bid, 0.0, 0.0, "Fybot SELL"))
+        {
+         // PASSO 2: Modifica a posição para inserir SL e TP
+         Sleep(500);
+         ulong deal = trade.ResultDeal();
+         if(HistoryDealSelect(deal))
+           {
+            ulong posTicket = HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+            if(posTicket > 0 && PositionSelectByTicket(posTicket))
+              {
+               if(slPrice > 0 || tpPrice > 0)
+                  if(!trade.PositionModify(posTicket, slPrice, tpPrice))
+                     Print("Falha ao adicionar SL/TP no backtest (SELL): ", trade.ResultRetcodeDescription());
+              }
+           }
          PrintFormat("► SELL %s @ %.5f | SL: %.5f | TP: %.5f | ATR: %.5f | RSI: %.1f",
                      sym, bid, slPrice, tpPrice, atrVal[0], rsiVal[0]);
+        }
       else
+        {
          PrintFormat("✖ ERRO SELL: %d - %s", trade.ResultRetcode(), trade.ResultRetcodeDescription());
+        }
      }
   }
 
@@ -605,8 +644,64 @@ void ProcessCommands(string jsonResponse)
       if(lotEnd == -1) lotEnd = StringFind(jsonResponse, "}", lotStart);
       double lot = StringToDouble(StringSubstr(jsonResponse, lotStart, lotEnd - lotStart));
 
-      if(type == "BUY")       trade.Buy(lot, sym);
-      else if(type == "SELL") trade.Sell(lot, sym);
+      int slStart = StringFind(jsonResponse, "\"sl\":");
+      double sl_price = 0.0;
+      if (slStart != -1) {
+         slStart += 5;
+         int slEnd = StringFind(jsonResponse, ",", slStart);
+         if(slEnd == -1) slEnd = StringFind(jsonResponse, "}", slStart);
+         sl_price = StringToDouble(StringSubstr(jsonResponse, slStart, slEnd - slStart));
+      }
+
+      int tpStart = StringFind(jsonResponse, "\"tp\":");
+      double tp_price = 0.0;
+      if (tpStart != -1) {
+         tpStart += 5;
+         int tpEnd = StringFind(jsonResponse, ",", tpStart);
+         if(tpEnd == -1) tpEnd = StringFind(jsonResponse, "}", tpStart);
+         tp_price = StringToDouble(StringSubstr(jsonResponse, tpStart, tpEnd - tpStart));
+      }
+
+      Print("DEBUG: JSON Received = ", jsonResponse);
+      Print("DEBUG: Parsed SL = ", sl_price, " | TP = ", tp_price);
+
+      double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
+      double bid = SymbolInfoDouble(sym, SYMBOL_BID);
+
+      // Normalização para a corretora não rejeitar casas decimais extras
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      if(sl_price > 0) sl_price = NormalizeDouble(sl_price, digits);
+      if(tp_price > 0) tp_price = NormalizeDouble(tp_price, digits);
+
+      bool result = false;
+      // PASSO 1: Abre a ordem SEM SL/TP
+      if(type == "BUY")       result = trade.Buy(lot, sym, ask, 0.0, 0.0, "Fybot BUY");
+      else if(type == "SELL") result = trade.Sell(lot, sym, bid, 0.0, 0.0, "Fybot SELL");
+
+      if(result)
+        {
+         // PASSO 2: Modifica a posição para inserir SL e TP
+         Sleep(500); // Aguarda o MetaTrader registrar a posição
+         ulong deal = trade.ResultDeal();
+         if(HistoryDealSelect(deal))
+           {
+            ulong posTicket = HistoryDealGetInteger(deal, DEAL_POSITION_ID);
+            if(posTicket > 0 && PositionSelectByTicket(posTicket))
+              {
+               if(sl_price > 0 || tp_price > 0)
+                 {
+                  if(!trade.PositionModify(posTicket, sl_price, tp_price))
+                     Print("Falha ao adicionar SL/TP na ordem ao vivo: ", trade.ResultRetcodeDescription());
+                  else
+                     Print("SL/TP inseridos com SUCESSO na ordem ao vivo!");
+                 }
+              }
+           }
+        }
+      else
+        {
+         Print("ERRO AO ABRIR ORDEM! Retcode: ", trade.ResultRetcode(), " | ", trade.ResultRetcodeDescription());
+        }
      }
 
    if(StringFind(jsonResponse, "\"action\":\"CLOSE\"") != -1)

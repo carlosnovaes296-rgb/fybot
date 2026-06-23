@@ -1172,8 +1172,13 @@ async function startServer() {
 
         let direction = smcDir === momDir ? smcDir : null;
 
-        const currentOpenTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-        const symbolOpenTrades = currentOpenTrades.filter((t: any) => t.symbol.includes(symbol));
+        // 0. Filtrar as ordens desse símbolo e contar por direção
+        const symbolOpenTrades = state.trades.filter((t: any) => t.symbol === symbol && t.status === 'OPEN');
+        const buyTrades = symbolOpenTrades.filter((t: any) => t.type === 'BUY');
+        const sellTrades = symbolOpenTrades.filter((t: any) => t.type === 'SELL');
+        const buyCount = buyTrades.length;
+        const sellCount = sellTrades.length;
+        // Total count para limites absolutos
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
@@ -1197,51 +1202,87 @@ async function startServer() {
         console.log(`[DEBUG] symbol=${symbol} score=${score} dir=${direction} isDCATrade=${isDCATrade} openCount=${openCount}`);
         console.log(`[DEBUG] config.minScore=${config.minScore} state.symbolTrend=${state.symbolTrend[symbol]} pendingOrders.has=${state.pendingOrders.has(symbol)}`);
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
-        
-        // 1. VERIFICAÇÃO DE DCA
-        if (openCount > 0 && openCount < 6) {
-          const firstOrder = symbolOpenTrades[0];
-          const firstPrice = firstOrder.openPrice;
-          let totalDrawdownPct = 0;
-          
-          if (firstOrder.type === 'BUY') totalDrawdownPct = (firstPrice - price) / firstPrice;
-          else if (firstOrder.type === 'SELL') totalDrawdownPct = (price - firstPrice) / firstPrice;
+        // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
+        let dcaDirection = null;
+        const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010];
 
-          const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010];
-          let threshold = dcaThresholds[openCount] || 0.0010;
-          
-          if (totalDrawdownPct >= threshold) {
+        // Checa se precisa fazer DCA de Compra
+        if (buyCount > 0 && buyCount < 6) {
+          const firstBuy = buyTrades[0];
+          const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
+          let thresholdBuy = dcaThresholds[buyCount] || 0.0010;
+          if (drawdownBuy >= thresholdBuy) {
             isDCATrade = true;
-            direction = state.symbolTrend[symbol]; // Força mesma direção
-            addUserLog(uId, `⚠️ [DCA] Preço recuou -${(threshold * 100).toFixed(2)}%. Abrindo ${openCount + 1}ª ordem para ${symbol}.`);
+            dcaDirection = 'BUY';
+            addUserLog(uId, `⚠️ [DCA BUY] Preço recuou -${(thresholdBuy * 100).toFixed(2)}%. Abrindo ${buyCount + 1}ª ordem de BUY para ${symbol}.`);
           }
         }
 
-        if (openCount > 0 && !isDCATrade) return;
-
-        // 2. TRAVA DE TENDÊNCIA
-        if (!isDCATrade) {
-          if (!state.symbolTrend) state.symbolTrend = {};
-          if (!state.symbolTrend[symbol] && direction && score >= config.minScore) {
-            state.symbolTrend[symbol] = direction; 
-            addUserLog(uId, `🔄 Tendência inicial definida para ${direction} em ${symbol}`);
+        // Checa se precisa fazer DCA de Venda
+        if (!isDCATrade && sellCount > 0 && sellCount < 6) {
+          const firstSell = sellTrades[0];
+          const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
+          let thresholdSell = dcaThresholds[sellCount] || 0.0010;
+          if (drawdownSell >= thresholdSell) {
+            isDCATrade = true;
+            dcaDirection = 'SELL';
+            addUserLog(uId, `⚠️ [DCA SELL] Preço recuou -${(thresholdSell * 100).toFixed(2)}%. Abrindo ${sellCount + 1}ª ordem de SELL para ${symbol}.`);
           }
+        }
 
+        if (isDCATrade) {
+          direction = dcaDirection;
+        }
+
+        // Se já tem ordens abertas nessa direção e não é DCA, bloqueia apenas a mesma direção
+        if (!isDCATrade) {
+          if (direction === 'BUY' && buyCount > 0) return;
+          if (direction === 'SELL' && sellCount > 0) return;
+        }
+
+        // 2. TENDÊNCIA E HEDGE (Permitir abrir oposto se o sinal for forte)
+        if (!isDCATrade) {
+          if (score < config.minScore) {
+            return; // Bloqueia se o sinal for fraco
+          }
+          
+          if (!state.symbolTrend) state.symbolTrend = {};
           const currentTrend = state.symbolTrend[symbol];
+          
           if (direction && currentTrend && direction !== currentTrend) {
             if (score >= 80) {
-              state.symbolTrend[symbol] = direction;
-              addUserLog(uId, `🔄 [REVERSÃO] Tendência virou de ${currentTrend} para ${direction} em ${symbol}!`);
-            } else {
-              return;
-            }
-          }
+              // VERIFICAÇÃO DE DISTÂNCIA DO HEDGE (0.03%)
+              const minHedgeDistance = 0.0003; // 0.03%
+              let canHedge = true;
 
-          if (!direction || direction !== state.symbolTrend[symbol]) {
-            return;
-          }
-          if (score < config.minScore) {
-            return;
+              if (direction === 'BUY' && sellCount > 0) {
+                // Distância da última VENDA
+                const lastSell = sellTrades[sellCount - 1];
+                const distancePct = Math.abs(price - lastSell.openPrice) / lastSell.openPrice;
+                if (distancePct < minHedgeDistance) {
+                  canHedge = false;
+                  addUserLog(uId, `⏳ [HEDGE BLOQUEADO] Sinal de BUY ignorado. Distância da última SELL é de ${(distancePct * 100).toFixed(3)}% (Mínimo: 0.03%)`);
+                }
+              } else if (direction === 'SELL' && buyCount > 0) {
+                // Distância da última COMPRA
+                const lastBuy = buyTrades[buyCount - 1];
+                const distancePct = Math.abs(price - lastBuy.openPrice) / lastBuy.openPrice;
+                if (distancePct < minHedgeDistance) {
+                  canHedge = false;
+                  addUserLog(uId, `⏳ [HEDGE BLOQUEADO] Sinal de SELL ignorado. Distância da última BUY é de ${(distancePct * 100).toFixed(3)}% (Mínimo: 0.03%)`);
+                }
+              }
+
+              if (!canHedge) return;
+
+              state.symbolTrend[symbol] = direction;
+              addUserLog(uId, `🔄 [HEDGE/REVERSÃO] Forte sinal de ${direction} em ${symbol} (Score: ${score})! Abrindo operação oposta.`);
+            } else {
+              return; // Bloqueia sinais fracos no sentido oposto
+            }
+          } else if (!currentTrend) {
+            state.symbolTrend[symbol] = direction;
+            addUserLog(uId, `🔄 Tendência inicial definida para ${direction} em ${symbol}`);
           }
         }
 
@@ -1255,10 +1296,21 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
+          const sl_pct = 0.0040;
+          const tp_pct = 0.0002;
+          let sl_price = 0, tp_price = 0;
+          if (direction === 'BUY') {
+            sl_price = Number((price * (1 - sl_pct)).toFixed(5));
+            tp_price = Number((price * (1 + tp_pct)).toFixed(5));
+          } else if (direction === 'SELL') {
+            sl_price = Number((price * (1 + sl_pct)).toFixed(5));
+            tp_price = Number((price * (1 - tp_pct)).toFixed(5));
+          }
+
           // Push command to EA
           if (!state.pendingCommands) state.pendingCommands = [];
           const tempTicket = Math.floor(Math.random() * 10000000);
-          state.pendingCommands.push({ action: 'OPEN', symbol, type: direction, lot: 0.01, volume: 0.01, lots: 0.01, ticket_ref: tempTicket.toString() });
+          state.pendingCommands.push({ action: 'OPEN', symbol, type: direction, lot: 0.01, sl: sl_price, tp: tp_price, ticket_ref: tempTicket.toString() });
           
           const trade = {
             id: tempTicket.toString(),
