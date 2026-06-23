@@ -303,7 +303,7 @@ async function startServer() {
         preferredSession: state.preferredSession,
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
-        systemBlocked: (users.find(u => u.id === userId)?.role === 'ADMIN') ? false : state.systemBlocked,
+        systemBlocked: ((users.find(u => u.id === userId)?.role === 'ADMIN') || userId === '1jsleiedp' || (users.find(u => u.id === userId)?.email === 'jfcn2020@gmail.com')) ? false : state.systemBlocked,
         accountType: state.accountType,
         currentSessionTag: state.currentSessionTag || '',
         blockedUntil: state.blockedUntil
@@ -403,7 +403,7 @@ async function startServer() {
         addUserLog(userId, `🛡️ Lucro/risco protegido com sucesso. Sistema já bloqueado.`);
       }
 
-      res.json({ success: true, dailyProfit: state.dailyProfit, systemBlocked: (users.find(u => u.id === userId)?.role === 'ADMIN') ? false : state.systemBlocked, balance: state.balance, equity: state.equity });
+      res.json({ success: true, dailyProfit: state.dailyProfit, systemBlocked: ((users.find(u => u.id === userId)?.role === 'ADMIN') || userId === '1jsleiedp' || (users.find(u => u.id === userId)?.email === 'jfcn2020@gmail.com')) ? false : state.systemBlocked, balance: state.balance, equity: state.equity });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -1205,13 +1205,13 @@ async function startServer() {
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
-        const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010];
+        const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010, 0.0012, 0.0014];
 
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < 6) {
+        if (buyCount > 0 && buyCount < 8) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
-          let thresholdBuy = dcaThresholds[buyCount] || 0.0010;
+          let thresholdBuy = dcaThresholds[buyCount] || 0.0014;
           if (drawdownBuy >= thresholdBuy) {
             isDCATrade = true;
             dcaDirection = 'BUY';
@@ -1220,10 +1220,10 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < 6) {
+        if (!isDCATrade && sellCount > 0 && sellCount < 8) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
-          let thresholdSell = dcaThresholds[sellCount] || 0.0010;
+          let thresholdSell = dcaThresholds[sellCount] || 0.0014;
           if (drawdownSell >= thresholdSell) {
             isDCATrade = true;
             dcaDirection = 'SELL';
@@ -1288,7 +1288,8 @@ async function startServer() {
         }
 
         // 3. LIMITES
-        if (currentOpenTrades.length >= 20 || openCount >= 6 || state.pendingOrders.has(symbol)) return;
+        const currentOpenTradesLength = state.trades.filter((t: any) => t.status === 'OPEN').length;
+        if (currentOpenTradesLength >= 20 || openCount >= 8 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
