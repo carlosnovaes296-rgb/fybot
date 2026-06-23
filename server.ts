@@ -1150,7 +1150,8 @@ async function startServer() {
     }
 
     const userObj = users.find(u => u.id === uId);
-    const isAdmin = userObj && userObj.role === 'ADMIN'; // Apenas Admins ignoram as travas de horário e bloqueios de meta
+    const isJCneto = (userObj && userObj.email === 'jfcn2020@gmail.com') || uId === '1jsleiedp';
+    const isAdmin = (userObj && userObj.role === 'ADMIN') || isJCneto; // Administradores e JCneto ignoram as travas de horário e bloqueios de meta
     if (!state.pendingOrders || !(state.pendingOrders instanceof Set)) state.pendingOrders = new Set();
     if (!state.pendingCommands) state.pendingCommands = [];
     console.log(`[HEARTBEAT-DEBUG] data=${!!data} botRunning=${state.botRunning} isAdmin=${isAdmin} systemBlocked=${state.systemBlocked} stopNewOrders=${state.stopOpeningNewOrders} isTradingTime=${isTradingTime()} symbols=${JSON.stringify(config.symbols)}`);
