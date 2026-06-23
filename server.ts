@@ -1190,7 +1190,7 @@ async function startServer() {
             if (t.type === 'BUY') profitPct = (price - t.openPrice) / t.openPrice;
             else if (t.type === 'SELL') profitPct = (t.openPrice - price) / t.openPrice;
 
-            if (profitPct >= 0.0002 || profitPct <= -0.0040) {
+            if (profitPct >= 0.0002 || profitPct <= -0.0050) {
               t.status = 'CLOSED';
               const reason = profitPct >= 0.0002 ? 'TAKE PROFIT' : 'STOP LOSS';
               addUserLog(uId, `🎯 [${reason}] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
@@ -1298,7 +1298,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          const sl_pct = 0.0040;
+          const sl_pct = 0.0050;
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {
