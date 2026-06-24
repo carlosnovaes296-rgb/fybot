@@ -136,7 +136,7 @@ const _unused_translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (1% de la Banca)",
+      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
@@ -330,8 +330,8 @@ export default function App() {
       return null;
     }
   });
-  const [loginEmail, setLoginEmail] = useState('carlosnovaes296@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('password123');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
   const [referredByCode, setReferredByCode] = useState('');
   const [showLicenseModal, setShowLicenseModal] = useState(false);
@@ -419,6 +419,20 @@ export default function App() {
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get('ref');
+    if (ref) {
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('isLoggedIn');
+      setIsSignUp(true);
+      setReferredByCode(ref);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }, []);
 
   useEffect(() => {
@@ -1194,7 +1208,7 @@ export default function App() {
               <p className="text-[10px] text-yellow-500/70 font-semibold">{currentUser?.role === 'ADMIN' ? 'Administrator' : t.common.proAccount}</p>
             </div>
           </div>
-          
+
           <button
             onClick={() => { setIsLoggedIn(false); setCurrentUser(null); setIsMobileMenuOpen(false); localStorage.removeItem('isLoggedIn'); localStorage.removeItem('currentUser'); }}
             className="mt-6 w-full flex items-center justify-start gap-4 px-4 py-3 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition-all"
@@ -1428,8 +1442,8 @@ export default function App() {
                 try {
                   await fetchStatus();
                   await new Promise(r => setTimeout(r, 600)); // Simula tempo de rede
-                  alert(language === 'en' 
-                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}` 
+                  alert(language === 'en'
+                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}`
                     : `Saldo sincronizado com sucesso via MT5 (Exness)!\nSaldo atual: $${stats.balance.toFixed(2)}`);
                 } catch (e) { console.error(e); }
                 finally { setLoading(false); }
@@ -1516,7 +1530,7 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.01)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     delta="2%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
@@ -1531,7 +1545,7 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.01)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.01) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
@@ -2419,17 +2433,18 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => {
-                            const code = currentUser?.referralCode || 'CARLOS296';
-                            
+                            const code = currentUser?.referralCode || 'Admin';
+                            const referralUrl = `${window.location.origin}/?ref=${code}`;
+
                             // Função robusta para copiar (funciona em HTTP e HTTPS)
                             if (navigator.clipboard && window.isSecureContext) {
-                              navigator.clipboard.writeText(code).then(() => {
-                                alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                              navigator.clipboard.writeText(referralUrl).then(() => {
+                                alert(language === 'en' ? `Referral link copied!` : language === 'es' ? `¡Enlace de referencia copiado!` : `Link de indicação copiado!`);
                               });
                             } else {
                               // Fallback para HTTP (como http://209.97.163.75)
                               const textArea = document.createElement("textarea");
-                              textArea.value = code;
+                              textArea.value = referralUrl;
                               textArea.style.position = "fixed";
                               textArea.style.left = "-999999px";
                               textArea.style.top = "-999999px";
@@ -2438,7 +2453,7 @@ export default function App() {
                               textArea.select();
                               try {
                                 document.execCommand('copy');
-                                alert(language === 'en' ? `Referral code "${code}" copied!` : language === 'es' ? `¡Código de referencia "${code}" copiado!` : `Código de indicação "${code}" copiado!`);
+                                alert(language === 'en' ? `Referral link copied!` : language === 'es' ? `¡Enlace de referencia copiado!` : `Link de indicação copiado!`);
                               } catch (err) {
                                 console.error('Fallback: Oops, unable to copy', err);
                                 alert("Erro ao copiar o código. Por favor copie manualmente.");
@@ -3413,7 +3428,7 @@ export default function App() {
                     <div className="pt-2 border-t border-white/5">
                       <div className="flex items-center gap-2 mb-4">
                         <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
                         </div>
                         <div>
                           <p className="text-sm font-bold text-white">Conexão com a Corretora</p>
