@@ -1298,8 +1298,9 @@ async function startServer() {
           }
         }
 
-        // 3. LIMITES
-        const currentOpenTradesLength = state.trades.filter((t: any) => t.status === 'OPEN').length;
+        // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
+        const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
+        const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
         if (currentOpenTradesLength >= 2 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
