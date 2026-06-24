@@ -1082,7 +1082,7 @@ async function startServer() {
          state.blockedUntil = null;
          state.dailyProfit = 0;
          state.customStartingBalance = null;
-         addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h/21h). Bot pronto para operar.");
+         addUserLog(uId, "🟢 [SESSÃO INICIADA] Nova sessão habilitada (10h). Bot pronto para operar.");
       }
     }
 
@@ -1328,8 +1328,8 @@ async function startServer() {
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
     const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
-    // SEMPRE força a meta para 1% do saldo base, sem exceção
-    const targetPercent = 0.01;
+    // SEMPRE força a meta para 2% do saldo base, sem exceção
+    const targetPercent = 0.02;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
     if (!state.systemBlocked) {
@@ -1351,14 +1351,15 @@ async function startServer() {
            state.stopOpeningNewOrders = false;
            
            let target = new Date();
-           if (now.getHours() >= 10 && now.getHours() < 21) target.setHours(21, 0, 0, 0);
-           else if (now.getHours() >= 21) { target.setDate(target.getDate() + 1); target.setHours(10, 0, 0, 0); }
-           else if (now.getHours() < 10) target.setHours(10, 0, 0, 0);
-           else if (now.getHours() < 21) target.setHours(21, 0, 0, 0);
-           
-           if (target.getDay() === 5 && target.getHours() >= 21) { target.setDate(target.getDate() + 2); target.setHours(21, 0, 0, 0); }
-           else if (target.getDay() === 6) { target.setDate(target.getDate() + 1); target.setHours(21, 0, 0, 0); }
-           else if (target.getDay() === 0 && target.getHours() < 21) { target.setHours(21, 0, 0, 0); }
+           target.setDate(target.getDate() + 1); // Volta amanhã
+           target.setHours(10, 0, 0, 0); // Às 10h da manhã
+
+           // Pula fim de semana (se amanhã for Sábado, vai pra Segunda)
+           if (target.getDay() === 6) {
+               target.setDate(target.getDate() + 2);
+           } else if (target.getDay() === 0) {
+               target.setDate(target.getDate() + 1);
+           }
 
            state.blockedUntil = target.toISOString();
            

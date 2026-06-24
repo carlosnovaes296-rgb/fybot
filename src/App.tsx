@@ -1175,13 +1175,6 @@ export default function App() {
 
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-row justify-center items-center gap-8">
-            <a href="https://t.me/fybotpro_bot"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-200"
-              title="Fybot pro Telegram">
-              <img src="/telegram-logo.png.png" alt="Telegram" className="w-20 h-20 object-contain drop-shadow-md" />
-            </a>
 
             <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
               target="_blank"
@@ -1524,13 +1517,13 @@ export default function App() {
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
                     value={`$${(stats.dailyProfitTarget || (stats.balance * 0.01)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="1%"
+                    delta="2%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
                     valueClassName="text-emerald-400"
                     trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                    subLabel={language === "en" ? "Morning / NY | Night / Asia / Europe" : language === "es" ? "Mañana / NY | Noche / Asia / Europa" : "Sessão da Manhã / Nova York | Sessão da Noite / Ásia / Europa"}
+                    subLabel={language === "en" ? "Daily Session (10 AM to 9 PM)" : language === "es" ? "Sesión Diaria Única (10h a 21h)" : "Sessão Diária Única (10h às 21h)"}
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
@@ -1543,7 +1536,7 @@ export default function App() {
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         trendPositive={realTimeProfit >= 0}
-                        subLabel={language === "en" ? "Morning session 10:00 AM / Night session 9:00 PM" : language === "es" ? "Sesión de mañana 10:00 AM / Sesión de noche 9:00 PM" : "Operação pela manhã 10:00 horas / pela noite as 21:00 horas"}
+                        subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias comenzando a las 10:00 AM" : "Operações diárias iniciando às 10:00 horas"}
                       />
                     );
                   })()}
