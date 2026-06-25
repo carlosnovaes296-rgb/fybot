@@ -130,7 +130,7 @@ async function startServer() {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.001,
     minScore: 10,
-    symbols: ["XAUUSD"],
+    symbols: ["XAUUSDm"],
     strategyWeights: {
       smc: 0.6,
       momentum: 0.1,
@@ -563,7 +563,19 @@ async function startServer() {
   app.post('/api/admin/users/:id/toggle', adminAuth, (req, res) => {
     const user = users.find(u => u.id === req.params.id);
     if (user) {
-      user.status = user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      if (user.status === 'BLOCKED') {
+        user.status = 'ACTIVE';
+        // Reativar a licença
+        licenses.forEach(l => {
+          if (l.userId === user.id) l.status = 'ACTIVE';
+        });
+      } else {
+        user.status = 'BLOCKED';
+        // Desativar a licença para o robô parar de funcionar
+        licenses.forEach(l => {
+          if (l.userId === user.id) l.status = 'INACTIVE';
+        });
+      }
       saveDB();
     }
     res.json({ success: true, user });
@@ -979,6 +991,9 @@ async function startServer() {
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
     
     if (user) {
+      if (user.status === 'BLOCKED') {
+        return res.status(403).json({ error: 'Sua conta foi bloqueada pelo administrador.' });
+      }
       if (normalizedEmail === 'jfcn2020@gmail.com' && user.role !== 'ADMIN') {
         user.role = 'ADMIN';
         saveDB();
@@ -1061,6 +1076,11 @@ async function startServer() {
     const licenseObj = licenses.find(l => l.key === licenseKey && (l.status === 'ACTIVE' || l.status === 'UPGRADED'));
     if (!licenseObj) {
       return res.status(401).json({ error: 'Invalid or expired license' });
+    }
+
+    const licenseUser = users.find(u => u.id === licenseObj.userId);
+    if (licenseUser && licenseUser.status === 'BLOCKED') {
+      return res.status(403).json({ error: 'Sua conta foi bloqueada pelo administrador.' });
     }
 
     const accStr = `[HEARTBEAT] Accepted. Account balance: ${account ? account.balance : 'NO_ACCOUNT'}\n`;
@@ -1192,21 +1212,12 @@ async function startServer() {
               addUserLog(uId, `🎯 [TAKE PROFIT] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
               if (!state.pendingCommands) state.pendingCommands = [];
               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-            } else if (profitPct <= -0.0010) {
-              // Stop Loss Virtual com Atraso
-              if (!t.slHitTime) {
-                t.slHitTime = Date.now(); // Inicia a contagem
-              } else if (Date.now() - t.slHitTime >= 10000) { // 10 segundos de carência
-                t.status = 'CLOSED';
-                addUserLog(uId, `🛑 [STOP LOSS VIRTUAL] Ordem ${t.id} (${symbol}) fechada (confirmado 10s). Variação: ${(profitPct * 100).toFixed(3)}%`);
-                if (!state.pendingCommands) state.pendingCommands = [];
-                state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-              }
-            } else {
-              // Preço se recuperou, cancela a violinada
-              if (t.slHitTime) {
-                t.slHitTime = null;
-              }
+            } else if (profitPct <= -0.0030) {
+              // Stop Loss imediato
+              t.status = 'CLOSED';
+              addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
+              if (!state.pendingCommands) state.pendingCommands = [];
+              state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
             }
           }
         });
@@ -1301,7 +1312,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 2 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 20 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
@@ -1310,8 +1321,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          // SL Físico na MT5 bem mais longo (0.50%) apenas para caso o servidor caia. O Servidor fecha antes no Virtual.
-          const sl_pct = 0.0050;
+          const sl_pct = 0.0030;
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {

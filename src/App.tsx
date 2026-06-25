@@ -3026,8 +3026,8 @@ export default function App() {
                             title={u.status === 'ACTIVE' ? 'Lock User' : 'Activate User'}
                             className="p-2 px-3 bg-white/5 rounded-lg hover:bg-white/10 text-white/60 transition-colors flex items-center gap-1.5"
                           >
-                            {u.status === 'ACTIVE' ? <Lock size={14} /> : <UserCheck size={14} />}
-                            <span className="text-[10px] font-bold uppercase tracking-tight">{u.status === 'ACTIVE' ? (language === 'en' ? 'Lock' : language === 'es' ? 'Bloquear' : 'Bloquear') : (language === 'en' ? 'Unlock' : language === 'es' ? 'Desbloquear' : 'Desbloquear')}</span>
+                            {u.status === 'BLOCKED' ? <UserCheck size={14} /> : <Lock size={14} />}
+                            <span className="text-[10px] font-bold uppercase tracking-tight">{u.status === 'BLOCKED' ? (language === 'en' ? 'Unlock' : language === 'es' ? 'Desbloquear' : 'Desbloquear') : (language === 'en' ? 'Lock' : language === 'es' ? 'Bloquear' : 'Bloquear')}</span>
                           </button>
                           <button
                             onClick={() => deleteUser(u.id, u.name)}
