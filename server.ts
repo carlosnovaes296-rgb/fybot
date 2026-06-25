@@ -1227,13 +1227,13 @@ async function startServer() {
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
-        const dcaThresholds = [0, 0.0005, 0.0008, 0.0011];
+        const dcaThresholds = [0, 0.0004, 0.0008, 0.0012, 0.0016, 0.0020, 0.0024, 0.0030];
 
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < 4) {
+        if (buyCount > 0 && buyCount < 8) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
-          let thresholdBuy = dcaThresholds[buyCount] || 0.0011;
+          let thresholdBuy = dcaThresholds[buyCount] || 0.0030;
           if (drawdownBuy >= thresholdBuy) {
             isDCATrade = true;
             dcaDirection = 'BUY';
@@ -1242,10 +1242,10 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < 4) {
+        if (!isDCATrade && sellCount > 0 && sellCount < 8) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
-          let thresholdSell = dcaThresholds[sellCount] || 0.0011;
+          let thresholdSell = dcaThresholds[sellCount] || 0.0030;
           if (drawdownSell >= thresholdSell) {
             isDCATrade = true;
             dcaDirection = 'SELL';
@@ -1312,7 +1312,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 40 || openCount >= 4 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 80 || openCount >= 8 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
