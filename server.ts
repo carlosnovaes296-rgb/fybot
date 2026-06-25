@@ -1212,7 +1212,7 @@ async function startServer() {
               addUserLog(uId, `🎯 [TAKE PROFIT] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
               if (!state.pendingCommands) state.pendingCommands = [];
               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-            } else if (profitPct <= -0.0030) {
+            } else if (profitPct <= -0.7000) {
               // Stop Loss imediato
               t.status = 'CLOSED';
               addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
@@ -1321,7 +1321,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          const sl_pct = 0.0030;
+          const sl_pct = 0.7000;
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {
