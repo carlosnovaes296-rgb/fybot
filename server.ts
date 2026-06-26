@@ -89,6 +89,10 @@ async function startServer() {
         antiOvertrading: true,
         systemBlocked: false,
         currentSessionTag: '',   // e.g. "20260529-MORNING" or "20260529-NIGHT"
+        analysisPhase: 'DONE',
+        analysisStartedAt: 0,
+        analysisSignals: { BUY: 0, SELL: 0 },
+        dominantTrend: null,
         trades: [],
         logs: [],
         pnlHistory: [
@@ -277,8 +281,8 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // SEMPRE força a meta para 2% do saldo base
-      const targetPercent = 0.02;
+      // SEMPRE força a meta para 2.5% do saldo base
+      const targetPercent = 0.025;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
@@ -384,8 +388,8 @@ async function startServer() {
       state.pnlHistory.push({ time: new Date().toISOString(), balance: Number(state.balance.toFixed(2)) });
       if (state.pnlHistory.length > 30) state.pnlHistory.shift();
 
-      // Dynamically calculate daily profit target as 2% of updated balance
-      state.dailyProfitTarget = Number((state.balance * 0.02).toFixed(2));
+      // Dynamically calculate daily profit target as 2.5% of updated balance
+      state.dailyProfitTarget = Number((state.balance * 0.025).toFixed(2));
 
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
       addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [CONTA REAL]`);
@@ -527,7 +531,11 @@ async function startServer() {
         // return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
       }
       state.botRunning = true;
-      addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
+      state.analysisPhase = 'ANALYZING';
+      state.analysisStartedAt = Date.now();
+      state.analysisSignals = { BUY: 0, SELL: 0 };
+      state.dominantTrend = null;
+      addUserLog(userId, "FYBOT PRO INICIADO - Analisando Mercado por 5 minutos...");
     } else {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
@@ -1177,6 +1185,24 @@ async function startServer() {
     else if (!isAdmin && state.stopOpeningNewOrders) { console.log(`[HEARTBEAT-SKIP] stopOpeningNewOrders is true`); }
     else if (!isAdmin && !isTradingTime()) { console.log(`[HEARTBEAT-SKIP] Outside trading hours`); }
     if (data && state.botRunning && (isAdmin || (!state.systemBlocked && !state.stopOpeningNewOrders && isTradingTime()))) {
+      // Verifica se está na fase de análise (5 minutos = 300000 ms)
+      if (state.analysisPhase === 'ANALYZING') {
+        const elapsed = Date.now() - state.analysisStartedAt;
+        if (elapsed >= 300000) {
+          state.analysisPhase = 'DONE';
+          let dominant = null;
+          if (state.analysisSignals.BUY > state.analysisSignals.SELL) dominant = 'BUY';
+          else if (state.analysisSignals.SELL > state.analysisSignals.BUY) dominant = 'SELL';
+          state.dominantTrend = dominant;
+          
+          if (dominant) {
+             addUserLog(uId, `✅ [ANÁLISE CONCLUÍDA] Sinais: ${dominant} (${state.analysisSignals[dominant]}). Aguardando confirmação para 1ª ordem.`);
+          } else {
+             addUserLog(uId, `✅ [ANÁLISE CONCLUÍDA] Sem direção clara. O bot abrirá com o próximo sinal forte.`);
+          }
+        }
+      }
+
       Object.keys(data).forEach(symbol => {
         const symData = data[symbol];
         if (!symData || typeof symData !== 'object') return;
@@ -1188,6 +1214,20 @@ async function startServer() {
         if (aiBias !== "NEUTRAL") score += (100 * config.strategyWeights.ai);
 
         let direction = smcDir === momDir ? smcDir : null;
+
+        if (state.analysisPhase === 'ANALYZING') {
+          if (direction && score >= config.minScore) {
+            state.analysisSignals[direction] = (state.analysisSignals[direction] || 0) + 1;
+          }
+          return; // Bloqueia abertura de ordens durante a análise
+        }
+
+        // Se a análise terminou e temos uma tendência dominante obrigatória para a 1ª ordem
+        if (state.analysisPhase === 'DONE' && state.dominantTrend) {
+           if (direction && direction !== state.dominantTrend) {
+              return; // Bloqueia sinais opostos até pegar a primeira ordem certa
+           }
+        }
 
         // 0. Filtrar as ordens desse símbolo e contar por direção
         const symbolOpenTrades = state.trades.filter((t: any) => t.symbol === symbol && t.status === 'OPEN');
@@ -1227,13 +1267,13 @@ async function startServer() {
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
-        const dcaThresholds = [0, 0.0006, 0.0010, 0.0015, 0.0020];
+        const dcaThresholds = [0, 0.0010, 0.0015, 0.0025, 0.0030, 0.0035, 0.0040, 0.0050, 0.0055, 0.0060];
 
         // Checa se precisa fazer DCA de Compra
         if (buyCount > 0 && buyCount < 5) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
-          let thresholdBuy = dcaThresholds[buyCount] || 0.0020;
+          let thresholdBuy = dcaThresholds[buyCount] || 0.0060;
           if (drawdownBuy >= thresholdBuy) {
             isDCATrade = true;
             dcaDirection = 'BUY';
@@ -1245,7 +1285,7 @@ async function startServer() {
         if (!isDCATrade && sellCount > 0 && sellCount < 5) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
-          let thresholdSell = dcaThresholds[sellCount] || 0.0020;
+          let thresholdSell = dcaThresholds[sellCount] || 0.0060;
           if (drawdownSell >= thresholdSell) {
             isDCATrade = true;
             dcaDirection = 'SELL';
@@ -1273,7 +1313,7 @@ async function startServer() {
           const currentTrend = state.symbolTrend[symbol];
           
           if (direction && currentTrend && direction !== currentTrend) {
-            if (score >= 50) {
+            if (score >= 60) {
               // VERIFICAÇÃO DE DISTÂNCIA DO HEDGE (0.03%)
               const minHedgeDistance = 0.0003; // 0.03%
               let canHedge = true;
@@ -1312,7 +1352,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 50 || openCount >= 10 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || openCount >= 20 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
@@ -1347,6 +1387,9 @@ async function startServer() {
             status: 'OPEN'
           };
           state.trades.push(trade);
+          if (state.dominantTrend) {
+             state.dominantTrend = null; // Libera para ordens normais daqui pra frente
+          }
           addUserLog(uId, `🎯 ORDEM ENVIADA AO EA: ${symbol} | Tipo: ${direction}`);
           
           setTimeout(() => state.pendingOrders.delete(symbol), 2000);
@@ -1359,8 +1402,8 @@ async function startServer() {
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
     const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
-    // SEMPRE força a meta para 2% do saldo base, sem exceção
-    const targetPercent = 0.02;
+    // SEMPRE força a meta para 2.5% do saldo base, sem exceção
+    const targetPercent = 0.025;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
     if (!state.systemBlocked) {
@@ -1369,35 +1412,37 @@ async function startServer() {
 
        if (hitProfit || hitLoss) {
          const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
+         const msg = hitProfit ? "META DIÁRIA" : "LIMITE DE PERDA";
          
          if (openTrades.length > 0) {
-           if (!state.stopOpeningNewOrders) {
-             state.stopOpeningNewOrders = true;
-             const msg = hitProfit ? "META DIÁRIA" : "LIMITE DE PERDA";
-             addUserLog(uId, `⚠️ [${msg} ATINGIDO] Parando abertura de novas ordens. Aguardando fechamento...`);
-           }
-         } else {
-           state.systemBlocked = true;
-           state.botRunning = false;
-           state.stopOpeningNewOrders = false;
-           
-           let target = new Date();
-           target.setDate(target.getDate() + 1); // Volta amanhã
-           target.setHours(10, 0, 0, 0); // Às 10h da manhã
-
-           // Pula fim de semana (se amanhã for Sábado, vai pra Segunda)
-           if (target.getDay() === 6) {
-               target.setDate(target.getDate() + 2);
-           } else if (target.getDay() === 0) {
-               target.setDate(target.getDate() + 1);
-           }
-
-           state.blockedUntil = target.toISOString();
-           
-           const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
-           addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
-           addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Todas as ordens fechadas. Bot protegido.`);
+           addUserLog(uId, `⚡ [${msg} ATINGIDO] Fechando TODAS as ordens imediatamente para segurar lucro/evitar perdas!`);
+           if (!state.pendingCommands) state.pendingCommands = [];
+           openTrades.forEach((t: any) => {
+             t.status = 'CLOSED';
+             state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+           });
          }
+
+         state.systemBlocked = true;
+         state.botRunning = false;
+         state.stopOpeningNewOrders = false;
+         
+         let target = new Date();
+         target.setDate(target.getDate() + 1); // Volta amanhã
+         target.setHours(10, 0, 0, 0); // Às 10h da manhã
+
+         // Pula fim de semana (se amanhã for Sábado, vai pra Segunda)
+         if (target.getDay() === 6) {
+             target.setDate(target.getDate() + 2);
+         } else if (target.getDay() === 0) {
+             target.setDate(target.getDate() + 1);
+         }
+
+         state.blockedUntil = target.toISOString();
+         
+         const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
+         addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
+         addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Tela de bloqueio lançada. Operações encerradas.`);
        }
     }
 
