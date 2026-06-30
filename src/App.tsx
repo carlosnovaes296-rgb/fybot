@@ -868,6 +868,7 @@ export default function App() {
         setIsLoggedIn(true);
         localStorage.setItem('currentUser', JSON.stringify(data.user));
         localStorage.setItem('isLoggedIn', 'true');
+        window.location.reload();
       } else {
         alert(data.error);
       }
