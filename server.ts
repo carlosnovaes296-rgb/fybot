@@ -1270,7 +1270,7 @@ async function startServer() {
         const dcaThresholds = [0, 0.0010, 0.0015, 0.0025, 0.0030, 0.0035, 0.0040, 0.0050, 0.0055, 0.0060];
 
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < 5) {
+        if (buyCount > 0 && buyCount < 2) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
           let thresholdBuy = dcaThresholds[buyCount] || 0.0060;
@@ -1282,7 +1282,7 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < 5) {
+        if (!isDCATrade && sellCount > 0 && sellCount < 2) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
           let thresholdSell = dcaThresholds[sellCount] || 0.0060;
@@ -1352,7 +1352,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 100 || openCount >= 20 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
