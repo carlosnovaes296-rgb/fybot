@@ -3554,6 +3554,22 @@ export default function App() {
 
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Max DCA Orders' : language === 'es' ? 'Máx. Órdenes DCA' : 'Máx. Ordens DCA'}</label>
+                            <span className="text-xs font-mono text-blue-400">{config.maxOrders || 10}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step="1"
+                            value={config.maxOrders || 10}
+                            onChange={(e) => setConfig({ ...config, maxOrders: parseInt(e.target.value) })}
+                            className="w-full accent-blue-500 h-1.5 bg-white/10 rounded-full"
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Trading Direction' : language === 'es' ? 'Dirección de Operación' : 'Direção de Operação'}</label>
                           </div>
                           <div className="flex gap-4">

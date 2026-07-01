@@ -92,6 +92,7 @@ export interface Config {
   paymentWallet?: string;
   allowBuy?: boolean;
   allowSell?: boolean;
+  maxOrders?: number;
 }
 
 export type Language = 'en' | 'pt' | 'es';

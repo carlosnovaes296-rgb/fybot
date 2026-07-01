@@ -1269,8 +1269,9 @@ async function startServer() {
         let dcaDirection = null;
         const dcaThresholds = [0, 0.0010, 0.0015, 0.0025, 0.0030, 0.0035, 0.0040, 0.0050, 0.0055, 0.0060];
 
+        const maxOrdersLimit = config.maxOrders || 10;
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < 10) {
+        if (buyCount > 0 && buyCount < maxOrdersLimit) {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
           let thresholdBuy = dcaThresholds[buyCount] || 0.0060;
@@ -1282,7 +1283,7 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < 10) {
+        if (!isDCATrade && sellCount > 0 && sellCount < maxOrdersLimit) {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
           let thresholdSell = dcaThresholds[sellCount] || 0.0060;
