@@ -18,7 +18,16 @@ conn.on('ready', () => {
     serverStream.on('close', () => {
       console.log('📤 server.ts uploaded!');
       
-      // Upload App.tsx
+      // Upload types.ts
+      const typesContent = fs.readFileSync('./src/types.ts');
+      const typesStream = sftp.createWriteStream('/root/fybot/src/types.ts');
+      typesStream.write(typesContent);
+      typesStream.end();
+      
+      typesStream.on('close', () => {
+        console.log('📤 types.ts uploaded!');
+        
+        // Upload App.tsx
       const appContent = fs.readFileSync('./src/App.tsx');
       const appStream = sftp.createWriteStream('/root/fybot/src/App.tsx');
       appStream.write(appContent);
@@ -35,10 +44,11 @@ conn.on('ready', () => {
             conn.end();
           }).on('data', d => process.stdout.write(d))
             .stderr.on('data', d => process.stderr.write(d));
-        });
-      });
-    });
-  });
+        }); // conn.exec
+      }); // appStream.on
+    }); // typesStream.on
+  }); // serverStream.on
+}); // conn.sftp
 }).on('error', (err) => {
   console.error('SSH Error: ' + err);
 }).connect({

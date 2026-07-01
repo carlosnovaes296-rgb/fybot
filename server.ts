@@ -1184,7 +1184,7 @@ async function startServer() {
     else if (!isAdmin && state.systemBlocked) { console.log(`[HEARTBEAT-SKIP] System is blocked until ${state.blockedUntil}`); }
     else if (!isAdmin && state.stopOpeningNewOrders) { console.log(`[HEARTBEAT-SKIP] stopOpeningNewOrders is true`); }
     else if (!isAdmin && !isTradingTime()) { console.log(`[HEARTBEAT-SKIP] Outside trading hours`); }
-    if (data && state.botRunning && (isAdmin || (!state.systemBlocked && !state.stopOpeningNewOrders && isTradingTime()))) {
+    if (data && state.botRunning && (isAdmin || (!state.systemBlocked && isTradingTime()))) {
       // Verifica se está na fase de análise (5 minutos = 300000 ms)
       if (state.analysisPhase === 'ANALYZING') {
         const elapsed = Date.now() - state.analysisStartedAt;
@@ -1267,9 +1267,12 @@ async function startServer() {
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
-        const dcaThresholds = [0, 0.0010, 0.0015, 0.0025, 0.0030, 0.0035, 0.0040, 0.0050, 0.0055, 0.0060];
+        const dcaThresholds = [
+          0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0012, 0.0016, 0.0020, 0.0024, 0.0028,
+          0.0032, 0.0036, 0.0040, 0.0044, 0.0048, 0.0052, 0.0056, 0.0060, 0.0064, 0.0068
+        ];
 
-        const maxOrdersLimit = config.maxOrders || 10;
+        const maxOrdersLimit = 20;
         // Checa se precisa fazer DCA de Compra
         if (buyCount > 0 && buyCount < maxOrdersLimit) {
           const firstBuy = buyTrades[0];
@@ -1296,6 +1299,11 @@ async function startServer() {
 
         if (isDCATrade) {
           direction = dcaDirection;
+        }
+
+        // Se o envio de novas ordens está bloqueado (ex: meta atingida), bloqueia envio de TENDÊNCIA e DCA
+        if (state.stopOpeningNewOrders && !isAdmin) {
+           return;
         }
 
         // Se já tem ordens abertas nessa direção e não é DCA, bloqueia apenas a mesma direção
@@ -1353,7 +1361,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 100 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || openCount >= 20 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
@@ -1414,36 +1422,57 @@ async function startServer() {
        if (hitProfit || hitLoss) {
          const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
          const msg = hitProfit ? "META DIÁRIA" : "LIMITE DE PERDA";
-         
-         if (openTrades.length > 0) {
-           addUserLog(uId, `⚡ [${msg} ATINGIDO] Fechando TODAS as ordens imediatamente para segurar lucro/evitar perdas!`);
-           if (!state.pendingCommands) state.pendingCommands = [];
-           openTrades.forEach((t: any) => {
-             t.status = 'CLOSED';
-             state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-           });
+         // NOVO: Calcular Flutuante das ordens abertas se bater o Lucro
+         let totalFloating = 0;
+         if (hitProfit && openTrades.length > 0 && open_positions && Array.isArray(open_positions)) {
+             openTrades.forEach((t: any) => {
+                 const mt5Pos = open_positions.find((p: any) => p.ticket.toString() === t.id.toString());
+                 if (mt5Pos && mt5Pos.profit !== undefined) {
+                     totalFloating += mt5Pos.profit;
+                 }
+             });
          }
 
-         state.systemBlocked = true;
-         state.botRunning = false;
-         state.stopOpeningNewOrders = false;
-         
-         let target = new Date();
-         target.setDate(target.getDate() + 1); // Volta amanhã
-         target.setHours(10, 0, 0, 0); // Às 10h da manhã
+         // Se bater perda, ou se bater lucro e não tiver ordens abertas, ou se o flutuante negativo for <= 20% do alvo
+         const maxAllowedLoss = state.dailyProfitTarget * 0.20;
+         const canCloseImmediately = hitLoss || openTrades.length === 0 || (hitProfit && totalFloating >= -maxAllowedLoss);
 
-         // Pula fim de semana (se amanhã for Sábado, vai pra Segunda)
-         if (target.getDay() === 6) {
-             target.setDate(target.getDate() + 2);
-         } else if (target.getDay() === 0) {
-             target.setDate(target.getDate() + 1);
+         if (!canCloseImmediately) {
+           if (!state.stopOpeningNewOrders) {
+             state.stopOpeningNewOrders = true;
+             addUserLog(uId, `⏳ [${msg} ATINGIDO] Flutuante atual: $${totalFloating.toFixed(2)}. Aguardando reduzir para pelo menos -$${maxAllowedLoss.toFixed(2)} para fechar...`);
+           }
+         } else {
+             if (openTrades.length > 0) {
+                 addUserLog(uId, `⚡ [${msg}] Fechando TODAS as ordens imediatamente! (Flutuante: $${totalFloating.toFixed(2)})`);
+                 if (!state.pendingCommands) state.pendingCommands = [];
+                 openTrades.forEach((t: any) => {
+                     t.status = 'CLOSED';
+                     state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+                 });
+             }
+
+             state.systemBlocked = true;
+             state.botRunning = false;
+             state.stopOpeningNewOrders = false;
+             
+             let target = new Date();
+             target.setDate(target.getDate() + 1); // Volta amanhã
+             target.setHours(10, 0, 0, 0); // Às 10h da manhã
+
+             // Pula fim de semana (se amanhã for Sábado, vai pra Segunda)
+             if (target.getDay() === 6) {
+                 target.setDate(target.getDate() + 2);
+             } else if (target.getDay() === 0) {
+                 target.setDate(target.getDate() + 1);
+             }
+
+             state.blockedUntil = target.toISOString();
+             
+             const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
+             addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
+             addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Tela de bloqueio lançada. Operações encerradas.`);
          }
-
-         state.blockedUntil = target.toISOString();
-         
-         const logTitle = hitProfit ? "🟢 [META DIÁRIA] META DIÁRIA DE LUCRO ATINGIDA!" : "🛑 [LIMITE DE PERDA] LIMITE DIÁRIO DE PERDA ATINGIDO!";
-         addUserLog(uId, `${logTitle} ($${state.dailyProfit.toFixed(2)})`);
-         addUserLog(uId, `🔒 [SISTEMA BLOQUEADO] Tela de bloqueio lançada. Operações encerradas.`);
        }
     }
 
