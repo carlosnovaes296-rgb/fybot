@@ -1531,14 +1531,14 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="2%"
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="1.6%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
                     valueClassName="text-emerald-400"
                     trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                    subLabel={language === "en" ? "Daily Session (10 AM to 9 PM)" : language === "es" ? "Sesión Diaria Única (10h a 21h)" : "Sessão Diária Única (10h às 21h)"}
+                    subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias iniciando a las 10:00 horas" : "Operações diárias iniciando às 10:00 horas"}
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
@@ -1546,7 +1546,7 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}

@@ -1239,6 +1239,40 @@ async function startServer() {
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
+        // STOP LOSS EM LOTE (CESTA) DE 0.15% (Baseado na 1ª Ordem)
+        const basketSlThreshold = 0.0015;
+        let triggeredBasketSL = false;
+
+        if (buyCount > 0) {
+          const firstBuy = buyTrades[0];
+          const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
+          if (drawdownBuy >= basketSlThreshold) {
+            addUserLog(uId, `🛑 [STOP LOSS EM LOTE] Queda de ${(basketSlThreshold * 100).toFixed(2)}% atingida! Fechando TODAS as ${buyCount} COMPRAS de ${symbol}.`);
+            if (!state.pendingCommands) state.pendingCommands = [];
+            buyTrades.forEach((t: any) => {
+              t.status = 'CLOSED';
+              state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+            });
+            triggeredBasketSL = true;
+          }
+        }
+
+        if (sellCount > 0) {
+          const firstSell = sellTrades[0];
+          const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
+          if (drawdownSell >= basketSlThreshold) {
+            addUserLog(uId, `🛑 [STOP LOSS EM LOTE] Queda de ${(basketSlThreshold * 100).toFixed(2)}% atingida! Fechando TODAS as ${sellCount} VENDAS de ${symbol}.`);
+            if (!state.pendingCommands) state.pendingCommands = [];
+            sellTrades.forEach((t: any) => {
+              t.status = 'CLOSED';
+              state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
+            });
+            triggeredBasketSL = true;
+          }
+        }
+
+        if (triggeredBasketSL) return; // Se acionou stop em lote, ignora o restante (sem novos DCAs)
+
         // 0. VERIFICAÇÃO DE SL / TP
         symbolOpenTrades.forEach((t: any) => {
           if (t.status === 'OPEN') {
@@ -1369,7 +1403,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          const sl_pct = 0.0015; // 0.15%
+          const sl_pct = 0.7000; // 70.00% (Proteção de catástrofe, SL real é na cesta)
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {
