@@ -1042,7 +1042,7 @@ export default function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[25vh] md:mt-[40vh] lg:mt-[55vh] mx-2 sm:mx-0 transform scale-[0.7] origin-top"
+          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[10vh] md:mt-[25vh] lg:mt-[55vh] mx-4 sm:mx-0 transform scale-100 md:scale-90 lg:scale-[0.7] origin-top"
         >
           <div className="text-center space-y-2 pb-1">
             <p className="text-white text-base font-extrabold tracking-wide [text-shadow:_0_2px_6px_rgba(0,0,0,1)]">{isSignUp ? (language === 'en' ? 'Create your professional account' : language === 'pt' ? 'Crie sua conta profissional' : 'Crea tu cuenta profesional') : t.login.subTitle}</p>
@@ -1481,7 +1481,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="p-8 space-y-8">
+        <div className="p-4 md:p-8 space-y-6 md:space-y-8">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
               <motion.div
