@@ -1268,11 +1268,10 @@ async function startServer() {
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
         const dcaThresholds = [
-          0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0012, 0.0016, 0.0020, 0.0024, 0.0028,
-          0.0032, 0.0036, 0.0040, 0.0044, 0.0048, 0.0052, 0.0056, 0.0060, 0.0064, 0.0068
+          0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0012
         ];
 
-        const maxOrdersLimit = 20;
+        const maxOrdersLimit = 6;
         // Checa se precisa fazer DCA de Compra
         if (buyCount > 0 && buyCount < maxOrdersLimit) {
           const firstBuy = buyTrades[0];
@@ -1370,7 +1369,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          const sl_pct = 0.7000;
+          const sl_pct = 0.0015; // 0.15%
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {
@@ -1411,8 +1410,8 @@ async function startServer() {
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
     const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
-    // SEMPRE força a meta para 2.5% do saldo base, sem exceção
-    const targetPercent = 0.025;
+    // SEMPRE força a meta para 1.6% do saldo base, sem exceção
+    const targetPercent = 0.016;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
     if (!state.systemBlocked) {
@@ -1427,14 +1426,14 @@ async function startServer() {
          if (hitProfit && openTrades.length > 0 && open_positions && Array.isArray(open_positions)) {
              openTrades.forEach((t: any) => {
                  const mt5Pos = open_positions.find((p: any) => p.ticket.toString() === t.id.toString());
-                 if (mt5Pos && mt5Pos.profit !== undefined) {
+                 if (mt5Pos && mt5Pos.profit !== undefined && mt5Pos.profit < 0) {
                      totalFloating += mt5Pos.profit;
                  }
              });
          }
 
-         // Se bater perda, ou se bater lucro e não tiver ordens abertas, ou se o flutuante negativo for <= 20% do alvo
-         const maxAllowedLoss = state.dailyProfitTarget * 0.20;
+         // Se bater perda, ou se bater lucro e não tiver ordens abertas, ou se o flutuante negativo for <= 20% do ganho do dia
+         const maxAllowedLoss = state.dailyProfit * 0.20;
          const canCloseImmediately = hitLoss || openTrades.length === 0 || (hitProfit && totalFloating >= -maxAllowedLoss);
 
          if (!canCloseImmediately) {
