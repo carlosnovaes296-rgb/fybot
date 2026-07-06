@@ -42,7 +42,7 @@ export const translations = {
     },
     dashboard: {
       balance: "ACCOUNT BALANCE (REAL / DEMO)",
-      dailyTargetLabel: "Daily Gain 1.6% day",
+      dailyTargetLabel: "Daily Gain 2% day",
       dailyLossLabel: "Daily Loss Limit (10% of Bankroll)",
       dailyProfitLabel: "Today's Profit",
       activeTrades: "Active Positions",
@@ -217,7 +217,7 @@ export const translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Ganho diario 1.6% dia",
+      dailyTargetLabel: "Ganho diario 2% dia",
       dailyLossLabel: "Limite de Perda Diária (10% da Banca)",
       dailyProfitLabel: "Lucro de Hoje",
       activeTrades: "Posições Ativas",
@@ -392,7 +392,7 @@ export const translations = {
     },
     dashboard: {
       balance: "SALDO (REAL / DEMO)",
-      dailyTargetLabel: "Ganancia diaria 1.6% día",
+      dailyTargetLabel: "Ganancia diaria 2% día",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",

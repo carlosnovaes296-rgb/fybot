@@ -46,7 +46,7 @@ const targetTranslations = {
   pt: {
     title: "META DIÁRIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Proteção Avançada de Capital",
-    targetValue: "Meta Diária 1.6% sobre o valor da banca",
+    targetValue: "Meta Diária 2% sobre o valor da banca",
     lossValue: "Limite de Perda (10% da Banca)",
     currentProfit: "Lucro de Hoje (Em Tempo Real)",
     resetManual: "Reset Operacional",
@@ -80,7 +80,7 @@ const targetTranslations = {
   en: {
     title: "SMART DAILY TARGET",
     subtitle: "V8 PRO SAFETY GATE - Advanced Capital Protection",
-    targetValue: "Daily Target (1.6% of Bankroll)",
+    targetValue: "Daily Target (2% of Bankroll)",
     lossValue: "Loss Limit (10% of Bankroll)",
     currentProfit: "Today's Profit (Real-time)",
     resetManual: "Operational Reset",
@@ -114,7 +114,7 @@ const targetTranslations = {
   es: {
     title: "META DIARIA INTELIGENTE",
     subtitle: "V8 PRO SAFETY GATE - Protección de Capital Avanzada",
-    targetValue: "Meta Diaria (1.6% de la Banca)",
+    targetValue: "Meta Diaria (2% de la Banca)",
     lossValue: "Límite de Pérdida (10% de la Banca)",
     currentProfit: "Ganancia de Hoy (En Tiempo Real)",
     resetManual: "Reajuste Operativo",
@@ -655,12 +655,12 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                     <span className="absolute left-3 top-2.5 text-xs text-white/30">$</span>
                     <input
                       type="number"
-                      value={Math.round((stats.balance || 0) * 0.016)}
+                      value={Math.round((stats.balance || 0) * 0.02)}
                       readOnly
                       disabled
                       className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white/50 cursor-not-allowed"
                     />
-                    <span className="absolute right-3 top-2 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded">AUTO (1.6%)</span>
+                    <span className="absolute right-3 top-2 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded">AUTO (2%)</span>
                   </div>
                 </div>
 

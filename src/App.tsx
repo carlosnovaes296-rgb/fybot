@@ -136,7 +136,7 @@ const _unused_translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (1.6% de la Banca)",
+      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
@@ -293,7 +293,7 @@ export default function App() {
     activeLicense: null,
     pendingPayment: null,
     dailyProfit: 0.00,
-    dailyProfitTarget: 160.00, // 1.6% of initial balance ($10,000)
+    dailyProfitTarget: 200.00, // 2% of initial balance ($10,000)
     dailyLossLimit: 1000.00, // 10% of initial balance
     dailyResetHour: "08:00",
     preferredSession: "London/NY",
@@ -1531,8 +1531,8 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="1.6%"
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="2%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
@@ -1546,7 +1546,7 @@ export default function App() {
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
