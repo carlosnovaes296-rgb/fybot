@@ -281,8 +281,8 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // SEMPRE força a meta para 2.5% do saldo base
-      const targetPercent = 0.025;
+      // SEMPRE força a meta para 1.6% do saldo base
+      const targetPercent = 0.016;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
@@ -322,7 +322,7 @@ async function startServer() {
     try {
       const { target, resetHour, session, tz, overtrading, userId } = req.body;
       const state = getUserState(userId);
-      // Ignora o valor de `target` enviado para forçar o sistema a sempre calcular 2% da banca dinamicamente
+      // Ignora o valor de `target` enviado para forçar o sistema a sempre calcular 1.6% da banca dinamicamente
       if (typeof resetHour === 'string') state.dailyResetHour = resetHour;
       if (typeof session === 'string') state.preferredSession = session;
       if (typeof tz === 'string') state.timezone = tz;
@@ -352,7 +352,7 @@ async function startServer() {
         }
         
         state.dailyProfit = rawDailyProfit - state.startupProfitOffset; // Zera imediatamente para o frontend
-      state.customStartingBalance = state.balance; // Define a nova base de cálculo para os limites 5% e 2%
+      state.customStartingBalance = state.balance; // Define a nova base de cálculo para os limites 5% e 1.6%
       state.systemBlocked = false;
       addUserLog(userId, "🔄 [RESET MANUAL] Lucro diário zerado. Perdas/ganhos e flutuantes atuais se tornaram a nova base $0.00.");
       addUserLog(userId, "🟢 Operações automáticas liberadas para novas sessões.");
@@ -388,8 +388,8 @@ async function startServer() {
       state.pnlHistory.push({ time: new Date().toISOString(), balance: Number(state.balance.toFixed(2)) });
       if (state.pnlHistory.length > 30) state.pnlHistory.shift();
 
-      // Dynamically calculate daily profit target as 2.5% of updated balance
-      state.dailyProfitTarget = Number((state.balance * 0.025).toFixed(2));
+      // Dynamically calculate daily profit target as 1.6% of updated balance
+      state.dailyProfitTarget = Number((state.balance * 0.016).toFixed(2));
 
       const formattedProfit = profitAmount >= 0 ? `+$${profitAmount.toFixed(2)}` : `-$${Math.abs(profitAmount).toFixed(2)}`;
       addUserLog(userId, `${profitAmount >= 0 ? '✅' : '❌'} CLOSED XAUUSD: ${formattedProfit} [CONTA REAL]`);

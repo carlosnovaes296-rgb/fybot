@@ -136,7 +136,7 @@ const _unused_translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
+      dailyTargetLabel: "Meta Diaria (1.6% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
