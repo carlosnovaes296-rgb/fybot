@@ -1058,7 +1058,7 @@ export default function App() {
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
                     placeholder="Seu nome"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
                   />
                 </div>
                 <div className="space-y-2 animate-fadeIn">
@@ -1070,7 +1070,7 @@ export default function App() {
                     value={referredByCode}
                     onChange={(e) => setReferredByCode(e.target.value)}
                     placeholder="Ex: CARLOS296"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/40 uppercase font-mono"
+                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/40 uppercase font-mono"
                   />
                 </div>
               </>
@@ -1082,7 +1082,7 @@ export default function App() {
                 placeholder="seu@email.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
               />
             </div>
             <div className="space-y-2">
@@ -1092,7 +1092,7 @@ export default function App() {
                   type={showPassword ? "text" : "password"}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
+                  className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
                 />
                 <button
                   type="button"
@@ -1108,7 +1108,7 @@ export default function App() {
           <button
             onClick={isSignUp ? handleRegister : handleLogin}
             disabled={loading}
-            className="w-full py-3 sm:py-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-sm transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
+            className="w-full py-5 sm:py-6 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-lg transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
           >
             {loading ? <RefreshCw className="animate-spin mx-auto" size={20} /> : (isSignUp ? t.login.registerButton : t.login.button)}
           </button>
@@ -1116,7 +1116,7 @@ export default function App() {
           <div className="text-center space-y-3 sm:space-y-4 pt-1">
             <button
               onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full py-2.5 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-[11px] rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
+              className="w-full py-4 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-sm rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
             >
               {isSignUp ? t.login.haveAccount : t.login.noAccount}{' '}
               <span className="underline font-black">{isSignUp ? t.login.login : t.login.signUp}</span>
@@ -2302,7 +2302,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
@@ -2332,22 +2332,9 @@ export default function App() {
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
                   <PricingCard
-                    title={t.plans.card4Title}
-                    price={100}
-                    customPriceText={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
-                    desc={t.plans.card4Desc}
-                    features={t.plans.card4Features}
-                    language={language}
-                    image="/bot_trading.png"
-                    hideButton={true}
-                    largeFeatures={true}
-                    titleColor="text-emerald-400"
-                    descColor="text-emerald-400"
-                  />
-                  <PricingCard
-                    title="MEU BOT"
+                    title=""
                     price={500}
-                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Seu Bot Livre 24 Horas'}
+                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Bot livre 24 horas'}
                     descSize="text-base font-bold"
                     descColor="text-emerald-400"
                     features={[]}

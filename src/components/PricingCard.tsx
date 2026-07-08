@@ -38,7 +38,7 @@ export function PricingCard({ title, price, recommended, desc, features, languag
       )}
 
       <div className="mb-8">
-        <h3 className={`text-xl font-bold ${titleColor || ''}`}>{title}</h3>
+        {title && <h3 className={`text-xl font-bold ${titleColor || ''}`}>{title}</h3>}
         <p className={`${descSize || 'text-xs'} mt-2 ${descColor || 'text-white/40'}`}>{desc}</p>
       </div>
 

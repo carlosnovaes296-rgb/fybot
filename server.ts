@@ -1299,15 +1299,29 @@ async function startServer() {
         console.log(`[DEBUG] symbol=${symbol} score=${score} dir=${direction} isDCATrade=${isDCATrade} openCount=${openCount}`);
         console.log(`[DEBUG] config.minScore=${config.minScore} state.symbolTrend=${state.symbolTrend[symbol]} pendingOrders.has=${state.pendingOrders.has(symbol)}`);
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
+        
+        // 0.5. TRAVA LOCOMOTIVA (Filtro Anti-Tendência Forte)
+        if (score >= 80 && direction) {
+          if (!state.strongTrendUntil || Date.now() > state.strongTrendUntil || state.strongTrend !== direction) {
+            state.strongTrend = direction;
+            state.strongTrendUntil = Date.now() + 30 * 60 * 1000; // 30 minutos
+            addUserLog(uId, `🚂 [TENDÊNCIA EXTREMA] Score ${score.toFixed(0)} detectado para ${direction}. Operações contrárias bloqueadas por 30 min!`);
+          }
+        }
+
+        const blockedDirection = (state.strongTrendUntil && Date.now() < state.strongTrendUntil) 
+                                 ? (state.strongTrend === 'BUY' ? 'SELL' : 'BUY') 
+                                 : null;
+
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
         const dcaThresholds = [
-          0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0012
+          0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010
         ];
 
         const maxOrdersLimit = 6;
         // Checa se precisa fazer DCA de Compra
-        if (buyCount > 0 && buyCount < maxOrdersLimit) {
+        if (buyCount > 0 && buyCount < maxOrdersLimit && blockedDirection !== 'BUY') {
           const firstBuy = buyTrades[0];
           const drawdownBuy = (firstBuy.openPrice - price) / firstBuy.openPrice;
           let thresholdBuy = dcaThresholds[buyCount] || 0.0060;
@@ -1319,7 +1333,7 @@ async function startServer() {
         }
 
         // Checa se precisa fazer DCA de Venda
-        if (!isDCATrade && sellCount > 0 && sellCount < maxOrdersLimit) {
+        if (!isDCATrade && sellCount > 0 && sellCount < maxOrdersLimit && blockedDirection !== 'SELL') {
           const firstSell = sellTrades[0];
           const drawdownSell = (price - firstSell.openPrice) / firstSell.openPrice;
           let thresholdSell = dcaThresholds[sellCount] || 0.0060;
@@ -1394,9 +1408,12 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 100 || openCount >= 20 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || openCount >= 6 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
+          if (direction === blockedDirection) {
+             return; // Bloqueado pela Trava Locomotiva
+          }
           if ((direction === 'BUY' && config.allowBuy === false) || (direction === 'SELL' && config.allowSell === false)) return;
 
           state.lastOrderTime[symbol] = Date.now();
@@ -1443,7 +1460,7 @@ async function startServer() {
     const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
-    const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
+    const dailyLossLimit = Number((startingDailyBalance * 0.30).toFixed(2));
     // SEMPRE força a meta para 2% do saldo base, sem exceção
     const targetPercent = 0.02;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
@@ -1466,14 +1483,14 @@ async function startServer() {
              });
          }
 
-         // Se bater perda, ou se bater lucro e não tiver ordens abertas, ou se o flutuante negativo for <= 20% do ganho do dia
+         // Se bater perda, ou se bater lucro e não tiver ordens abertas
          const maxAllowedLoss = state.dailyProfit * 0.20;
-         const canCloseImmediately = hitLoss || openTrades.length === 0 || (hitProfit && totalFloating >= -maxAllowedLoss);
+         const canCloseImmediately = hitLoss || openTrades.length === 0;
 
          if (!canCloseImmediately) {
            if (!state.stopOpeningNewOrders) {
              state.stopOpeningNewOrders = true;
-             addUserLog(uId, `⏳ [${msg} ATINGIDO] Flutuante atual: $${totalFloating.toFixed(2)}. Aguardando reduzir para pelo menos -$${maxAllowedLoss.toFixed(2)} para fechar...`);
+             addUserLog(uId, `⏳ [${msg} ATINGIDO] Aguardando ordens abertas fecharem naturalmente para encerrar o dia...`);
            }
          } else {
              if (openTrades.length > 0) {
