@@ -1019,6 +1019,30 @@ async function startServer() {
     }
   });
 
+  app.post('/api/user/profile', (req, res) => {
+    const { id, name, password, wallet, paymentWallet, mt5Login, mt5Password, mt5Server } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const user = users.find(u => u.id === id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (name) user.name = name;
+    if (password && password !== '••••••••') user.password = password;
+    if (wallet !== undefined) user.wallet = wallet;
+    if (paymentWallet !== undefined) user.paymentWallet = paymentWallet;
+    if (mt5Login !== undefined) user.mt5Login = mt5Login;
+    if (mt5Password !== undefined && mt5Password !== '••••••••') user.mt5Password = mt5Password;
+    if (mt5Server !== undefined) user.mt5Server = mt5Server;
+
+    saveDB();
+    res.json({ success: true, user });
+  });
+
   app.post('/api/register', (req, res) => {
     const { name, email, password, referredBy } = req.body;
     
@@ -1239,8 +1263,8 @@ async function startServer() {
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
-        // STOP LOSS EM LOTE (CESTA) DE 0.15% (Baseado na 1ª Ordem)
-        const basketSlThreshold = 0.0015;
+        // STOP LOSS EM LOTE (CESTA) DE 70% (Baseado na 1ª Ordem)
+        const basketSlThreshold = 0.7000;
         let triggeredBasketSL = false;
 
         if (buyCount > 0) {
@@ -1300,18 +1324,30 @@ async function startServer() {
         console.log(`[DEBUG] config.minScore=${config.minScore} state.symbolTrend=${state.symbolTrend[symbol]} pendingOrders.has=${state.pendingOrders.has(symbol)}`);
         if (isAdmin) { console.log(`[DEBUG-ADMIN] score: ${score}, config.minScore: ${config.minScore}, isTradingTime: ${isTradingTime()}, botRunning: ${state.botRunning}, systemBlocked: ${state.systemBlocked}`); }
         
-        // 0.5. TRAVA LOCOMOTIVA (Filtro Anti-Tendência Forte)
-        if (score >= 80 && direction) {
-          if (!state.strongTrendUntil || Date.now() > state.strongTrendUntil || state.strongTrend !== direction) {
-            state.strongTrend = direction;
-            state.strongTrendUntil = Date.now() + 30 * 60 * 1000; // 30 minutos
-            addUserLog(uId, `🚂 [TENDÊNCIA EXTREMA] Score ${score.toFixed(0)} detectado para ${direction}. Operações contrárias bloqueadas por 30 min!`);
+        // 0.5. FILTRO DIRECIONAL RIGOROSO (Sincronia Total de Tendência)
+        if (!state.symbolTrend) state.symbolTrend = {};
+
+        // Atualiza a tendência do mercado se vier um sinal forte de entrada (Score >= 60)
+        if (direction && score >= 60 && !isDCATrade) {
+          if (state.symbolTrend[symbol] !== direction) {
+            state.symbolTrend[symbol] = direction;
+            const blockedSide = direction === 'BUY' ? 'SELL' : 'BUY';
+            addUserLog(uId, `🔄 [MUDANÇA DE TENDÊNCIA] Mercado virou para ${direction}. Desligando entradas e DCAs de ${blockedSide} imediatamente!`);
           }
         }
 
-        const blockedDirection = (state.strongTrendUntil && Date.now() < state.strongTrendUntil) 
-                                 ? (state.strongTrend === 'BUY' ? 'SELL' : 'BUY') 
-                                 : null;
+        const currentMarketTrend = state.symbolTrend[symbol];
+        // A trava direcional inicial bloqueia o lado oposto da tendência geral
+        let blockedDirection = currentMarketTrend === 'BUY' ? 'SELL' : (currentMarketTrend === 'SELL' ? 'BUY' : null);
+
+        // 🚨 TRAVA DE SEGURANÇA (A PEDIDO DO USUÁRIO) 🚨
+        // Desliga a COMPRA imediatamente se o mercado começar a CAIR (momentum de queda)
+        // Desliga a VENDA imediatamente se o mercado começar a SUBIR (momentum de alta)
+        if (momDir === 'SELL') {
+            blockedDirection = 'BUY';
+        } else if (momDir === 'BUY') {
+            blockedDirection = 'SELL';
+        }
 
         // 1. VERIFICAÇÃO DE DCA INDEPENDENTE POR DIREÇÃO
         let dcaDirection = null;
@@ -1461,11 +1497,16 @@ async function startServer() {
     state.dailyProfit = state.equity > 0 ? (state.equity - startingDailyBalance) : 0;
     
     const dailyLossLimit = Number((startingDailyBalance * 0.30).toFixed(2));
-    // SEMPRE força a meta para 2% do saldo base, sem exceção
-    const targetPercent = 0.02;
+    
+    // Verifica se é Bot Livre (Licença LIVRE ou JCneto)
+    const userLicense = licenses.find(l => l.userId === uId && l.status === 'ACTIVE');
+    const isBotLivre = isJCneto || (userLicense && userLicense.type === 'LIVRE');
+    
+    // Bot Livre tem meta de 10%, os demais 2%
+    const targetPercent = isBotLivre ? 0.10 : 0.02;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
-    if (!state.systemBlocked && !isJCneto) {
+    if (!state.systemBlocked) {
        const hitProfit = state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget;
        const hitLoss = dailyLossLimit > 0 && state.dailyProfit <= -dailyLossLimit;
 

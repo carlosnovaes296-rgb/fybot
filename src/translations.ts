@@ -124,8 +124,8 @@ export const translations = {
       card3Desc: "Maximum performance for professional capital.",
       card3Features: ["90 Days License"],
       card4Title: "Partnership License",
-      card4Desc: "Activate 10 Institutional Pro licenses on your first level and become a Leader with LIFETIME access.",
-      card4Features: [],
+      card4Desc: "Activate 5 Institutional Pro licenses on your first level and become a Leader.",
+      card4Features: ["Lifetime Access"],
       period: "DAYS"
     },
     installation: {
@@ -299,8 +299,8 @@ export const translations = {
       card3Desc: "Máxima performance para capital profissional.",
       card3Features: ["Licença de 90 dias"],
       card4Title: "Licença Parceria",
-      card4Desc: "Ativar 10 licenças Institucional Pro em seu primeiro nível e torne-se Líder com acesso VITALÍCIO.",
-      card4Features: [],
+      card4Desc: "Ativar 5 licenças Institucional Pro em seu primeiro nível e torne-se Líder.",
+      card4Features: ["Acesso Vitalício"],
       period: "DIAS"
     },
     installation: {
@@ -474,8 +474,8 @@ export const translations = {
       card3Desc: "Máximo rendimiento para capital profesional.",
       card3Features: ["Licencia de 90 días"],
       card4Title: "Licencia Asociación",
-      card4Desc: "Active 10 licencias Institucional Pro en su primer nivel y conviértase en Líder con acceso VITALICIO.",
-      card4Features: [],
+      card4Desc: "Active 5 licencias Institucional Pro en su primer nivel y conviértase en Líder.",
+      card4Features: ["Acceso Vitalicio"],
       period: "DÍAS"
     },
     installation: {

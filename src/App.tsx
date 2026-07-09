@@ -2302,7 +2302,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1600px] mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
@@ -2334,6 +2334,7 @@ export default function App() {
                   <PricingCard
                     title=""
                     price={500}
+                    priceSubtext="Licença Livre"
                     desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Bot livre 24 horas'}
                     descSize="text-base font-bold"
                     descColor="text-emerald-400"
@@ -2341,6 +2342,20 @@ export default function App() {
                     language={language}
                     image="/awake_bot.png"
                     onBuy={() => setShowPaymentModal({ title: "MEU BOT", price: 500 })}
+                  />
+                  <PricingCard
+                    isVip
+                    title="LÍDER VIP"
+                    titleColor="text-[#f59e0b] uppercase tracking-wider font-black"
+                    price={0}
+                    customPriceText="VITALÍCIO"
+                    desc={t.plans.card4Desc}
+                    descSize="text-sm font-medium leading-relaxed"
+                    descColor="text-white/80"
+                    features={t.plans.card4Features}
+                    language={language}
+                    image="/fybot-logo.png.png"
+                    onBuy={() => setShowPaymentModal({ title: "LÍDER VIP", price: 1000 })}
                   />
                 </div>
 
