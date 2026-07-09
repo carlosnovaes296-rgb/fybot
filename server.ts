@@ -134,7 +134,7 @@ async function startServer() {
     riskLevel: 'MEDIUM',
     lotMultiplier: 0.001,
     minScore: 10,
-    symbols: ["XAUUSDm"],
+    symbols: ["XAUUSD"],
     strategyWeights: {
       smc: 0.6,
       momentum: 0.1,
@@ -1319,7 +1319,7 @@ async function startServer() {
           0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010
         ];
 
-        const maxOrdersLimit = 6;
+        const maxOrdersLimit = 2;
         // Checa se precisa fazer DCA de Compra
         if (buyCount > 0 && buyCount < maxOrdersLimit && blockedDirection !== 'BUY') {
           const firstBuy = buyTrades[0];
@@ -1408,7 +1408,7 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 100 || openCount >= 6 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
 
         if (direction) {
           if (direction === blockedDirection) {
@@ -1465,7 +1465,7 @@ async function startServer() {
     const targetPercent = 0.02;
     state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
 
-    if (!state.systemBlocked) {
+    if (!state.systemBlocked && !isJCneto) {
        const hitProfit = state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget;
        const hitLoss = dailyLossLimit > 0 && state.dailyProfit <= -dailyLossLimit;
 
