@@ -1395,7 +1395,7 @@ async function startServer() {
           if (direction === 'SELL' && sellCount > 0) return;
         }
 
-        // 2. TENDÊNCIA E HEDGE (Permitir abrir oposto se o sinal for forte)
+        // 2. TENDÊNCIA E PROTEÇÃO CONTRA HEDGE (Seguidor de Tendência Estrito)
         if (!isDCATrade) {
           if (score < config.minScore) {
             return; // Bloqueia se o sinal for fraco
@@ -1404,37 +1404,10 @@ async function startServer() {
           if (!state.symbolTrend) state.symbolTrend = {};
           const currentTrend = state.symbolTrend[symbol];
           
+          // Se houver sinal contrário à tendência atual, bloqueia 100% (Sem Hedge)
           if (direction && currentTrend && direction !== currentTrend) {
-            if (score >= 60) {
-              // VERIFICAÇÃO DE DISTÂNCIA DO HEDGE (0.03%)
-              const minHedgeDistance = 0.0003; // 0.03%
-              let canHedge = true;
-
-              if (direction === 'BUY' && sellCount > 0) {
-                // Distância da última VENDA
-                const lastSell = sellTrades[sellCount - 1];
-                const distancePct = Math.abs(price - lastSell.openPrice) / lastSell.openPrice;
-                if (distancePct < minHedgeDistance) {
-                  canHedge = false;
-                  addUserLog(uId, `⏳ [HEDGE BLOQUEADO] Sinal de BUY ignorado. Distância da última SELL é de ${(distancePct * 100).toFixed(3)}% (Mínimo: 0.03%)`);
-                }
-              } else if (direction === 'SELL' && buyCount > 0) {
-                // Distância da última COMPRA
-                const lastBuy = buyTrades[buyCount - 1];
-                const distancePct = Math.abs(price - lastBuy.openPrice) / lastBuy.openPrice;
-                if (distancePct < minHedgeDistance) {
-                  canHedge = false;
-                  addUserLog(uId, `⏳ [HEDGE BLOQUEADO] Sinal de SELL ignorado. Distância da última BUY é de ${(distancePct * 100).toFixed(3)}% (Mínimo: 0.03%)`);
-                }
-              }
-
-              if (!canHedge) return;
-
-              state.symbolTrend[symbol] = direction;
-              addUserLog(uId, `🔄 [HEDGE/REVERSÃO] Forte sinal de ${direction} em ${symbol} (Score: ${score})! Abrindo operação oposta.`);
-            } else {
-              return; // Bloqueia sinais fracos no sentido oposto
-            }
+            addUserLog(uId, `⏳ [SINAL IGNORADO] Tentativa de sinal contra a tendência. Mercado está em ${currentTrend}. Sem permissão para Hedge.`);
+            return;
           } else if (!currentTrend) {
             state.symbolTrend[symbol] = direction;
             addUserLog(uId, `🔄 Tendência inicial definida para ${direction} em ${symbol}`);
