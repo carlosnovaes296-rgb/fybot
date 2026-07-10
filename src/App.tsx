@@ -994,112 +994,114 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-start lg:items-center lg:pl-20 xl:pl-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
-        {/* Floating Language Switcher for Login Screen */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-[#050508]/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+      <div className="min-h-screen bg-[#0f1522] flex flex-col items-center justify-center lg:items-start lg:pl-24 xl:pl-40 p-4 font-sans relative overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="/fybot_neon_dubai.png.png"
+            alt="Fybot Dubai Background"
+            className="w-full h-full object-cover object-center pointer-events-none"
+          />
+        </div>
+
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <button
             onClick={() => setLanguage('en')}
-            title="English"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇺🇸
           </button>
           <button
             onClick={() => setLanguage('pt')}
-            title="Português"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇧🇷
           </button>
           <button
             onClick={() => setLanguage('es')}
-            title="Español"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇪🇸
           </button>
         </div>
 
-        {/* Background Image with Full Realism and Visibility */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          <img
-            src="/fybot_neon_small.png"
-            alt="Futuristic Robot Background"
-            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[10vh] md:mt-[25vh] lg:mt-[55vh] mx-4 sm:mx-0 transform scale-100 md:scale-90 lg:scale-[0.7] origin-top"
+          className="w-full max-w-[420px] bg-[#181f2f] border border-white/5 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10"
         >
-          <div className="text-center space-y-2 pb-1">
-            <p className="text-white text-base font-extrabold tracking-wide [text-shadow:_0_2px_6px_rgba(0,0,0,1)]">{isSignUp ? (language === 'en' ? 'Create your professional account' : language === 'pt' ? 'Crie sua conta profissional' : 'Crea tu cuenta profesional') : t.login.subTitle}</p>
+          <div className="space-y-1 pb-6">
+            {isSignUp && (
+              <h1 className="text-[22px] font-bold text-white">
+                {language === 'en' ? 'Create Account' : language === 'es' ? 'Crear Cuenta' : 'Criar Conta'}
+              </h1>
+            )}
+            <div className="inline-block px-2 py-0.5 mt-1">
+              <p className="text-[20px] font-medium text-[#FCD535]">
+                {isSignUp ? (language === 'en' ? 'Fill the details below' : 'Preencha os dados abaixo') : (language === 'en' ? 'Access your account' : 'Acesse sua conta')}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-4">
             {isSignUp && (
               <>
-                <div className="space-y-2">
-                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.name}</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                    {language === 'en' ? 'Name' : 'Nome'}
+                  </label>
                   <input
                     type="text"
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
                     placeholder="Seu nome"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
                   />
                 </div>
-                <div className="space-y-2 animate-fadeIn">
-                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">
-                    {language === 'en' ? 'Referral Code (Optional)' : language === 'es' ? 'Código de Referido (Opcional)' : 'Código de Indicação (Opcional)'}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                    {language === 'en' ? 'Referral Code' : 'Código de Indicação'}
                   </label>
                   <input
                     type="text"
                     value={referredByCode}
                     onChange={(e) => setReferredByCode(e.target.value)}
                     placeholder="Ex: CARLOS296"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/40 uppercase font-mono"
+                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20 uppercase"
                   />
                 </div>
               </>
             )}
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.email}</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                {language === 'en' ? 'E-mail' : 'E-mail'}
+              </label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.password}</label>
-              <div className="relative group">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                {language === 'en' ? 'Password' : 'Senha'}
+              </label>
+              <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-6 py-6 sm:py-7 text-lg sm:text-xl font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
+                  placeholder="••••••••"
+                  className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all pr-12 placeholder-white/20 tracking-widest"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 hover:text-black transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
@@ -1108,25 +1110,63 @@ export default function App() {
           <button
             onClick={isSignUp ? handleRegister : handleLogin}
             disabled={loading}
-            className="w-full py-5 sm:py-6 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-lg transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
+            className="w-full mt-6 py-3 bg-[#FCD535] text-black hover:bg-[#F3BA2F] rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20"
           >
-            {loading ? <RefreshCw className="animate-spin mx-auto" size={20} /> : (isSignUp ? t.login.registerButton : t.login.button)}
+            {loading ? <RefreshCw className="animate-spin" size={18} /> : (isSignUp ? (language === 'en' ? 'Create Account' : 'Criar Conta') : (language === 'en' ? 'Log in' : 'Entrar'))}
+            {!loading && <ArrowRight size={16} />}
           </button>
 
-          <div className="text-center space-y-3 sm:space-y-4 pt-1">
+          {!isSignUp && (
+            <>
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px bg-white/5 flex-1" />
+                <span className="text-[11px] text-white/30">{language === 'en' ? 'or continue with' : 'ou continue com'}</span>
+                <div className="h-px bg-white/5 flex-1" />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
+                  className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[18px] font-bold flex items-center justify-center gap-2"
+                >
+                  <LogOut size={20} className="rotate-180" />
+                  {language === 'en' ? 'Login Deriv' : 'Entrar Deriv'}
+                </button>
+              <button
+                onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
+                className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[18px] font-bold flex items-center justify-center gap-2"
+              >
+                <Users size={20} />
+                {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
+              </button>
+            </div>
+        </>
+          )}
+
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
+          <button
+            onClick={() => setIsSignUp(!isSignUp)}
+            className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
+          >
+            {isSignUp ? (language === 'en' ? 'Log in' : 'Entrar') : (language === 'en' ? 'Create account' : 'Criar conta')}
+          </button>
+          {!isSignUp && (
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full py-4 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-sm rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
+              onClick={() => alert(language === 'en' ? 'Contact support to reset your password.' : 'Entre em contato com o suporte para redefinir sua senha.')}
+              className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
             >
-              {isSignUp ? t.login.haveAccount : t.login.noAccount}{' '}
-              <span className="underline font-black">{isSignUp ? t.login.login : t.login.signUp}</span>
+              {language === 'en' ? 'Forgot password' : 'Esqueci minha senha'}
             </button>
-            <p className="text-[10px] text-white/50 uppercase tracking-widest font-bold [text-shadow:_0_1px_4px_rgba(0,0,0,1)]">
-              {t.login.authorized}
-            </p>
-          </div>
-        </motion.div>
-      </div>
+          )}
+        </div>
+
+        <div className="mt-6 text-center">
+          <p className="text-[20px] text-white/50 font-medium">
+            Fybot © 2026
+          </p>
+        </div>
+      </motion.div>
+      </div >
     );
   }
 

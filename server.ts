@@ -1263,8 +1263,8 @@ async function startServer() {
         const openCount = symbolOpenTrades.length;
         let isDCATrade = false;
 
-        // STOP LOSS EM LOTE (CESTA) DE 70% (Baseado na 1ª Ordem)
-        const basketSlThreshold = 0.7000;
+        // STOP LOSS EM LOTE (CESTA) DE 5% (Baseado na 1ª Ordem)
+        const basketSlThreshold = 0.0500;
         let triggeredBasketSL = false;
 
         if (buyCount > 0) {
@@ -1310,7 +1310,7 @@ async function startServer() {
               addUserLog(uId, `🎯 [TAKE PROFIT] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
               if (!state.pendingCommands) state.pendingCommands = [];
               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
-            } else if (profitPct <= -0.7000) {
+            } else if (profitPct <= -0.0500) {
               // Stop Loss imediato
               t.status = 'CLOSED';
               addUserLog(uId, `🛑 [STOP LOSS] Ordem ${t.id} (${symbol}) fechada. Variação: ${(profitPct * 100).toFixed(3)}%`);
@@ -1327,8 +1327,8 @@ async function startServer() {
         // 0.5. FILTRO DIRECIONAL RIGOROSO (Sincronia Total de Tendência)
         if (!state.symbolTrend) state.symbolTrend = {};
 
-        // Atualiza a tendência do mercado se vier um sinal forte de entrada (Score >= 60)
-        if (direction && score >= 60 && !isDCATrade) {
+        // Atualiza a tendência do mercado IMEDIATAMENTE (sem esperar score 60)
+        if (direction && !isDCATrade) {
           if (state.symbolTrend[symbol] !== direction) {
             state.symbolTrend[symbol] = direction;
             const blockedSide = direction === 'BUY' ? 'SELL' : 'BUY';
