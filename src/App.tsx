@@ -393,9 +393,7 @@ export default function App() {
     password: '••••••••',
     wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
     paymentWallet: '',
-    mt5Login: '',
-    mt5Password: '',
-    mt5Server: '',
+
     derivToken: '',
     derivTokenDemo: '',
     derivTokenReal: '',
@@ -540,44 +538,18 @@ export default function App() {
             currency: auth.currency || 'USD'
           }));
           
-          // Se tiver login MT5, pede o saldo do MT5 e começa o polling
-          if (currentUser?.mt5Login) {
-            ws.send(JSON.stringify({ mt5_login_list: 1 }));
-            pollInterval = setInterval(() => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ mt5_login_list: 1 }));
-              }
-            }, 10000); // atualiza saldo MT5 a cada 10 segundos
-          } else {
-            // Se não, subscreve ao saldo genérico ao vivo
-            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-          }
+          // Subscreve ao saldo genérico ao vivo
+          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         }
         
         // Atualização de saldo genérico (Opções)
-        if (data.msg_type === 'balance' && !currentUser?.mt5Login) {
+        if (data.msg_type === 'balance') {
           if (data.balance && data.balance.balance !== undefined) {
             setStats(prev => ({
               ...prev,
-              balance: data.balance.balance
+              balance: data.balance.balance,
+              equity: data.balance.balance
             }));
-          }
-        }
-
-        // Atualização de saldo MT5
-        if (data.msg_type === 'mt5_login_list') {
-          const mt5Accounts = data.mt5_login_list;
-          if (mt5Accounts && mt5Accounts.length > 0 && currentUser?.mt5Login) {
-            let targetAccount = mt5Accounts.find((acc: any) => String(acc.login) === String(currentUser.mt5Login).trim());
-            
-            if (targetAccount) {
-              setStats(prev => ({
-                ...prev,
-                balance: targetAccount.balance,
-                equity: targetAccount.equity !== undefined ? targetAccount.equity : targetAccount.balance,
-                accountType: targetAccount.account_type === 'demo' ? 'DEMO' : 'REAL'
-              }));
-            }
           }
         }
       };
@@ -607,9 +579,7 @@ export default function App() {
         password: '••••••••',
         wallet: currentUser.wallet || '',
         paymentWallet: currentUser.paymentWallet || '',
-        mt5Login: currentUser.mt5Login || '',
-        mt5Password: currentUser.mt5Password || '',
-        mt5Server: currentUser.mt5Server || '',
+
         derivToken: currentUser.derivToken || '',
         derivTokenDemo: currentUser.derivTokenDemo || '',
         derivTokenReal: currentUser.derivTokenReal || '',
@@ -919,8 +889,24 @@ export default function App() {
       const data = await res.json();
       console.log("Received profile response:", data);
       if (data.success) {
-        setCurrentUser(data.user);
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        let updatedUser = { ...currentUser, ...data.user };
+        
+        // Se houver troca de conta manual ou tokens novos, garantir que o derivToken atual aponte pro ativo
+        if (updatedUser.activeAccountType === 'REAL' && profileForm.derivTokenReal) {
+          updatedUser.derivToken = profileForm.derivTokenReal;
+        } else if (updatedUser.activeAccountType === 'DEMO' && profileForm.derivTokenDemo) {
+          updatedUser.derivToken = profileForm.derivTokenDemo;
+        }
+
+        // Fazer uma chamada extra para salvar o derivToken correto no backend
+        await fetch('/api/user/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: updatedUser.id, derivToken: updatedUser.derivToken })
+        });
+        
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
         alert(language === 'en' ? "Profile updated successfully!" : language === 'es' ? "¡Perfil actualizado!" : "Perfil atualizado com sucesso!");
       } else {
         alert(data.error || "Update failed");
@@ -939,10 +925,10 @@ export default function App() {
       setStats(prev => ({
         ...prev,
         ...data,
-        // Atualiza sempre com os dados do backend para evitar ficar preso no valor inicial (10000)
-        balance: data.balance,
-        equity: data.equity,
-        accountType: data.accountType
+        // Usa sempre o saldo do websocket (Deriv API), pois o backend não recebe mais do MT5
+        balance: prev.balance,
+        equity: prev.equity,
+        accountType: currentUser?.activeAccountType || 'DEMO'
       }));
       if (data.logs) setLogs(data.logs);
       if (data.trades) setTrades(data.trades);
@@ -1661,7 +1647,6 @@ export default function App() {
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
               <div className={`w-2 h-2 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
               <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
-            </div>
             <span className="hidden md:block text-white/20">|</span>
             <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden">
               <button 
@@ -3685,7 +3670,7 @@ export default function App() {
                               type="password"
                               value={profileForm.derivTokenDemo || ''}
                               onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                              placeholder="Ex: VRTC..."
+                              placeholder="Ex: pat_..."
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-yellow-500/80"
                             />
                           </div>
@@ -3695,7 +3680,7 @@ export default function App() {
                               type="password"
                               value={profileForm.derivTokenReal || ''}
                               onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
-                              placeholder="Ex: CR..."
+                              placeholder="Ex: pat_..."
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
                             />
                           </div>
@@ -4001,160 +3986,4 @@ export default function App() {
   );
 }
 
-/*
-function NavItem({ icon, label, active, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-        active 
-          ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/10 font-bold' 
-          : 'text-white/40 hover:bg-white/5 hover:text-yellow-500 active:text-yellow-500'
-      }`}
-    >
-      <span className={`${active ? 'text-black' : 'group-hover:scale-110 group-hover:text-yellow-500'} transition-transform duration-200`}>
-        {icon}
-      </span>
-      <span className="hidden md:block text-sm">{label}</span>
-    </button>
-  );
-}
 
-function StatCard({ label, value, delta, icon, valueClassName }: { label: string, value: string | number, delta: string, icon: any, valueClassName?: string }) {
-  return (
-    <motion.div 
-      whileHover={{ y: -4 }}
-      className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 transition-all border-hover:border-white/10 shadow-2xl"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-          {icon}
-        </div>
-        <div className="px-2 py-1 bg-white/10 border border-white/20 rounded-md">
-          <span className="text-[10px] font-black text-white uppercase tracking-tighter">{delta}</span>
-        </div>
-      </div>
-      <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1">{label}</p>
-      <h3 className={`text-2xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>{value}</h3>
-    </motion.div>
-  );
-}
-
-function StrategyGauge({ label, percentage, color }: { label: string, percentage: number, color: string }) {
-  return (
-    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 min-w-0">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 truncate" title={label}>{label}</span>
-        <span className="text-xs font-mono font-bold shrink-0" style={{ color }}>{percentage}%</span>
-      </div>
-      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-        <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function AffiliateLevel({ level, percentage, label, color, language }: { level: number, percentage: number, label: string, color: string, language: Language }) {
-  const glowClass = level === 1 ? "shadow-[0_0_25px_rgba(59,130,246,0.5)]" : level === 2 ? "shadow-[0_0_20px_rgba(96,165,250,0.4)]" : "shadow-[0_0_15px_rgba(168,85,247,0.3)]";
-  
-  return (
-    <div className="group bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:border-white/10 transition-all">
-      <div className="flex items-center gap-6">
-        <div className={`w-12 h-12 rounded-2xl ${color} ${glowClass} flex items-center justify-center text-black font-black text-lg`}>
-          {level}
-        </div>
-        <div>
-          <p className="text-xs font-bold text-white/40 uppercase tracking-widest">{label}</p>
-          <p className="text-xl font-bold">{language === 'en' ? `Level ${level}` : language === 'es' ? `Nivel ${level}` : `Nível ${level}`}</p>
-        </div>
-      </div>
-      <div className="text-right">
-        <span className="text-3xl font-black bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent">{percentage}%</span>
-      </div>
-    </div>
-  );
-}
-
-function Step({ number, title, desc }: { number: string, title: string, desc: string }) {
-  return (
-    <div className="flex gap-4">
-      <span className="text-blue-500 font-mono font-bold">{number}</span>
-      <div>
-        <p className="font-bold text-sm">{title}</p>
-        <p className="text-xs text-white/40 leading-relaxed mt-1">{desc}</p>
-      </div>
-    </div>
-  );
-}
-
-function BenefitCard({ title, desc, icon }: { title: string, desc: string, icon: any }) {
-  return (
-    <div className="bg-[#0f0f12] border border-white/5 p-8 rounded-[32px] hover:bg-[#141418] transition-colors border-hover:border-white/10">
-      <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mb-6">
-        {icon}
-      </div>
-      <h3 className="font-bold mb-2">{title}</h3>
-      <p className="text-xs text-white/40 leading-relaxed">{desc}</p>
-    </div>
-  );
-
-
-
-
-function WeightControl({ label, value, color, max = 100, onChange }: { label: string, value: number, color: string, max?: number, onChange?: (val: number) => void }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest pl-1">
-        <span className="text-white/40">{label}</span>
-        <span style={{ color }}>{Math.round(value)}%</span>
-      </div>
-      <div className="relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-        <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: `${(value / max) * 100}%` }}
-          className="absolute left-0 top-0 h-full rounded-full pointer-events-none"
-          style={{ backgroundColor: color }}
-        />
-        {onChange && (
-          <input 
-            type="range" 
-            min="0" 
-            max={max} 
-            value={value} 
-            onChange={(e) => onChange(parseFloat(e.target.value))} 
-            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" 
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StrategyMetric({ label, value, color }: { label: string, value: string, color: string }) {
-  return (
-    <div className="flex justify-between items-center text-xs">
-      <span className="text-white/40">{label}</span>
-      <span className={`font-bold ${color}`}>{value}</span>
-    </div>
-  );
-}
-
-function BenefitItem({ title, desc, icon }: { title: string, desc: string, icon: any }) {
-  return (
-    <div className="flex gap-4">
-      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div>
-        <p className="font-bold text-sm">{title}</p>
-        <p className="text-[11px] text-white/40 leading-relaxed mt-1">{desc}</p>
-      </div>
-    </div>
-  );
-}
-*/
