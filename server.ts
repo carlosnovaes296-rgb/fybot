@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { exec } from 'child_process';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
+import derivRouter from './backend/routes/deriv.ts';
 dotenv.config();
 
 let mysqlPool: mysql.Pool | null = null;
@@ -51,6 +52,8 @@ async function startServer() {
     }
     next();
   });
+
+  app.use('/api/deriv', derivRouter);
 
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
@@ -1020,7 +1023,7 @@ async function startServer() {
   });
 
   app.post('/api/user/profile', (req, res) => {
-    const { id, name, password, wallet, paymentWallet, mt5Login, mt5Password, mt5Server } = req.body;
+    const { id, name, password, wallet, paymentWallet, mt5Login, mt5Password, mt5Server, derivToken, derivTokenDemo, derivTokenReal, activeAccountType } = req.body;
     
     if (!id) {
       return res.status(400).json({ error: 'User ID is required' });
@@ -1038,6 +1041,10 @@ async function startServer() {
     if (mt5Login !== undefined) user.mt5Login = mt5Login;
     if (mt5Password !== undefined && mt5Password !== '••••••••') user.mt5Password = mt5Password;
     if (mt5Server !== undefined) user.mt5Server = mt5Server;
+    if (derivToken !== undefined) user.derivToken = derivToken;
+    if (derivTokenDemo !== undefined) user.derivTokenDemo = derivTokenDemo;
+    if (derivTokenReal !== undefined) user.derivTokenReal = derivTokenReal;
+    if (activeAccountType !== undefined) user.activeAccountType = activeAccountType;
 
     saveDB();
     res.json({ success: true, user });
@@ -1332,7 +1339,18 @@ async function startServer() {
           if (state.symbolTrend[symbol] !== direction) {
             state.symbolTrend[symbol] = direction;
             const blockedSide = direction === 'BUY' ? 'SELL' : 'BUY';
-            addUserLog(uId, `🔄 [MUDANÇA DE TENDÊNCIA] Mercado virou para ${direction}. Desligando entradas e DCAs de ${blockedSide} imediatamente!`);
+            addUserLog(uId, `🔄 [MUDANÇA DE TENDÊNCIA] Mercado virou para ${direction}. Desligando entradas de ${blockedSide} imediatamente!`);
+            
+            // 🚨 TRAVA DE SEGURANÇA (A PEDIDO DO USUÁRIO) 🚨
+            // Altera diretamente o config global para refletir no painel admin!
+            if (direction === 'BUY') {
+              config.allowBuy = true;
+              config.allowSell = false;
+            } else if (direction === 'SELL') {
+              config.allowBuy = false;
+              config.allowSell = true;
+            }
+            saveDB(); // Salva a alteração para o frontend sincronizar
           }
         }
 
@@ -1340,9 +1358,7 @@ async function startServer() {
         // A trava direcional inicial bloqueia o lado oposto da tendência geral
         let blockedDirection = currentMarketTrend === 'BUY' ? 'SELL' : (currentMarketTrend === 'SELL' ? 'BUY' : null);
 
-        // 🚨 TRAVA DE SEGURANÇA (A PEDIDO DO USUÁRIO) 🚨
-        // Desliga a COMPRA imediatamente se o mercado começar a CAIR (momentum de queda)
-        // Desliga a VENDA imediatamente se o mercado começar a SUBIR (momentum de alta)
+        // A checagem por momDir aqui é redundante se a direção global já muda a configuração, mas mantemos para segurança adicional
         if (momDir === 'SELL') {
             blockedDirection = 'BUY';
         } else if (momDir === 'BUY') {
@@ -1355,7 +1371,7 @@ async function startServer() {
           0, 0.0002, 0.0004, 0.0006, 0.0008, 0.0010
         ];
 
-        const maxOrdersLimit = 2;
+        const maxOrdersLimit = 4;
         // Checa se precisa fazer DCA de Compra
         if (buyCount > 0 && buyCount < maxOrdersLimit && blockedDirection !== 'BUY') {
           const firstBuy = buyTrades[0];
@@ -1417,7 +1433,11 @@ async function startServer() {
         // 3. LIMITES RIGOROSOS (Usa tanto a memória do servidor quanto a realidade da corretora)
         const mt5RealOpenCount = (open_positions && Array.isArray(open_positions)) ? open_positions.length : 0;
         const currentOpenTradesLength = Math.max(state.trades.filter((t: any) => t.status === 'OPEN').length, mt5RealOpenCount);
-        if (currentOpenTradesLength >= 100 || openCount >= 2 || state.pendingOrders.has(symbol)) return;
+        if (currentOpenTradesLength >= 100 || state.pendingOrders.has(symbol)) return;
+
+        // Aplica o limite direcional maximo de 4 ordens (primarias + DCAs)
+        if (direction === 'BUY' && buyCount >= 4) return;
+        if (direction === 'SELL' && sellCount >= 4) return;
 
         if (direction) {
           if (direction === blockedDirection) {
@@ -1429,7 +1449,7 @@ async function startServer() {
           const lot = 0.01;
           state.pendingOrders.add(symbol);
 
-          const sl_pct = 0.7000; // 70.00% (Proteção de catástrofe, SL real é na cesta)
+          const sl_pct = 0.0500; // 5.00% (Proteção de catástrofe MT5)
           const tp_pct = 0.0002;
           let sl_price = 0, tp_price = 0;
           if (direction === 'BUY') {

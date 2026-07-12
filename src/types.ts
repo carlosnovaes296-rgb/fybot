@@ -10,6 +10,7 @@ export interface User {
   mt5Login?: string;
   mt5Password?: string;
   mt5Server?: string;
+  derivToken?: string;
 }
 
 export interface ReferralEarning {
@@ -58,6 +59,8 @@ export interface Stats {
   botRunning: boolean;
   balance: number;
   equity: number;
+  accountType?: 'DEMO' | 'REAL';
+  currency?: string;
   activeTrades: number;
   winrate: string | number;
   pnlHistory: { time: string; balance: number }[];

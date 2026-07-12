@@ -48,6 +48,7 @@ import {
   Copy,
   Menu,
   Crown,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
@@ -87,6 +88,7 @@ import { AffiliateLevel } from './components/AffiliateLevel';
 import { Step } from './components/Step';
 import { BenefitCard, BenefitItem } from './components/BenefitCard';
 import { PricingCard } from './components/PricingCard';
+import { ConnectDeriv } from './components/ConnectDeriv';
 
 
 /*
@@ -282,6 +284,7 @@ export default function App() {
     return localStorage.getItem('isLoggedIn') === 'true';
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showDerivModal, setShowDerivModal] = useState(false);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
@@ -392,7 +395,11 @@ export default function App() {
     paymentWallet: '',
     mt5Login: '',
     mt5Password: '',
-    mt5Server: ''
+    mt5Server: '',
+    derivToken: '',
+    derivTokenDemo: '',
+    derivTokenReal: '',
+    activeAccountType: 'DEMO'
   });
 
   const [targetPaymentWallet, setTargetPaymentWallet] = useState<string>('');
@@ -436,6 +443,163 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const search = window.location.search || window.location.hash;
+    if (search.includes('token1=')) {
+      const params = new URLSearchParams(search.replace('#', '?'));
+      
+      let derivTokenDemo = '';
+      let derivTokenReal = '';
+      let defaultToken = '';
+
+      for (let i = 1; i <= 10; i++) {
+        const acct = params.get(`acct${i}`);
+        const token = params.get(`token${i}`);
+        if (acct && token) {
+          if (!defaultToken) defaultToken = token;
+          if (acct.startsWith('VRTC')) {
+            derivTokenDemo = token;
+          } else {
+            derivTokenReal = token;
+          }
+        }
+      }
+      
+      if (!derivTokenDemo && !derivTokenReal) {
+        defaultToken = params.get('token1') || '';
+      }
+
+      if (defaultToken) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          try {
+            const savedUser = JSON.parse(savedUserStr);
+            fetch('/api/user/profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                id: savedUser.id, 
+                derivTokenDemo: derivTokenDemo || savedUser.derivTokenDemo,
+                derivTokenReal: derivTokenReal || savedUser.derivTokenReal,
+                derivToken: defaultToken 
+              })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                setCurrentUser(data.user);
+                localStorage.setItem('currentUser', JSON.stringify(data.user));
+                alert(language === 'en' ? 'Deriv accounts successfully connected!' : 'Contas Deriv (Real e Demo) conectadas com sucesso! O painel será atualizado.');
+                window.location.reload();
+              } else {
+                alert('Erro ao salvar tokens na conta: ' + data.error);
+              }
+            })
+            .catch(err => alert('Erro na comunicação com o servidor: ' + err.message));
+          } catch (e: any) {
+            alert('Erro ao processar dados locais: ' + e.message);
+          }
+        } else {
+          alert('ATENÇÃO: Você não está logado no Fybot neste navegador! O token da Deriv foi recebido, mas não há conta para salvá-lo. Faça o login primeiro.');
+        }
+      }
+    }
+  }, [language]);
+
+  // WebSocket da Deriv para Saldo em Tempo Real
+  useEffect(() => {
+    if (!currentUser?.derivToken) return;
+
+    let ws: WebSocket;
+    let pollInterval: any;
+    
+    const connectDeriv = () => {
+      // Usando App ID oficial do Fybot Top (Garante a comissão de 3%)
+      ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=33NZMcJPylz5696xl0RMa');
+      
+      ws.onopen = () => {
+        // Autentica assim que conectar
+        ws.send(JSON.stringify({ authorize: currentUser.derivToken }));
+      };
+      
+      ws.onmessage = (msg) => {
+        const data = JSON.parse(msg.data);
+        
+        if (data.msg_type === 'authorize') {
+          if (data.error) {
+            console.error('Deriv Auth Error:', data.error.message);
+            return;
+          }
+          const auth = data.authorize;
+          
+          setStats(prev => ({
+            ...prev,
+            // Seta o balance inicial, mas será sobrescrito se houver MT5
+            balance: auth.balance,
+            accountType: auth.is_virtual ? 'DEMO' : 'REAL',
+            currency: auth.currency || 'USD'
+          }));
+          
+          // Se tiver login MT5, pede o saldo do MT5 e começa o polling
+          if (currentUser?.mt5Login) {
+            ws.send(JSON.stringify({ mt5_login_list: 1 }));
+            pollInterval = setInterval(() => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ mt5_login_list: 1 }));
+              }
+            }, 10000); // atualiza saldo MT5 a cada 10 segundos
+          } else {
+            // Se não, subscreve ao saldo genérico ao vivo
+            ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+          }
+        }
+        
+        // Atualização de saldo genérico (Opções)
+        if (data.msg_type === 'balance' && !currentUser?.mt5Login) {
+          if (data.balance && data.balance.balance !== undefined) {
+            setStats(prev => ({
+              ...prev,
+              balance: data.balance.balance
+            }));
+          }
+        }
+
+        // Atualização de saldo MT5
+        if (data.msg_type === 'mt5_login_list') {
+          const mt5Accounts = data.mt5_login_list;
+          if (mt5Accounts && mt5Accounts.length > 0 && currentUser?.mt5Login) {
+            let targetAccount = mt5Accounts.find((acc: any) => String(acc.login) === String(currentUser.mt5Login).trim());
+            
+            if (targetAccount) {
+              setStats(prev => ({
+                ...prev,
+                balance: targetAccount.balance,
+                equity: targetAccount.equity !== undefined ? targetAccount.equity : targetAccount.balance,
+                accountType: targetAccount.account_type === 'demo' ? 'DEMO' : 'REAL'
+              }));
+            }
+          }
+        }
+      };
+      
+      ws.onclose = () => {
+        if (pollInterval) clearInterval(pollInterval);
+        // Tenta reconectar se a conexão cair
+        setTimeout(connectDeriv, 5000);
+      };
+    };
+
+    connectDeriv();
+
+    return () => {
+      if (ws) {
+        ws.onclose = null; // evita reconexões em loop no desmonte
+        ws.close();
+      }
+    };
+  }, [currentUser?.derivToken, currentUser?.mt5Login]);
+
+  useEffect(() => {
     if (currentUser) {
       setProfileForm({
         name: currentUser.name || '',
@@ -445,7 +609,11 @@ export default function App() {
         paymentWallet: currentUser.paymentWallet || '',
         mt5Login: currentUser.mt5Login || '',
         mt5Password: currentUser.mt5Password || '',
-        mt5Server: currentUser.mt5Server || ''
+        mt5Server: currentUser.mt5Server || '',
+        derivToken: currentUser.derivToken || '',
+        derivTokenDemo: currentUser.derivTokenDemo || '',
+        derivTokenReal: currentUser.derivTokenReal || '',
+        activeAccountType: currentUser.activeAccountType || 'DEMO'
       });
       setWithdrawWallet(currentUser.wallet || '');
       fetchPaymentDestination();
@@ -742,14 +910,17 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
+      console.log("Sending profile update:", { ...profileForm, id: currentUser.id });
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...profileForm, id: currentUser.id })
       });
       const data = await res.json();
+      console.log("Received profile response:", data);
       if (data.success) {
         setCurrentUser(data.user);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
         alert(language === 'en' ? "Profile updated successfully!" : language === 'es' ? "¡Perfil actualizado!" : "Perfil atualizado com sucesso!");
       } else {
         alert(data.error || "Update failed");
@@ -765,7 +936,14 @@ export default function App() {
     if (!isLoggedIn) return;
     const data = await safeFetch(`/api/status?t=${Date.now()}&userId=${currentUser?.id || ''}`);
     if (data) {
-      setStats(data);
+      setStats(prev => ({
+        ...prev,
+        ...data,
+        // Atualiza sempre com os dados do backend para evitar ficar preso no valor inicial (10000)
+        balance: data.balance,
+        equity: data.equity,
+        accountType: data.accountType
+      }));
       if (data.logs) setLogs(data.logs);
       if (data.trades) setTrades(data.trades);
     }
@@ -965,6 +1143,36 @@ export default function App() {
     }
   };
 
+  const toggleAccountType = async () => {
+    if (!currentUser) return;
+    const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
+    const newToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+    
+    setLoading(true);
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: currentUser.id, 
+          activeAccountType: newType,
+          derivToken: newToken || currentUser.derivToken // fallback
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentUser(data.user);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        // Reload to reconnect websocket with new token
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isLoggedIn) return;
 
@@ -1125,13 +1333,6 @@ export default function App() {
               </div>
 
               <div className="flex gap-3">
-                <button
-                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
-                  className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[18px] font-bold flex items-center justify-center gap-2"
-                >
-                  <LogOut size={20} className="rotate-180" />
-                  {language === 'en' ? 'Login Deriv' : 'Entrar Deriv'}
-                </button>
               <button
                 onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
                 className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[18px] font-bold flex items-center justify-center gap-2"
@@ -1218,12 +1419,8 @@ export default function App() {
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
-          <div className="px-4 mt-8 mb-4">
-            <a href="/downloads/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-              <Download size={18} className="animate-bounce" />
-              <span>DOWNLOAD ROBÔ (EA)</span>
-            </a>
+          <div className="px-4 mt-6 mb-2 space-y-3">
+            {/* Download EA button removed */}
           </div>
 
         </nav>
@@ -1450,6 +1647,7 @@ export default function App() {
               </motion.div>
             </div>
           )}
+
         </AnimatePresence>
         {/* Header */}
         <header className="h-20 border-b border-white/5 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
@@ -1465,9 +1663,21 @@ export default function App() {
               <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
             <span className="hidden md:block text-white/20">|</span>
-            <div className="hidden md:flex items-center gap-2">
-              <ShieldCheck size={16} className="text-blue-400/60" />
-              <span className="text-xs font-medium text-white/40">{t.header.broker}</span>
+            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden">
+              <button 
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'text-white/40 hover:text-white'}`}
+              >
+                DEMO
+              </button>
+              <button 
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'REAL'}
+                className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-white/40 hover:text-white'}`}
+              >
+                REAL
+              </button>
             </div>
           </div>
 
@@ -1477,24 +1687,7 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
-            <button
-              onClick={async () => {
-                setLoading(true);
-                try {
-                  await fetchStatus();
-                  await new Promise(r => setTimeout(r, 600)); // Simula tempo de rede
-                  alert(language === 'en'
-                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}`
-                    : `Saldo sincronizado com sucesso via MT5 (Exness)!\nSaldo atual: $${stats.balance.toFixed(2)}`);
-                } catch (e) { console.error(e); }
-                finally { setLoading(false); }
-              }}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-xs md:text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-1 md:mr-2 disabled:opacity-50"
-            >
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-              <span className="hidden md:inline">SYNC MT5</span>
-            </button>
+
             <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
@@ -3466,57 +3659,50 @@ export default function App() {
                       </div>
                     </div>
 
-
-                    {/* MT5 Broker Connection Section */}
                     <div className="pt-2 border-t border-white/5">
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-white">Tokens de API Deriv</span>
+                            <span className="text-xs text-white/40">Gere seus tokens na Deriv e cole abaixo</span>
+                          </div>
+                          <button
+                            onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                            className={`px-4 py-2 text-white rounded-lg font-bold text-xs uppercase transition-all shadow-lg flex items-center gap-2 ${
+                              (currentUser?.derivTokenDemo || currentUser?.derivTokenReal)
+                                ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'
+                                : 'bg-[#ff4444] hover:bg-[#ff5555] shadow-red-500/20'
+                            }`}
+                          >
+                            Gerar Tokens <ExternalLink size={14} />
+                          </button>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-white">Conexão com a Corretora</p>
-                          <p className="text-[10px] text-white/40">Credenciais do MetaTrader 5 para sincronização automática</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA DEMO)</label>
+                            <input
+                              type="password"
+                              value={profileForm.derivTokenDemo || ''}
+                              onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                              placeholder="Ex: VRTC..."
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-yellow-500/80"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA REAL)</label>
+                            <input
+                              type="password"
+                              value={profileForm.derivTokenReal || ''}
+                              onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                              placeholder="Ex: CR..."
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
+                            />
+                          </div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Login MT5</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Login}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
-                            placeholder="Ex: 12345678"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Senha MT5</label>
-                          <input
-                            type="password"
-                            value={profileForm.mt5Password}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
-                            placeholder="••••••••"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Servidor</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Server}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
-                            placeholder="Ex: Exness-MT5Real"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                      </div>
-                      {profileForm.mt5Login && (
-                        <div className="mt-3 flex items-center gap-2 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-2">
-                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                          <span className="text-[11px] text-green-400">Login MT5 configurado: <strong>{profileForm.mt5Login}</strong> — Salve o perfil para aplicar</span>
-                        </div>
-                      )}
                     </div>
+
 
                   </div>
 
@@ -3661,6 +3847,7 @@ export default function App() {
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm focus:border-blue-500 outline-none font-mono text-white"
                           />
                         </div>
+
                       </div>
 
                       <div className="pt-4 flex gap-4">
