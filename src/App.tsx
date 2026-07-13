@@ -392,16 +392,14 @@ export default function App() {
   };
 
   const [profileForm, setProfileForm] = useState({
-    name: 'Carlos Novaes',
-    email: 'carlosnovaes296@gmail.com',
-    password: '••••••••',
-    wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
+    name: currentUser?.name || '',
+    email: currentUser?.email || '',
+    password: '',
+    wallet: currentUser?.wallet || '',
     paymentWallet: '',
 
-    derivToken: '',
-    derivTokenDemo: '',
-    derivTokenReal: '',
-    activeAccountType: 'DEMO'
+    derivToken: currentUser?.derivToken || '',
+    activeAccountType: currentUser?.activeAccountType || 'DEMO'
   });
 
   const [targetPaymentWallet, setTargetPaymentWallet] = useState<string>('');
@@ -516,16 +514,18 @@ export default function App() {
     let pollInterval: any;
     
     const connectDeriv = () => {
-      // Pega o App ID customizado do localStorage ou usa o genérico 1089
-      const appId = localStorage.getItem('customDerivAppId') || '1089';
-      ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${appId}`);
+      // Pega o App ID customizado do localStorage (Deriv agora usa códigos alfanuméricos)
+      let rawAppId = localStorage.getItem('customDerivAppId') || '1089';
+      let appId = rawAppId.trim();
+      if (!appId || appId.length === 0) appId = '1089'; // Fallback seguro
+      
+      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}`);
       derivWsRef.current = ws;
       
       ws.onopen = () => {
         // Autentica assim que conectar, limpando QUALQUER caractere invisível
         const tokenToSend = currentUser.derivToken.replace(/[^a-zA-Z0-9_]/g, '');
         console.log("Enviando token para Deriv:", tokenToSend);
-        alert("🔍 MODO DETETIVE ATIVADO 🔍\n\nO robô está enviando EXATAMENTE este token para a Deriv:\n" + tokenToSend + "\n\nVerifique se este é o token NOVO que você acabou de criar. Se for um token velho, o seu navegador não atualizou o sistema!");
         ws.send(JSON.stringify({ authorize: tokenToSend }));
       };
       
@@ -562,7 +562,17 @@ export default function App() {
           
           // Subscreve ao saldo genérico ao vivo
           ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+          
+          // Mantém a conexão viva enviando ping a cada 30 segundos
+          pollInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ ping: 1 }));
+            }
+          }, 30000);
         }
+        
+        // Trata resposta do ping silenciosamente
+        if (data.msg_type === 'ping') return;
         
         // Atualização de saldo genérico (Opções)
         if (data.msg_type === 'balance') {
@@ -590,10 +600,24 @@ export default function App() {
           }
         }
       };
+
+      ws.onerror = (error: any) => {
+        console.error('Deriv WebSocket Error:', error);
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: "⚠️ ERRO DE CONEXÃO: Falha ao conectar no servidor da Deriv. Verifique seu App ID." })
+        });
+      };
       
-      ws.onclose = () => {
-        if (pollInterval) clearInterval(pollInterval);
-        // Tenta reconectar se a conexão cair
+      ws.onclose = (event) => {
+        console.log('Deriv WebSocket Closed. Code:', event.code, 'Reason:', event.reason);
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: `🛑 CONEXÃO FECHADA pela Deriv (Código: ${event.code}). Tentando reconectar...` })
+        });
+        clearInterval(pollInterval);
         setTimeout(connectDeriv, 5000);
       };
     };
@@ -982,9 +1006,7 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      console.log("Sending profile update:", { ...profileForm, id: currentUser.id });
-      if (profileForm.derivTokenDemo) profileForm.derivTokenDemo = profileForm.derivTokenDemo.trim();
-      if (profileForm.derivTokenReal) profileForm.derivTokenReal = profileForm.derivTokenReal.trim();
+      if (profileForm.derivToken) profileForm.derivToken = profileForm.derivToken.trim();
 
       const res = await fetch('/api/user/profile', {
         method: 'POST',
@@ -1005,14 +1027,8 @@ export default function App() {
       if (data.success) {
         let updatedUser = { ...currentUser, ...data.user };
         
-        // Se houver troca de conta manual ou tokens novos, garantir que o derivToken atual aponte pro ativo
-        const currentType = updatedUser.activeAccountType || 'DEMO';
-        
-        if (currentType === 'REAL' && profileForm.derivTokenReal) {
-          updatedUser.derivToken = profileForm.derivTokenReal;
-        } else if (currentType === 'DEMO' && profileForm.derivTokenDemo) {
-          updatedUser.derivToken = profileForm.derivTokenDemo;
-        }
+        // Atualiza com o único token
+        updatedUser.derivToken = profileForm.derivToken;
 
         // Fazer uma chamada extra para salvar o derivToken correto no backend
         await fetch('/api/user/profile', {
@@ -1772,23 +1788,7 @@ export default function App() {
               <div className={`w-3 h-3 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
               <span className="text-sm font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
-            <span className="hidden md:block text-white/20 mx-2 text-xl font-thin">|</span>
-            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1.5 overflow-hidden shadow-inner">
-              <button 
-                onClick={toggleAccountType}
-                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
-                className={`px-5 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30 hover:text-yellow-400'}`}
-              >
-                DEMO
-              </button>
-              <button 
-                onClick={toggleAccountType}
-                disabled={loading || currentUser?.activeAccountType === 'REAL'}
-                className={`px-5 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30 hover:text-green-400'}`}
-              >
-                REAL
-              </button>
-            </div>
+
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
@@ -3738,30 +3738,18 @@ export default function App() {
                             Gerar Tokens <ExternalLink size={14} />
                           </button>
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="mt-4">
                           <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA DEMO)</label>
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">TOKEN DE API DERIV</label>
                             <input
                               type="password"
-                              value={profileForm.derivTokenDemo || ''}
-                              onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                              placeholder="Ex: pat_..."
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-yellow-500/80"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA REAL)</label>
-                            <input
-                              type="password"
-                              value={profileForm.derivTokenReal || ''}
-                              onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                              value={profileForm.derivToken || ''}
+                              onChange={(e) => setProfileForm(f => ({ ...f, derivToken: e.target.value }))}
                               placeholder="Ex: pat_..."
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
                             />
                           </div>
                         </div>
-                        
                         <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
                           <label className="text-[10px] uppercase font-bold text-blue-400 tracking-widest pl-1">Deriv App ID (Obrigatório para PAT tokens)</label>
                           <input
