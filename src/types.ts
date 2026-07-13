@@ -49,6 +49,8 @@ export interface Trade {
   lot: number;
   type: 'BUY' | 'SELL';
   openPrice: number;
+  sl?: number;
+  tp?: number;
   time: string;
   status: 'OPEN' | 'CLOSED';
   profit?: number;

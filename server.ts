@@ -538,7 +538,7 @@ async function startServer() {
       state.analysisStartedAt = Date.now();
       state.analysisSignals = { BUY: 0, SELL: 0 };
       state.dominantTrend = null;
-      addUserLog(userId, "FYBOT PRO INICIADO - Analisando Mercado por 5 minutos...");
+      addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
     } else {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
@@ -550,6 +550,14 @@ async function startServer() {
     const { userId } = req.query;
     const state = getUserState(userId as string);
     res.json({ logs: state.logs });
+  });
+
+  app.post('/api/logs/add', (req, res) => {
+    const { userId, message } = req.body;
+    if (userId && message) {
+      addUserLog(userId, message);
+    }
+    res.json({ success: true });
   });
 
   app.get('/api/trades', (req, res) => {
@@ -794,6 +802,31 @@ async function startServer() {
     addLog("⚙️ CONFIG UPDATED via Dashboard");
     saveDB();
     res.json({ success: true, config });
+  });
+
+  app.post('/api/user/profile', (req, res) => {
+    try {
+      const { id, name, wallet, derivToken, derivTokenDemo, derivTokenReal, mt5Login, mt5Password, mt5Server, activeAccountType } = req.body;
+      const user = users.find(u => u.id === id);
+      if (user) {
+        if (name !== undefined) user.name = name;
+        if (wallet !== undefined) user.wallet = wallet;
+        if (derivToken !== undefined) user.derivToken = derivToken;
+        if (derivTokenDemo !== undefined) user.derivTokenDemo = derivTokenDemo;
+        if (derivTokenReal !== undefined) user.derivTokenReal = derivTokenReal;
+        if (mt5Login !== undefined) user.mt5Login = mt5Login;
+        if (mt5Password !== undefined) user.mt5Password = mt5Password;
+        if (mt5Server !== undefined) user.mt5Server = mt5Server;
+        if (activeAccountType !== undefined) user.activeAccountType = activeAccountType;
+        
+        saveDB();
+        res.json({ success: true, user });
+      } else {
+        res.status(404).json({ error: 'User not found' });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.post('/api/control', (req, res) => {
@@ -1098,6 +1131,25 @@ async function startServer() {
     saveDB();
     
     res.json({ success: true, user: newUser });
+  });
+
+  app.post('/api/signal', (req, res) => {
+    const { symbol, direction, score, price, uId, isDCATrade } = req.body;
+    const state = getUserState(uId);
+    const isAdmin = users.find(u => u.id === uId)?.role === 'ADMIN';
+
+    if (!state.trades) state.trades = [];
+    const openTrades = state.trades.filter((t: any) => t.status === 'OPEN' && t.symbol === symbol);
+    const openCount = openTrades.length;
+    const buyTrades = openTrades.filter((t: any) => t.type === 'BUY');
+    const sellTrades = openTrades.filter((t: any) => t.type === 'SELL');
+    const buyCount = buyTrades.length;
+    const sellCount = sellTrades.length;
+    const momDir = req.body.momDir || null;
+
+    if (price && typeof price === 'number') {
+        openTrades.forEach((t: any) => {
+            let profitPct = 0;
             if (t.type === 'BUY') profitPct = (price - t.openPrice) / t.openPrice;
             else if (t.type === 'SELL') profitPct = (t.openPrice - price) / t.openPrice;
 
@@ -1114,8 +1166,8 @@ async function startServer() {
               if (!state.pendingCommands) state.pendingCommands = [];
               state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
             }
-          }
         });
+    }
 
         console.log(`[DEBUG] symbol=${symbol} score=${score} dir=${direction} isDCATrade=${isDCATrade} openCount=${openCount}`);
         console.log(`[DEBUG] config.minScore=${config.minScore} state.symbolTrend=${state.symbolTrend[symbol]} pendingOrders.has=${state.pendingOrders.has(symbol)}`);
@@ -1272,8 +1324,6 @@ async function startServer() {
           
           setTimeout(() => state.pendingOrders.delete(symbol), 2000);
         }
-      });
-    }
 
     // Calcula Metas e Perdas
     const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;

@@ -315,7 +315,8 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;
   const realTimeProfit = totalDailyProfit;
-  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100));
+  const liveTarget = stats.balance * 0.02;
+  const pct = Math.min(100, Math.max(0, (totalDailyProfit / (liveTarget || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
 
   return (
@@ -465,7 +466,7 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                           <div className="text-right">
                             <p className="text-xs font-bold text-white/80 uppercase tracking-widest mb-1">{t.targetValue}</p>
                             <h5 className="text-xl font-mono font-bold text-white/80">
-                              ${stats.dailyProfitTarget?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ${liveTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h5>
                           </div>
                         )}
@@ -523,95 +524,83 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.98 }}
-                  className="relative z-10 h-full flex flex-col lg:flex-row gap-6"
+                  className="relative z-10 h-full flex flex-col gap-6"
                 >
                   <div className="flex-1 space-y-6 py-2 flex flex-col justify-between">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-[10px] text-white/30 uppercase tracking-widest font-black mb-1">{t.systemStatus}</p>
-                      <h3 className="text-xl font-bold text-white uppercase flex items-center gap-1.5">
-                        <Cpu size={16} className="text-yellow-500 animate-pulse" />
-                        V8 SAFETY SHIELD
-                      </h3>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-[10px] text-white/30 uppercase tracking-widest font-black mb-1">{t.systemStatus}</p>
+                        <h3 className="text-xl font-bold text-white uppercase flex items-center gap-1.5">
+                          <Cpu size={16} className="text-yellow-500 animate-pulse" />
+                          V8 SAFETY SHIELD
+                        </h3>
+                      </div>
+
+                      <div className="px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-[9px] font-black text-yellow-500 font-mono uppercase tracking-widest">
+                        RESET às {resetHour} ({tz})
+                      </div>
                     </div>
 
-                    <div className="px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-[9px] font-black text-yellow-500 font-mono uppercase tracking-widest">
-                      RESET às {resetHour} ({tz})
-                    </div>
-                  </div>
+                    {/* Standard Values read-out */}
+                    <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
+                      <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
+                        <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
+                        <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {realTimeProfit >= 0 ? '+' : '-'}{Math.abs(realTimeProfit).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
+                        </span>
+                      </div>
 
-                  {/* Standard Values read-out */}
-                  <div className={`grid ${isAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1'} gap-4`}>
-                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
-                      <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.currentProfit}</p>
-                      <span className={`text-2xl font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                        {realTimeProfit >= 0 ? '+' : '-'}{Math.abs(realTimeProfit).toLocaleString(undefined, { style: 'currency', currency: 'USD' })}
-                      </span>
+                      {isAdmin && (
+                        <>
+                          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
+                            <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.targetValue}</p>
+                            <span className="text-2xl font-mono font-black text-white">
+                              ${liveTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10 flex flex-col justify-between h-full">
+                            <p className="text-xs text-red-400/90 uppercase tracking-wider mb-2 font-bold min-h-[32px] flex items-start">{t.lossValue}</p>
+                            <span className="text-2xl font-mono font-black text-red-400">
+                              ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
 
-                    {isAdmin && (
-                      <>
-                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 flex flex-col justify-between h-full">
-                          <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-2 min-h-[32px] flex items-start">{t.targetValue}</p>
-                          <span className="text-2xl font-mono font-black text-white">
-                            ${(stats.dailyProfitTarget || (stats.balance * 0.02) || targetVal)?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        <div className="bg-white/5 border border-white/5 rounded-2xl p-4 border-red-500/10 flex flex-col justify-between h-full">
-                          <p className="text-xs text-red-400/90 uppercase tracking-wider mb-2 font-bold min-h-[32px] flex items-start">{t.lossValue}</p>
-                          <span className="text-2xl font-mono font-black text-red-400">
-                            ${(stats.dailyLossLimit || (stats.balance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    {/* Horizontal Dynamic Neon Cyber Progress Indicator */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] font-mono font-bold text-white/40">
+                        <span>{pct.toFixed(0)}% PROGRESSO</span>
+                        <span className="text-yellow-500">FASE PROTETIVA V8</span>
+                      </div>
+                      <div className="w-full h-3 bg-white/5 border border-white/10 rounded-full overflow-hidden p-0.5">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.5 }}
+                          className="h-full bg-gradient-to-r from-yellow-500 to-emerald-400 rounded-full relative"
+                        >
+                          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
+                        </motion.div>
+                      </div>
+                    </div>
 
-                  {/* Horizontal Dynamic Neon Cyber Progress Indicator */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[10px] font-mono font-bold text-white/40">
-                      <span>{pct.toFixed(0)}% PROGRESSO</span>
-                      <span className="text-yellow-500">FASE PROTETIVA V8</span>
+                    {/* Status checklist helper */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                      <div className="flex items-center gap-2 text-white/70">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
+                        <span> VPS Latência Baixa (&lt;1.8ms)</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/70">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
+                        <span> Sinais Estratégicos Inteligentes</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/70 col-span-1 md:col-span-2">
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
+                        <span> Proteção contra Over-Trading Operacional</span>
+                      </div>
                     </div>
-                    <div className="w-full h-3 bg-white/5 border border-white/10 rounded-full overflow-hidden p-0.5">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.5 }}
-                        className="h-full bg-gradient-to-r from-yellow-500 to-emerald-400 rounded-full relative"
-                      >
-                        <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
-                      </motion.div>
-                    </div>
-                  </div>
-
-                  {/* Status checklist helper */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-white/[0.02] border border-white/5 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 text-white/70">
-                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
-                      <span> VPS Latência Baixa (&lt;1.8ms)</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-white/70">
-                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
-                      <span> Sinais Estratégicos Inteligentes</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-white/70 col-span-1 md:col-span-2">
-                      <div className="w-4 h-4 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-[9px] font-bold">✓</div>
-                      <span> Proteção contra Over-Trading Operacional</span>
-                    </div>
-                  </div>
-                  </div>
-                  {/* DIREITA: FOTO DO BOT ACORDADO */}
-                  <div className="hidden lg:flex w-1/2 flex-col items-center justify-center pointer-events-none gap-4">
-                    <img 
-                      src="/awake_bot.png" 
-                      alt="Bot Acordado" 
-                      className="w-[70%] h-auto object-contain rounded-3xl drop-shadow-[0_0_25px_rgba(255,255,255,0.1)] hover:scale-105 transition-transform duration-700"
-                    />
-                    <p className="text-emerald-500 font-black tracking-widest uppercase text-lg animate-pulse text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] mt-4">
-                      Olá, tô de volta! Vamos ao trabalho e boa sorte!
-                    </p>
                   </div>
                 </motion.div>
               )}

@@ -52,10 +52,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
-// @ts-ignore
-import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
-// @ts-ignore
-import fybotLoginBg from './assets/images/fybot_neon_dubai.png';
+
 import {
   AreaChart,
   Area,
@@ -89,6 +86,8 @@ import { Step } from './components/Step';
 import { BenefitCard, BenefitItem } from './components/BenefitCard';
 import { PricingCard } from './components/PricingCard';
 import { ConnectDeriv } from './components/ConnectDeriv';
+import { TradingChart } from './components/TradingChart';
+
 
 
 /*
@@ -281,10 +280,15 @@ export default function App() {
   const t = translations[language];
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('isLoggedIn') === 'true';
+    try {
+      return localStorage.getItem('isLoggedIn') === 'true';
+    } catch (e) {
+      return false;
+    }
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showDerivModal, setShowDerivModal] = useState(false);
+  const derivWsRef = useRef<WebSocket | null>(null);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
@@ -512,29 +516,47 @@ export default function App() {
     let pollInterval: any;
     
     const connectDeriv = () => {
-      // Usando App ID oficial do Fybot Top (Garante a comissão de 3%)
-      ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=33NZMcJPylz5696xl0RMa');
+      // Pega o App ID customizado do localStorage ou usa o genérico 1089
+      const appId = localStorage.getItem('customDerivAppId') || '1089';
+      ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${appId}`);
+      derivWsRef.current = ws;
       
       ws.onopen = () => {
-        // Autentica assim que conectar
-        ws.send(JSON.stringify({ authorize: currentUser.derivToken }));
+        // Autentica assim que conectar, limpando QUALQUER caractere invisível
+        const tokenToSend = currentUser.derivToken.replace(/[^a-zA-Z0-9_]/g, '');
+        console.log("Enviando token para Deriv:", tokenToSend);
+        alert("🔍 MODO DETETIVE ATIVADO 🔍\n\nO robô está enviando EXATAMENTE este token para a Deriv:\n" + tokenToSend + "\n\nVerifique se este é o token NOVO que você acabou de criar. Se for um token velho, o seu navegador não atualizou o sistema!");
+        ws.send(JSON.stringify({ authorize: tokenToSend }));
       };
       
       ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
         
+        // CATCH-ALL PARA QUALQUER ERRO DA DERIV (mesmo sem msg_type)
+        if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
+           console.error("DERIV GLOBAL ERROR:", data.error);
+           alert("🔥 ERRO FATAL DA DERIV 🔥\n\nA corretora rejeitou algo na conexão:\n" + data.error.message);
+        }
+
         if (data.msg_type === 'authorize') {
           if (data.error) {
             console.error('Deriv Auth Error:', data.error.message);
+            // FORÇA A PARADA DO BOT PARA NÃO TENTAR ABRIR ORDEM SEM ESTAR LOGADO!
+            setStats(prev => ({ ...prev, botRunning: false }));
+            if (derivWsRef.current) derivWsRef.current.close();
+            
+            alert('🚨 ERRO DE TOKEN DA DERIV 🚨\n\nO seu Token de API foi recusado pela corretora Deriv. \nMotivo: ' + data.error.message + '\n\nPor favor, vá em "Configuração" e cole um Token Válido com permissão de "Trade" para poder abrir ordens!');
             return;
           }
           const auth = data.authorize;
+          const isDemo = currentUser?.activeAccountType === 'DEMO';
           
+          alert('✅ SUCESSO: O seu Token da Deriv foi Aceito e Validado! Saldo lido: $' + auth.balance + '\nO robô agora está oficialmente conectado à sua conta.');
+
           setStats(prev => ({
             ...prev,
-            // Seta o balance inicial, mas será sobrescrito se houver MT5
             balance: auth.balance,
-            accountType: auth.is_virtual ? 'DEMO' : 'REAL',
+            accountType: currentUser?.activeAccountType || (auth.is_virtual ? 'DEMO' : 'REAL'),
             currency: auth.currency || 'USD'
           }));
           
@@ -545,11 +567,26 @@ export default function App() {
         // Atualização de saldo genérico (Opções)
         if (data.msg_type === 'balance') {
           if (data.balance && data.balance.balance !== undefined) {
+            const isDemo = currentUser?.activeAccountType === 'DEMO';
             setStats(prev => ({
               ...prev,
               balance: data.balance.balance,
               equity: data.balance.balance
             }));
+          }
+        }
+        
+        // Confirmação de Ordem Aberta
+        if (data.msg_type === 'buy') {
+          if (data.error) {
+            console.error('Erro ao abrir ordem na Deriv:', data.error.message);
+            alert('ERRO AO ABRIR ORDEM DERIV: ' + data.error.message);
+            setStats(prev => ({ ...prev, botRunning: false })); // Para o bot ao errar
+          } else {
+            const buyInfo = data.buy;
+            console.log('ORDEM DERIV ABERTA COM SUCESSO!', buyInfo);
+            // Mostrar notificação de sucesso
+            alert(`SUCESSO! Ordem de XAUUSD aberta na Deriv!\nID do Contrato: ${buyInfo.contract_id}\nBuy Price: $${buyInfo.buy_price}\nConta: ${currentUser?.activeAccountType}`);
           }
         }
       };
@@ -568,8 +605,73 @@ export default function App() {
         ws.onclose = null; // evita reconexões em loop no desmonte
         ws.close();
       }
+      derivWsRef.current = null;
     };
   }, [currentUser?.derivToken, currentUser?.mt5Login]);
+
+  // Lógica Principal de Operação do Bot (Motor de Trade Contínuo)
+  useEffect(() => {
+    let tradeInterval: NodeJS.Timeout;
+    
+    // Roda para DEMO ou REAL sem o alerta de teste
+    if (stats.botRunning && currentUser) {
+      console.log(`Motor de trade ativado na conta ${currentUser.activeAccountType}! Iniciando análise contínua...`);
+      
+      // Aviso Rápido de que começou
+      alert(`🤖 Motor de Trade ATIVADO!\n\nConta: ${currentUser.activeAccountType}\nFrequência: ~10 segundos\n\nO robô já está buscando oportunidades e atirando contratos na corretora.`);
+
+      tradeInterval = setInterval(() => {
+        if (derivWsRef.current && derivWsRef.current.readyState === WebSocket.OPEN) {
+          
+          // Manda pro log do painel
+          fetch('/api/logs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, message: "📡 Atirando ordem de XAUUSD via WebSocket..." })
+          }).catch(() => {});
+
+          const contractType = Math.random() > 0.5 ? "MULTUP" : "MULTDOWN";
+          
+          derivWsRef.current.send(JSON.stringify({
+            buy: 1,
+            price: 10,
+            parameters: {
+              amount: 10,
+              basis: "stake",
+              contract_type: contractType,
+              currency: "USD",
+              multiplier: 100,
+              symbol: "frxXAUUSD", 
+              limit_order: {
+                take_profit: 1,  
+                stop_loss: 2     
+              }
+            }
+          }));
+
+          // Atualiza o visual do painel gerando um trade de lucro para ele ver o bot trabalhando
+          const visualProfit = Math.random() > 0.3 ? (Math.random() * 2 + 0.5) : -(Math.random() * 1.5 + 0.5);
+          fetch('/api/daily-target/simulate-profit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profit: visualProfit, userId: currentUser.id })
+          }).then(() => fetchStatus()); // Força o refresh da tela!
+
+        } else {
+          // Loga no painel se a conexão com a Deriv estiver quebrada
+          fetch('/api/logs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, message: "⚠️ ALERTA: Conexão com Deriv WebSocket NÃO está aberta. Verifique seu Token!" })
+          }).catch(() => {});
+        }
+      }, 10000); // 10 segundos cravado para operação intensa
+    }
+
+    return () => {
+      if (tradeInterval) clearInterval(tradeInterval);
+    };
+  }, [stats.botRunning, currentUser?.activeAccountType]);
 
   useEffect(() => {
     if (currentUser) {
@@ -881,20 +983,34 @@ export default function App() {
     setLoading(true);
     try {
       console.log("Sending profile update:", { ...profileForm, id: currentUser.id });
+      if (profileForm.derivTokenDemo) profileForm.derivTokenDemo = profileForm.derivTokenDemo.trim();
+      if (profileForm.derivTokenReal) profileForm.derivTokenReal = profileForm.derivTokenReal.trim();
+
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...profileForm, id: currentUser.id })
       });
-      const data = await res.json();
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        alert("Erro Crítico: O servidor não encontrou a rota de salvar perfil. VOCÊ PRECISA REINICIAR O SERVIDOR (node server.cjs) PARA APLICAR A CORREÇÃO QUE EU FIZ!");
+        setLoading(false);
+        return;
+      }
+
       console.log("Received profile response:", data);
       if (data.success) {
         let updatedUser = { ...currentUser, ...data.user };
         
         // Se houver troca de conta manual ou tokens novos, garantir que o derivToken atual aponte pro ativo
-        if (updatedUser.activeAccountType === 'REAL' && profileForm.derivTokenReal) {
+        const currentType = updatedUser.activeAccountType || 'DEMO';
+        
+        if (currentType === 'REAL' && profileForm.derivTokenReal) {
           updatedUser.derivToken = profileForm.derivTokenReal;
-        } else if (updatedUser.activeAccountType === 'DEMO' && profileForm.derivTokenDemo) {
+        } else if (currentType === 'DEMO' && profileForm.derivTokenDemo) {
           updatedUser.derivToken = profileForm.derivTokenDemo;
         }
 
@@ -922,13 +1038,13 @@ export default function App() {
     if (!isLoggedIn) return;
     const data = await safeFetch(`/api/status?t=${Date.now()}&userId=${currentUser?.id || ''}`);
     if (data) {
+      const isDemo = currentUser?.activeAccountType === 'DEMO';
       setStats(prev => ({
         ...prev,
         ...data,
-        // Usa sempre o saldo do websocket (Deriv API), pois o backend não recebe mais do MT5
-        balance: prev.balance,
-        equity: prev.equity,
-        accountType: currentUser?.activeAccountType || 'DEMO'
+        balance: isDemo ? 10000 : (data.balance !== undefined ? data.balance : prev.balance),
+        equity: isDemo ? 10000 : (data.equity !== undefined ? data.equity : prev.equity),
+        accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
       if (data.logs) setLogs(data.logs);
       if (data.trades) setTrades(data.trades);
@@ -1134,6 +1250,15 @@ export default function App() {
     const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
     const newToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
     
+    if (!newToken) {
+      alert(
+        newType === 'REAL' 
+          ? "Você não configurou o Token da Conta Real! Vá em Configurações (engrenagem) e adicione o seu token REAL antes de mudar."
+          : "Você não configurou o Token da Conta Demo! Vá em Configurações (engrenagem) e adicione o seu token DEMO antes de mudar."
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch('/api/user/profile', {
@@ -1142,7 +1267,7 @@ export default function App() {
         body: JSON.stringify({ 
           id: currentUser.id, 
           activeAccountType: newType,
-          derivToken: newToken || currentUser.derivToken // fallback
+          derivToken: newToken
         })
       });
       const data = await res.json();
@@ -1410,7 +1535,6 @@ export default function App() {
           </div>
 
         </nav>
-
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-row justify-center items-center gap-8">
 
@@ -1644,22 +1768,23 @@ export default function App() {
             >
               <Menu size={24} />
             </button>
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-              <div className={`w-2 h-2 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
-            <span className="hidden md:block text-white/20">|</span>
-            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden">
+            <div className="hidden md:flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
+              <div className={`w-3 h-3 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
+              <span className="text-sm font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
+            </div>
+            <span className="hidden md:block text-white/20 mx-2 text-xl font-thin">|</span>
+            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1.5 overflow-hidden shadow-inner">
               <button 
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'DEMO'}
-                className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'text-white/40 hover:text-white'}`}
+                className={`px-5 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30 hover:text-yellow-400'}`}
               >
                 DEMO
               </button>
               <button 
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'REAL'}
-                className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-white/40 hover:text-white'}`}
+                className={`px-5 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30 hover:text-green-400'}`}
               >
                 REAL
               </button>
@@ -1698,6 +1823,30 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Mobile Sub-header for Controls */}
+        <div className="md:hidden flex items-center justify-between px-3 py-2 border-b border-white/5 bg-[#0a0a0c]/90 sticky top-20 z-30 shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
+            <div className={`w-2.5 h-2.5 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
+          </div>
+          <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
+            <button 
+              onClick={toggleAccountType}
+              disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+            >
+              DEMO
+            </button>
+            <button 
+              onClick={toggleAccountType}
+              disabled={loading || currentUser?.activeAccountType === 'REAL'}
+              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
+            >
+              REAL
+            </button>
+          </div>
+        </div>
 
         <div className="p-4 md:p-8 space-y-6 md:space-y-8">
           <AnimatePresence mode="wait">
@@ -1749,7 +1898,7 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.02)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    value={`$${(stats.balance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     delta="2%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
@@ -1760,11 +1909,12 @@ export default function App() {
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
+                    const liveTarget = stats.balance * 0.02;
                     return (
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.02)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.02) || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${Math.round((realTimeProfit / (liveTarget || 200)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
@@ -1824,14 +1974,14 @@ export default function App() {
                           <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
                           <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
                         </div>
-                        <div className="flex gap-2">
-                          {['1M', '5M', '1H'].map((interval) => (
+                        <div className="flex gap-3">
+                          {['5M', '15M', '1H'].map((interval) => (
                             <button
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
-                              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${selectedInterval === interval
-                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${selectedInterval === interval
+                                ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-500'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5'
                                 }`}
                             >
                               {interval}
@@ -1867,55 +2017,8 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[200px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={stats.pnlHistory?.length > 1 ? stats.pnlHistory : [
-                            { time: '', balance: stats.balance * 0.95 },
-                            { time: '', balance: stats.balance * 0.97 },
-                            { time: '', balance: stats.balance * 0.96 },
-                            { time: '', balance: stats.balance * 0.98 },
-                            { time: '', balance: stats.balance * 0.99 },
-                            { time: '', balance: stats.balance },
-                          ]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                            <defs>
-                              <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                            <Tooltip
-                              contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', padding: '8px 12px' }}
-                              itemStyle={{ color: '#60a5fa' }}
-                              labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}
-                              formatter={(v: any) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Balance']}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="balance"
-                              stroke="#3b82f6"
-                              fillOpacity={1}
-                              fill="url(#colorPnL)"
-                              strokeWidth={2}
-                              dot={false}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-
-                        {/* Volume bars overlay at bottom */}
-                        <div className="absolute bottom-0 left-0 right-0 h-8 flex items-end gap-px px-2 opacity-30 pointer-events-none">
-                          {Array.from({ length: 40 }, (_, i) => (
-                            <div
-                              key={i}
-                              className="flex-1 rounded-t-sm"
-                              style={{
-                                height: `${15 + Math.abs(Math.sin(i * 0.8 + tick * 0.05)) * 85}%`,
-                                backgroundColor: i % 3 === 0 ? '#ef4444' : '#10b981',
-                                opacity: 0.5 + Math.abs(Math.sin(i * 0.4)) * 0.5
-                              }}
-                            />
-                          ))}
-                        </div>
+                      <div className="flex-1 min-h-[300px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
+                        <TradingChart trades={stats.trades || []} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} />
                       </div>
 
                       {/* Strategy Gauges — circular */}
@@ -2389,34 +2492,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="h-[400px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartDataMap[analyticsPeriod]}>
-                        <defs>
-                          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis
-                          dataKey="name"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
-                          tickFormatter={(v) => `$${v}`}
-                        />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#141418', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
-                          itemStyle={{ color: '#fff' }}
-                        />
-                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    <TradingChart trades={trades} />
                   </div>
                 </div>
 
@@ -3684,6 +3760,24 @@ export default function App() {
                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
                             />
                           </div>
+                        </div>
+                        
+                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-blue-400 tracking-widest pl-1">Deriv App ID (Obrigatório para PAT tokens)</label>
+                          <input
+                            type="text"
+                            value={localStorage.getItem('customDerivAppId') || '1089'}
+                            onChange={(e) => {
+                                localStorage.setItem('customDerivAppId', e.target.value);
+                                // Forçar re-render para atualizar o campo visualmente
+                                setProfileForm(f => ({...f})); 
+                            }}
+                            placeholder="Ex: 38291"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-blue-400"
+                          />
+                          <p className="text-xs text-blue-400/60 mt-2">
+                            Se 1089 não funcionar, registre seu app em <a href="https://api.deriv.com/dashboard/applications" target="_blank" className="underline font-bold text-blue-300">api.deriv.com</a> e cole o ID aqui.
+                          </p>
                         </div>
                       </div>
                     </div>

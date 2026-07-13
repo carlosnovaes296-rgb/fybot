@@ -9,7 +9,7 @@ const config = {
 };
 
 conn.on('ready', () => {
-  conn.exec('pm2 logs fybot --lines 40 --nostream', (err, stream) => {
+  conn.exec('pm2 logs fybot --err --lines 30 --nostream', (err, stream) => {
     if (err) throw err;
     stream.on('close', () => {
       conn.end();

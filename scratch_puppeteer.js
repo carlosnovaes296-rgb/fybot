@@ -1,14 +1,46 @@
-const puppeteer = require('puppeteer');
+import fs from 'fs';
 
-(async () => {
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
+function findUnclosed(content, startLine, endLine, name) {
+  const lines = content.split('\n');
+  let openTags = [];
   
-  page.on('console', msg => console.log('BROWSER CONSOLE:', msg.type(), msg.text()));
-  page.on('pageerror', err => console.log('BROWSER PAGE ERROR:', err.toString()));
-  page.on('error', err => console.log('BROWSER ERROR:', err.toString()));
+  for (let i = startLine - 1; i < endLine && i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes('/*') && !line.includes('*/')) continue;
+    
+    const openCount = (line.match(/<div(?=[\s>])/g) || []).length;
+    const selfClosing = (line.match(/<div[^>]*\/>/g) || []).length;
+    const closeCount = (line.match(/<\/div\s*>/g) || []).length;
+    
+    for (let j = 0; j < openCount - selfClosing; j++) {
+      openTags.push({ line: i + 1, text: line.trim() });
+    }
+    for (let j = 0; j < closeCount; j++) {
+      if (openTags.length > 0) {
+        openTags.pop();
+      }
+    }
+  }
+  
+  console.log(`[${name}] Unclosed tags:`);
+  openTags.forEach(tag => console.log(`  Line ${tag.line}: ${tag.text}`));
+}
 
-  await page.goto('https://fybot.life', { waitUntil: 'networkidle0' });
-  console.log('Page loaded successfully');
-  await browser.close();
-})();
+const https = require('https');
+const vm = require('vm');
+
+https.get('https://fybot.life/assets/index-fl4cL03P.js', (res) => {
+  let data = '';
+  res.on('data', chunk => data += chunk);
+  res.on('end', () => {
+    try {
+      new vm.Script(data);
+      console.log('JS syntax is VALID.');
+    } catch (e) {
+      console.error('JS Syntax ERROR:', e);
+    }
+  });
+}).on('error', err => {
+  console.error('Error fetching JS:', err.message);
+});
+findUnclosed(content, 2585, 3197, 'Affiliates');
