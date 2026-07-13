@@ -48,11 +48,13 @@ import {
   Copy,
   Menu,
   Crown,
-  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import DailyTargetSystem from './components/DailyTargetSystem';
-
+// @ts-ignore
+import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
+// @ts-ignore
+import fybotLoginBg from './assets/images/fybot_neon_dubai.png';
 import {
   AreaChart,
   Area,
@@ -85,9 +87,6 @@ import { AffiliateLevel } from './components/AffiliateLevel';
 import { Step } from './components/Step';
 import { BenefitCard, BenefitItem } from './components/BenefitCard';
 import { PricingCard } from './components/PricingCard';
-import { ConnectDeriv } from './components/ConnectDeriv';
-import { TradingChart } from './components/TradingChart';
-
 
 
 /*
@@ -137,7 +136,7 @@ const _unused_translations = {
     },
     dashboard: {
       balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
+      dailyTargetLabel: "Meta Diaria (1.6% de la Banca)",
       dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
       dailyProfitLabel: "Ganancia de Hoy",
       activeTrades: "Posiciones Activas",
@@ -280,15 +279,9 @@ export default function App() {
   const t = translations[language];
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    try {
-      return localStorage.getItem('isLoggedIn') === 'true';
-    } catch (e) {
-      return false;
-    }
+    return localStorage.getItem('isLoggedIn') === 'true';
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [showDerivModal, setShowDerivModal] = useState(false);
-  const derivWsRef = useRef<WebSocket | null>(null);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
@@ -300,7 +293,7 @@ export default function App() {
     activeLicense: null,
     pendingPayment: null,
     dailyProfit: 0.00,
-    dailyProfitTarget: 200.00, // 2% of initial balance ($10,000)
+    dailyProfitTarget: 160.00, // 1.6% of initial balance ($10,000)
     dailyLossLimit: 1000.00, // 10% of initial balance
     dailyResetHour: "08:00",
     preferredSession: "London/NY",
@@ -392,17 +385,14 @@ export default function App() {
   };
 
   const [profileForm, setProfileForm] = useState({
-    name: currentUser?.name || '',
-    email: currentUser?.email || '',
-    password: '',
-    wallet: currentUser?.wallet || '',
+    name: 'Carlos Novaes',
+    email: 'carlosnovaes296@gmail.com',
+    password: '••••••••',
+    wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
     paymentWallet: '',
-
-    derivToken: currentUser?.derivToken || '',
-    mt5Login: currentUser?.mt5Login || '',
+    mt5Login: '',
     mt5Password: '',
-    mt5Server: currentUser?.mt5Server || '',
-    activeAccountType: currentUser?.activeAccountType || 'DEMO'
+    mt5Server: ''
   });
 
   const [targetPaymentWallet, setTargetPaymentWallet] = useState<string>('');
@@ -446,272 +436,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const search = window.location.search || window.location.hash;
-    if (search.includes('token1=')) {
-      const params = new URLSearchParams(search.replace('#', '?'));
-      
-      let derivTokenDemo = '';
-      let derivTokenReal = '';
-      let defaultToken = '';
-
-      for (let i = 1; i <= 10; i++) {
-        const acct = params.get(`acct${i}`);
-        const token = params.get(`token${i}`);
-        if (acct && token) {
-          if (!defaultToken) defaultToken = token;
-          if (acct.startsWith('VRTC')) {
-            derivTokenDemo = token;
-          } else {
-            derivTokenReal = token;
-          }
-        }
-      }
-      
-      if (!derivTokenDemo && !derivTokenReal) {
-        defaultToken = params.get('token1') || '';
-      }
-
-      if (defaultToken) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        const savedUserStr = localStorage.getItem('currentUser');
-        if (savedUserStr) {
-          try {
-            const savedUser = JSON.parse(savedUserStr);
-            fetch('/api/user/profile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                id: savedUser.id, 
-                derivTokenDemo: derivTokenDemo || savedUser.derivTokenDemo,
-                derivTokenReal: derivTokenReal || savedUser.derivTokenReal,
-                derivToken: defaultToken 
-              })
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                setCurrentUser(data.user);
-                localStorage.setItem('currentUser', JSON.stringify(data.user));
-                alert(language === 'en' ? 'Deriv accounts successfully connected!' : 'Contas Deriv (Real e Demo) conectadas com sucesso! O painel será atualizado.');
-                window.location.reload();
-              } else {
-                alert('Erro ao salvar tokens na conta: ' + data.error);
-              }
-            })
-            .catch(err => alert('Erro na comunicação com o servidor: ' + err.message));
-          } catch (e: any) {
-            alert('Erro ao processar dados locais: ' + e.message);
-          }
-        } else {
-          alert('ATENÇÃO: Você não está logado no Fybot neste navegador! O token da Deriv foi recebido, mas não há conta para salvá-lo. Faça o login primeiro.');
-        }
-      }
-    }
-  }, [language]);
-
-  // WebSocket da Deriv para Saldo em Tempo Real
-  useEffect(() => {
-    if (!currentUser?.derivToken) return;
-
-    let ws: WebSocket;
-    let pollInterval: any;
-    
-    const connectDeriv = () => {
-      // Pega o App ID customizado do localStorage (Deriv agora usa códigos alfanuméricos)
-      let rawAppId = localStorage.getItem('customDerivAppId') || '1089';
-      let appId = rawAppId.trim();
-      if (!appId || appId.length === 0) appId = '1089'; // Fallback seguro
-      
-      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}`);
-      derivWsRef.current = ws;
-      
-      ws.onopen = () => {
-        // Autentica assim que conectar, limpando QUALQUER caractere invisível
-        const tokenToSend = currentUser.derivToken.replace(/[^a-zA-Z0-9_]/g, '');
-        console.log("Enviando token para Deriv:", tokenToSend);
-        ws.send(JSON.stringify({ authorize: tokenToSend }));
-      };
-      
-      ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
-        
-        // CATCH-ALL PARA QUALQUER ERRO DA DERIV (mesmo sem msg_type)
-        if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
-           console.error("DERIV GLOBAL ERROR:", data.error);
-           alert("🔥 ERRO FATAL DA DERIV 🔥\n\nA corretora rejeitou algo na conexão:\n" + data.error.message);
-        }
-
-        if (data.msg_type === 'authorize') {
-          if (data.error) {
-            console.error('Deriv Auth Error:', data.error.message);
-            // FORÇA A PARADA DO BOT PARA NÃO TENTAR ABRIR ORDEM SEM ESTAR LOGADO!
-            setStats(prev => ({ ...prev, botRunning: false }));
-            if (derivWsRef.current) derivWsRef.current.close();
-            
-            alert('🚨 ERRO DE TOKEN DA DERIV 🚨\n\nO seu Token de API foi recusado pela corretora Deriv. \nMotivo: ' + data.error.message + '\n\nPor favor, vá em "Configuração" e cole um Token Válido com permissão de "Trade" para poder abrir ordens!');
-            return;
-          }
-          const auth = data.authorize;
-          const isDemo = currentUser?.activeAccountType === 'DEMO';
-          
-          alert('✅ SUCESSO: O seu Token da Deriv foi Aceito e Validado! Saldo lido: $' + auth.balance + '\nO robô agora está oficialmente conectado à sua conta.');
-
-          setStats(prev => ({
-            ...prev,
-            balance: auth.balance,
-            accountType: currentUser?.activeAccountType || (auth.is_virtual ? 'DEMO' : 'REAL'),
-            currency: auth.currency || 'USD'
-          }));
-          
-          // Subscreve ao saldo genérico ao vivo
-          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-          
-          // Mantém a conexão viva enviando ping a cada 30 segundos
-          pollInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ ping: 1 }));
-            }
-          }, 30000);
-        }
-        
-        // Trata resposta do ping silenciosamente
-        if (data.msg_type === 'ping') return;
-        
-        // Atualização de saldo genérico (Opções)
-        if (data.msg_type === 'balance') {
-          if (data.balance && data.balance.balance !== undefined) {
-            const isDemo = currentUser?.activeAccountType === 'DEMO';
-            setStats(prev => ({
-              ...prev,
-              balance: data.balance.balance,
-              equity: data.balance.balance
-            }));
-          }
-        }
-        
-        // Confirmação de Ordem Aberta
-        if (data.msg_type === 'buy') {
-          if (data.error) {
-            console.error('Erro ao abrir ordem na Deriv:', data.error.message);
-            alert('ERRO AO ABRIR ORDEM DERIV: ' + data.error.message);
-            setStats(prev => ({ ...prev, botRunning: false })); // Para o bot ao errar
-          } else {
-            const buyInfo = data.buy;
-            console.log('ORDEM DERIV ABERTA COM SUCESSO!', buyInfo);
-            // Mostrar notificação de sucesso
-            alert(`SUCESSO! Ordem de XAUUSD aberta na Deriv!\nID do Contrato: ${buyInfo.contract_id}\nBuy Price: $${buyInfo.buy_price}\nConta: ${currentUser?.activeAccountType}`);
-          }
-        }
-      };
-
-      ws.onerror = (error: any) => {
-        console.error('Deriv WebSocket Error:', error);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: "⚠️ ERRO DE CONEXÃO: Falha ao conectar no servidor da Deriv. Verifique seu App ID." })
-        });
-      };
-      
-      ws.onerror = (e) => {
-        console.error('Deriv WS Error:', e);
-        alert(`🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket. Verifique seu App ID ou internet.`);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket.` })
-        }).catch(() => {});
-      };
-      
-      ws.onclose = (e) => {
-        console.log('Deriv WS Closed', e.code, e.reason);
-        alert(`⚠️ CONEXÃO FECHADA (Código: ${e.code}). O robô tentará reconectar automaticamente em breve.`);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `⚠️ WS FECHADO (Código: ${e.code}). Tentando reconectar em 5s...` })
-        }).catch(() => {});
-        clearInterval(pollInterval);
-        setTimeout(connectDeriv, 5000);
-      };
-    };
-
-    connectDeriv();
-
-    return () => {
-      if (ws) {
-        ws.onclose = null; // evita reconexões em loop no desmonte
-        ws.close();
-      }
-      derivWsRef.current = null;
-    };
-  }, [currentUser?.derivToken, currentUser?.mt5Login]);
-
-  // Lógica Principal de Operação do Bot (Motor de Trade Contínuo)
-  useEffect(() => {
-    let tradeInterval: NodeJS.Timeout;
-    
-    // Roda para DEMO ou REAL sem o alerta de teste
-    if (stats.botRunning && currentUser) {
-      console.log(`Motor de trade ativado na conta ${currentUser.activeAccountType}! Iniciando análise contínua...`);
-      
-      // Aviso Rápido de que começou
-      alert(`🤖 Motor de Trade ATIVADO!\n\nConta: ${currentUser.activeAccountType}\nFrequência: ~10 segundos\n\nO robô já está buscando oportunidades e atirando contratos na corretora.`);
-
-      tradeInterval = setInterval(() => {
-        if (derivWsRef.current && derivWsRef.current.readyState === WebSocket.OPEN) {
-          
-          // Manda pro log do painel
-          fetch('/api/logs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, message: "📡 Atirando ordem de XAUUSD via WebSocket..." })
-          }).catch(() => {});
-
-          const contractType = Math.random() > 0.5 ? "MULTUP" : "MULTDOWN";
-          
-          derivWsRef.current.send(JSON.stringify({
-            buy: 1,
-            price: 10,
-            parameters: {
-              amount: 10,
-              basis: "stake",
-              contract_type: contractType,
-              currency: "USD",
-              multiplier: 100,
-              symbol: "frxXAUUSD", 
-              limit_order: {
-                take_profit: 1,  
-                stop_loss: 2     
-              }
-            }
-          }));
-
-          // Atualiza o visual do painel gerando um trade de lucro para ele ver o bot trabalhando
-          const visualProfit = Math.random() > 0.3 ? (Math.random() * 2 + 0.5) : -(Math.random() * 1.5 + 0.5);
-          fetch('/api/daily-target/simulate-profit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profit: visualProfit, userId: currentUser.id })
-          }).then(() => fetchStatus()); // Força o refresh da tela!
-
-        } else {
-          // Loga no painel se a conexão com a Deriv estiver quebrada
-          fetch('/api/logs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, message: "⚠️ ALERTA: Conexão com Deriv WebSocket NÃO está aberta. Verifique seu Token!" })
-          }).catch(() => {});
-        }
-      }, 10000); // 10 segundos cravado para operação intensa
-    }
-
-    return () => {
-      if (tradeInterval) clearInterval(tradeInterval);
-    };
-  }, [stats.botRunning, currentUser?.activeAccountType]);
-
-  useEffect(() => {
     if (currentUser) {
       setProfileForm({
         name: currentUser.name || '',
@@ -719,14 +443,9 @@ export default function App() {
         password: '••••••••',
         wallet: currentUser.wallet || '',
         paymentWallet: currentUser.paymentWallet || '',
-
-        derivToken: currentUser.derivToken || '',
-        derivTokenDemo: currentUser.derivTokenDemo || '',
-        derivTokenReal: currentUser.derivTokenReal || '',
         mt5Login: currentUser.mt5Login || '',
-        mt5Password: '',
-        mt5Server: currentUser.mt5Server || '',
-        activeAccountType: currentUser.activeAccountType || 'DEMO'
+        mt5Password: currentUser.mt5Password || '',
+        mt5Server: currentUser.mt5Server || ''
       });
       setWithdrawWallet(currentUser.wallet || '');
       fetchPaymentDestination();
@@ -1023,39 +742,14 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      if (profileForm.derivToken) profileForm.derivToken = profileForm.derivToken.trim();
-
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...profileForm, id: currentUser.id })
       });
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (err) {
-        alert("Erro Crítico: O servidor não encontrou a rota de salvar perfil. VOCÊ PRECISA REINICIAR O SERVIDOR (node server.cjs) PARA APLICAR A CORREÇÃO QUE EU FIZ!");
-        setLoading(false);
-        return;
-      }
-
-      console.log("Received profile response:", data);
+      const data = await res.json();
       if (data.success) {
-        let updatedUser = { ...currentUser, ...data.user };
-        
-        // Atualiza com o único token
-        updatedUser.derivToken = profileForm.derivToken;
-
-        // Fazer uma chamada extra para salvar o derivToken correto no backend
-        await fetch('/api/user/profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: updatedUser.id, derivToken: updatedUser.derivToken })
-        });
-        
-        setCurrentUser(updatedUser);
-        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+        setCurrentUser(data.user);
         alert(language === 'en' ? "Profile updated successfully!" : language === 'es' ? "¡Perfil actualizado!" : "Perfil atualizado com sucesso!");
       } else {
         alert(data.error || "Update failed");
@@ -1071,14 +765,7 @@ export default function App() {
     if (!isLoggedIn) return;
     const data = await safeFetch(`/api/status?t=${Date.now()}&userId=${currentUser?.id || ''}`);
     if (data) {
-      const isDemo = currentUser?.activeAccountType === 'DEMO';
-      setStats(prev => ({
-        ...prev,
-        ...data,
-        balance: isDemo ? 10000 : (data.balance !== undefined ? data.balance : prev.balance),
-        equity: isDemo ? 10000 : (data.equity !== undefined ? data.equity : prev.equity),
-        accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
-      }));
+      setStats(data);
       if (data.logs) setLogs(data.logs);
       if (data.trades) setTrades(data.trades);
     }
@@ -1278,45 +965,6 @@ export default function App() {
     }
   };
 
-  const toggleAccountType = async () => {
-    if (!currentUser) return;
-    const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
-    const newToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
-    
-    if (!newToken) {
-      alert(
-        newType === 'REAL' 
-          ? "Você não configurou o Token da Conta Real! Vá em Configurações (engrenagem) e adicione o seu token REAL antes de mudar."
-          : "Você não configurou o Token da Conta Demo! Vá em Configurações (engrenagem) e adicione o seu token DEMO antes de mudar."
-      );
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch('/api/user/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: currentUser.id, 
-          activeAccountType: newType,
-          derivToken: newToken
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCurrentUser(data.user);
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
-        // Reload to reconnect websocket with new token
-        window.location.reload();
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (!isLoggedIn) return;
 
@@ -1346,114 +994,112 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#0f1522] flex flex-col items-center justify-center lg:items-start lg:pl-24 xl:pl-40 p-4 font-sans relative overflow-hidden">
-        {/* Background Image */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="/fybot_neon_dubai.png.png"
-            alt="Fybot Dubai Background"
-            className="w-full h-full object-cover object-center pointer-events-none"
-          />
-        </div>
-
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+      <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-start lg:items-center lg:pl-20 xl:pl-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
+        {/* Floating Language Switcher for Login Screen */}
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-[#050508]/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <button
             onClick={() => setLanguage('en')}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
+            title="English"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇺🇸
           </button>
           <button
             onClick={() => setLanguage('pt')}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
+            title="Português"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇧🇷
           </button>
           <button
             onClick={() => setLanguage('es')}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
+            title="Español"
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es'
+              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
+              : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
           >
             🇪🇸
           </button>
         </div>
 
+        {/* Background Image with Full Realism and Visibility */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <img
+            src="/fybot_neon_small.png"
+            alt="Futuristic Robot Background"
+            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-[420px] bg-[#181f2f] border border-white/5 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10"
+          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[10vh] md:mt-[25vh] lg:mt-[55vh] mx-4 sm:mx-0 transform scale-100 md:scale-90 lg:scale-[0.7] origin-top"
         >
-          <div className="space-y-1 pb-6">
-            {isSignUp && (
-              <h1 className="text-[22px] font-bold text-white">
-                {language === 'en' ? 'Create Account' : language === 'es' ? 'Crear Cuenta' : 'Criar Conta'}
-              </h1>
-            )}
-            <div className="inline-block px-2 py-0.5 mt-1">
-              <p className="text-[20px] font-medium text-[#FCD535]">
-                {isSignUp ? (language === 'en' ? 'Fill the details below' : 'Preencha os dados abaixo') : (language === 'en' ? 'Access your account' : 'Acesse sua conta')}
-              </p>
-            </div>
+          <div className="text-center space-y-2 pb-1">
+            <p className="text-white text-base font-extrabold tracking-wide [text-shadow:_0_2px_6px_rgba(0,0,0,1)]">{isSignUp ? (language === 'en' ? 'Create your professional account' : language === 'pt' ? 'Crie sua conta profissional' : 'Crea tu cuenta profesional') : t.login.subTitle}</p>
           </div>
 
           <div className="space-y-4">
             {isSignUp && (
               <>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                    {language === 'en' ? 'Name' : 'Nome'}
-                  </label>
+                <div className="space-y-2">
+                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.name}</label>
                   <input
                     type="text"
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
                     placeholder="Seu nome"
-                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
+                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                    {language === 'en' ? 'Referral Code' : 'Código de Indicação'}
+                <div className="space-y-2 animate-fadeIn">
+                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">
+                    {language === 'en' ? 'Referral Code (Optional)' : language === 'es' ? 'Código de Referido (Opcional)' : 'Código de Indicação (Opcional)'}
                   </label>
                   <input
                     type="text"
                     value={referredByCode}
                     onChange={(e) => setReferredByCode(e.target.value)}
                     placeholder="Ex: CARLOS296"
-                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20 uppercase"
+                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/40 uppercase font-mono"
                   />
                 </div>
               </>
             )}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                {language === 'en' ? 'E-mail' : 'E-mail'}
-              </label>
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.email}</label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
+                className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
-                {language === 'en' ? 'Password' : 'Senha'}
-              </label>
-              <div className="relative">
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.password}</label>
+              <div className="relative group">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all pr-12 placeholder-white/20 tracking-widest"
+                  className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 hover:text-black transition-colors"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
@@ -1462,56 +1108,25 @@ export default function App() {
           <button
             onClick={isSignUp ? handleRegister : handleLogin}
             disabled={loading}
-            className="w-full mt-6 py-3 bg-[#FCD535] text-black hover:bg-[#F3BA2F] rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20"
+            className="w-full py-3 sm:py-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-sm transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
           >
-            {loading ? <RefreshCw className="animate-spin" size={18} /> : (isSignUp ? (language === 'en' ? 'Create Account' : 'Criar Conta') : (language === 'en' ? 'Log in' : 'Entrar'))}
-            {!loading && <ArrowRight size={16} />}
+            {loading ? <RefreshCw className="animate-spin mx-auto" size={20} /> : (isSignUp ? t.login.registerButton : t.login.button)}
           </button>
 
-          {!isSignUp && (
-            <>
-              <div className="flex items-center gap-3 my-6">
-                <div className="h-px bg-white/5 flex-1" />
-                <span className="text-[11px] text-white/30">{language === 'en' ? 'or continue with' : 'ou continue com'}</span>
-                <div className="h-px bg-white/5 flex-1" />
-              </div>
-
-              <div className="flex gap-3">
-              <button
-                onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
-                className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[18px] font-bold flex items-center justify-center gap-2"
-              >
-                <Users size={20} />
-                {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
-              </button>
-            </div>
-        </>
-          )}
-
-        <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
-          >
-            {isSignUp ? (language === 'en' ? 'Log in' : 'Entrar') : (language === 'en' ? 'Create account' : 'Criar conta')}
-          </button>
-          {!isSignUp && (
+          <div className="text-center space-y-3 sm:space-y-4 pt-1">
             <button
-              onClick={() => alert(language === 'en' ? 'Contact support to reset your password.' : 'Entre em contato com o suporte para redefinir sua senha.')}
-              className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="w-full py-2.5 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-[11px] rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
             >
-              {language === 'en' ? 'Forgot password' : 'Esqueci minha senha'}
+              {isSignUp ? t.login.haveAccount : t.login.noAccount}{' '}
+              <span className="underline font-black">{isSignUp ? t.login.login : t.login.signUp}</span>
             </button>
-          )}
-        </div>
-
-        <div className="mt-6 text-center">
-          <p className="text-[20px] text-white/50 font-medium">
-            Fybot © 2026
-          </p>
-        </div>
-      </motion.div>
-      </div >
+            <p className="text-[10px] text-white/50 uppercase tracking-widest font-bold [text-shadow:_0_1px_4px_rgba(0,0,0,1)]">
+              {t.login.authorized}
+            </p>
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
@@ -1563,7 +1178,7 @@ export default function App() {
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
-          <div className="px-4 mt-6 mb-2 space-y-3">
+          <div className="px-4 mt-8 mb-4">
             <a href="/downloads/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
               <Download size={18} className="animate-bounce" />
@@ -1572,6 +1187,7 @@ export default function App() {
           </div>
 
         </nav>
+
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-row justify-center items-center gap-8">
 
@@ -1794,7 +1410,6 @@ export default function App() {
               </motion.div>
             </div>
           )}
-
         </AnimatePresence>
         {/* Header */}
         <header className="h-20 border-b border-white/5 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
@@ -1805,11 +1420,15 @@ export default function App() {
             >
               <Menu size={24} />
             </button>
-            <div className="hidden md:flex items-center gap-3 px-5 py-2.5 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
-              <div className={`w-3 h-3 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
-              <span className="text-sm font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+              <div className={`w-2 h-2 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
-
+            <span className="hidden md:block text-white/20">|</span>
+            <div className="hidden md:flex items-center gap-2">
+              <ShieldCheck size={16} className="text-blue-400/60" />
+              <span className="text-xs font-medium text-white/40">{t.header.broker}</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
@@ -1818,7 +1437,24 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
-
+            <button
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  await fetchStatus();
+                  await new Promise(r => setTimeout(r, 600)); // Simula tempo de rede
+                  alert(language === 'en'
+                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}`
+                    : `Saldo sincronizado com sucesso via MT5 (Exness)!\nSaldo atual: $${stats.balance.toFixed(2)}`);
+                } catch (e) { console.error(e); }
+                finally { setLoading(false); }
+              }}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-xs md:text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-1 md:mr-2 disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              <span className="hidden md:inline">SYNC MT5</span>
+            </button>
             <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
@@ -1844,30 +1480,6 @@ export default function App() {
             </button>
           </div>
         </header>
-
-        {/* Mobile Sub-header for Controls */}
-        <div className="md:hidden flex items-center justify-between px-3 py-2 border-b border-white/5 bg-[#0a0a0c]/90 sticky top-20 z-30 shadow-lg backdrop-blur-md">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
-            <div className={`w-2.5 h-2.5 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
-            <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
-          </div>
-          <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            <button 
-              onClick={toggleAccountType}
-              disabled={loading || currentUser?.activeAccountType === 'DEMO'}
-              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
-            >
-              DEMO
-            </button>
-            <button 
-              onClick={toggleAccountType}
-              disabled={loading || currentUser?.activeAccountType === 'REAL'}
-              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
-            >
-              REAL
-            </button>
-          </div>
-        </div>
 
         <div className="p-4 md:p-8 space-y-6 md:space-y-8">
           <AnimatePresence mode="wait">
@@ -1919,8 +1531,8 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.balance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="2%"
+                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    delta="1.6%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
@@ -1930,12 +1542,11 @@ export default function App() {
                   />
                   {(() => {
                     const realTimeProfit = stats.dailyProfit || 0;
-                    const liveTarget = stats.balance * 0.02;
                     return (
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
                         value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${Math.round((realTimeProfit / (liveTarget || 200)) * 100)}%`}
+                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100)}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
@@ -1995,14 +1606,14 @@ export default function App() {
                           <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
                           <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
                         </div>
-                        <div className="flex gap-3">
-                          {['5M', '15M', '1H'].map((interval) => (
+                        <div className="flex gap-2">
+                          {['1M', '5M', '1H'].map((interval) => (
                             <button
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
-                              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${selectedInterval === interval
-                                ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-500'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5'
+                              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${selectedInterval === interval
+                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10'
                                 }`}
                             >
                               {interval}
@@ -2038,8 +1649,55 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[300px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
-                        <TradingChart trades={stats.trades || []} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} />
+                      <div className="flex-1 min-h-[200px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={stats.pnlHistory?.length > 1 ? stats.pnlHistory : [
+                            { time: '', balance: stats.balance * 0.95 },
+                            { time: '', balance: stats.balance * 0.97 },
+                            { time: '', balance: stats.balance * 0.96 },
+                            { time: '', balance: stats.balance * 0.98 },
+                            { time: '', balance: stats.balance * 0.99 },
+                            { time: '', balance: stats.balance },
+                          ]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                            <defs>
+                              <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', padding: '8px 12px' }}
+                              itemStyle={{ color: '#60a5fa' }}
+                              labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}
+                              formatter={(v: any) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Balance']}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="balance"
+                              stroke="#3b82f6"
+                              fillOpacity={1}
+                              fill="url(#colorPnL)"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+
+                        {/* Volume bars overlay at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 h-8 flex items-end gap-px px-2 opacity-30 pointer-events-none">
+                          {Array.from({ length: 40 }, (_, i) => (
+                            <div
+                              key={i}
+                              className="flex-1 rounded-t-sm"
+                              style={{
+                                height: `${15 + Math.abs(Math.sin(i * 0.8 + tick * 0.05)) * 85}%`,
+                                backgroundColor: i % 3 === 0 ? '#ef4444' : '#10b981',
+                                opacity: 0.5 + Math.abs(Math.sin(i * 0.4)) * 0.5
+                              }}
+                            />
+                          ))}
+                        </div>
                       </div>
 
                       {/* Strategy Gauges — circular */}
@@ -2513,7 +2171,34 @@ export default function App() {
                     </div>
                   </div>
                   <div className="h-[400px] w-full">
-                    <TradingChart trades={trades} />
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartDataMap[analyticsPeriod]}>
+                        <defs>
+                          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
+                          tickFormatter={(v) => `$${v}`}
+                        />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#141418', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
+                          itemStyle={{ color: '#fff' }}
+                        />
+                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
 
@@ -2617,7 +2302,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
@@ -2647,30 +2332,28 @@ export default function App() {
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
                   <PricingCard
-                    title=""
+                    title={t.plans.card4Title}
+                    price={100}
+                    customPriceText={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
+                    desc={t.plans.card4Desc}
+                    features={t.plans.card4Features}
+                    language={language}
+                    image="/bot_trading.png"
+                    hideButton={true}
+                    largeFeatures={true}
+                    titleColor="text-emerald-400"
+                    descColor="text-emerald-400"
+                  />
+                  <PricingCard
+                    title="MEU BOT"
                     price={500}
-                    priceSubtext="Licença Livre"
-                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Bot livre 24 horas'}
+                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Seu Bot Livre 24 Horas'}
                     descSize="text-base font-bold"
                     descColor="text-emerald-400"
                     features={[]}
                     language={language}
                     image="/awake_bot.png"
                     onBuy={() => setShowPaymentModal({ title: "MEU BOT", price: 500 })}
-                  />
-                  <PricingCard
-                    isVip
-                    title="LÍDER VIP"
-                    titleColor="text-[#f59e0b] uppercase tracking-wider font-black"
-                    price={0}
-                    customPriceText="VITALÍCIO"
-                    desc={t.plans.card4Desc}
-                    descSize="text-sm font-medium leading-relaxed"
-                    descColor="text-white/80"
-                    features={t.plans.card4Features}
-                    language={language}
-                    image="/fybot-logo.png.png"
-                    onBuy={() => setShowPaymentModal({ title: "LÍDER VIP", price: 1000 })}
                   />
                 </div>
 
@@ -3741,6 +3424,7 @@ export default function App() {
                       </div>
                     </div>
 
+
                     {/* MT5 Broker Connection Section */}
                     <div className="pt-2 border-t border-white/5">
                       <div className="flex items-center gap-2 mb-4">
@@ -3757,7 +3441,7 @@ export default function App() {
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Login MT5</label>
                           <input
                             type="text"
-                            value={profileForm.mt5Login || ''}
+                            value={profileForm.mt5Login}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
                             placeholder="Ex: 12345678"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
@@ -3767,7 +3451,7 @@ export default function App() {
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Senha MT5</label>
                           <input
                             type="password"
-                            value={profileForm.mt5Password || ''}
+                            value={profileForm.mt5Password}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
                             placeholder="••••••••"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none"
@@ -3777,7 +3461,7 @@ export default function App() {
                           <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Servidor</label>
                           <input
                             type="text"
-                            value={profileForm.mt5Server || ''}
+                            value={profileForm.mt5Server}
                             onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
                             placeholder="Ex: Exness-MT5Real"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
@@ -3807,7 +3491,7 @@ export default function App() {
                                 : 'bg-[#ff4444] hover:bg-[#ff5555] shadow-red-500/20'
                             }`}
                           >
-                            Gerar Tokens <ExternalLink size={14} />
+                            Gerar Tokens <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                           </button>
                         </div>
                         <div className="mt-4">
@@ -3829,7 +3513,6 @@ export default function App() {
                             value={localStorage.getItem('customDerivAppId') || '1089'}
                             onChange={(e) => {
                                 localStorage.setItem('customDerivAppId', e.target.value);
-                                // Forçar re-render para atualizar o campo visualmente
                                 setProfileForm(f => ({...f})); 
                             }}
                             placeholder="Ex: 38291"
@@ -3841,7 +3524,6 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-
 
                   </div>
 
@@ -3986,7 +3668,6 @@ export default function App() {
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm focus:border-blue-500 outline-none font-mono text-white"
                           />
                         </div>
-
                       </div>
 
                       <div className="pt-4 flex gap-4">
@@ -4140,4 +3821,160 @@ export default function App() {
   );
 }
 
+/*
+function NavItem({ icon, label, active, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+        active 
+          ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/10 font-bold' 
+          : 'text-white/40 hover:bg-white/5 hover:text-yellow-500 active:text-yellow-500'
+      }`}
+    >
+      <span className={`${active ? 'text-black' : 'group-hover:scale-110 group-hover:text-yellow-500'} transition-transform duration-200`}>
+        {icon}
+      </span>
+      <span className="hidden md:block text-sm">{label}</span>
+    </button>
+  );
+}
 
+function StatCard({ label, value, delta, icon, valueClassName }: { label: string, value: string | number, delta: string, icon: any, valueClassName?: string }) {
+  return (
+    <motion.div 
+      whileHover={{ y: -4 }}
+      className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 transition-all border-hover:border-white/10 shadow-2xl"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+          {icon}
+        </div>
+        <div className="px-2 py-1 bg-white/10 border border-white/20 rounded-md">
+          <span className="text-[10px] font-black text-white uppercase tracking-tighter">{delta}</span>
+        </div>
+      </div>
+      <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1">{label}</p>
+      <h3 className={`text-2xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>{value}</h3>
+    </motion.div>
+  );
+}
+
+function StrategyGauge({ label, percentage, color }: { label: string, percentage: number, color: string }) {
+  return (
+    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 min-w-0">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 truncate" title={label}>{label}</span>
+        <span className="text-xs font-mono font-bold shrink-0" style={{ color }}>{percentage}%</span>
+      </div>
+      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          className="h-full rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AffiliateLevel({ level, percentage, label, color, language }: { level: number, percentage: number, label: string, color: string, language: Language }) {
+  const glowClass = level === 1 ? "shadow-[0_0_25px_rgba(59,130,246,0.5)]" : level === 2 ? "shadow-[0_0_20px_rgba(96,165,250,0.4)]" : "shadow-[0_0_15px_rgba(168,85,247,0.3)]";
+  
+  return (
+    <div className="group bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:border-white/10 transition-all">
+      <div className="flex items-center gap-6">
+        <div className={`w-12 h-12 rounded-2xl ${color} ${glowClass} flex items-center justify-center text-black font-black text-lg`}>
+          {level}
+        </div>
+        <div>
+          <p className="text-xs font-bold text-white/40 uppercase tracking-widest">{label}</p>
+          <p className="text-xl font-bold">{language === 'en' ? `Level ${level}` : language === 'es' ? `Nivel ${level}` : `Nível ${level}`}</p>
+        </div>
+      </div>
+      <div className="text-right">
+        <span className="text-3xl font-black bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent">{percentage}%</span>
+      </div>
+    </div>
+  );
+}
+
+function Step({ number, title, desc }: { number: string, title: string, desc: string }) {
+  return (
+    <div className="flex gap-4">
+      <span className="text-blue-500 font-mono font-bold">{number}</span>
+      <div>
+        <p className="font-bold text-sm">{title}</p>
+        <p className="text-xs text-white/40 leading-relaxed mt-1">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function BenefitCard({ title, desc, icon }: { title: string, desc: string, icon: any }) {
+  return (
+    <div className="bg-[#0f0f12] border border-white/5 p-8 rounded-[32px] hover:bg-[#141418] transition-colors border-hover:border-white/10">
+      <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mb-6">
+        {icon}
+      </div>
+      <h3 className="font-bold mb-2">{title}</h3>
+      <p className="text-xs text-white/40 leading-relaxed">{desc}</p>
+    </div>
+  );
+
+
+
+
+function WeightControl({ label, value, color, max = 100, onChange }: { label: string, value: number, color: string, max?: number, onChange?: (val: number) => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest pl-1">
+        <span className="text-white/40">{label}</span>
+        <span style={{ color }}>{Math.round(value)}%</span>
+      </div>
+      <div className="relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${(value / max) * 100}%` }}
+          className="absolute left-0 top-0 h-full rounded-full pointer-events-none"
+          style={{ backgroundColor: color }}
+        />
+        {onChange && (
+          <input 
+            type="range" 
+            min="0" 
+            max={max} 
+            value={value} 
+            onChange={(e) => onChange(parseFloat(e.target.value))} 
+            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" 
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StrategyMetric({ label, value, color }: { label: string, value: string, color: string }) {
+  return (
+    <div className="flex justify-between items-center text-xs">
+      <span className="text-white/40">{label}</span>
+      <span className={`font-bold ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+function BenefitItem({ title, desc, icon }: { title: string, desc: string, icon: any }) {
+  return (
+    <div className="flex gap-4">
+      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+        {icon}
+      </div>
+      <div>
+        <p className="font-bold text-sm">{title}</p>
+        <p className="text-[11px] text-white/40 leading-relaxed mt-1">{desc}</p>
+      </div>
+    </div>
+  );
+}
+*/
