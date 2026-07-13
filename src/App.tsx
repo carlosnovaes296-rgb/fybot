@@ -610,13 +610,24 @@ export default function App() {
         });
       };
       
-      ws.onclose = (event) => {
-        console.log('Deriv WebSocket Closed. Code:', event.code, 'Reason:', event.reason);
+      ws.onerror = (e) => {
+        console.error('Deriv WS Error:', e);
+        alert(`🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket. Verifique seu App ID ou internet.`);
         fetch('/api/logs/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `🛑 CONEXÃO FECHADA pela Deriv (Código: ${event.code}). Tentando reconectar...` })
-        });
+          body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket.` })
+        }).catch(() => {});
+      };
+      
+      ws.onclose = (e) => {
+        console.log('Deriv WS Closed', e.code, e.reason);
+        alert(`⚠️ CONEXÃO FECHADA (Código: ${e.code}). O robô tentará reconectar automaticamente em breve.`);
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: `⚠️ WS FECHADO (Código: ${e.code}). Tentando reconectar em 5s...` })
+        }).catch(() => {});
         clearInterval(pollInterval);
         setTimeout(connectDeriv, 5000);
       };
