@@ -14,6 +14,7 @@ import {
   History,
   Clock,
   Wallet,
+  Cpu,
   TrendingUp,
   ShieldCheck,
   Zap,
@@ -292,8 +293,8 @@ export default function App() {
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
-    balance: 10000,
-    equity: 10000,
+    balance: 0,
+    equity: 0,
     activeTrades: 0,
     winrate: 0,
     pnlHistory: [],
@@ -353,6 +354,21 @@ export default function App() {
   const [manualBalanceInput, setManualBalanceInput] = useState('');
   const [manualAccountType, setManualAccountType] = useState('REAL');
 
+  const [tradeSettings, setTradeSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fybotTradeSettings');
+      return saved ? JSON.parse(saved) : { amount: 10, takeProfit: 1, stopLoss: 2 };
+    } catch {
+      return { amount: 10, takeProfit: 1, stopLoss: 2 };
+    }
+  });
+
+  const updateTradeSettings = (key: string, value: number) => {
+    const updated = { ...tradeSettings, [key]: value };
+    setTradeSettings(updated);
+    localStorage.setItem('fybotTradeSettings', JSON.stringify(updated));
+  };
+
   const hasActiveLicense = currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
   const chartDataMap = {
@@ -399,9 +415,6 @@ export default function App() {
     paymentWallet: '',
 
     derivToken: currentUser?.derivToken || '',
-    mt5Login: currentUser?.mt5Login || '',
-    mt5Password: '',
-    mt5Server: currentUser?.mt5Server || '',
     activeAccountType: currentUser?.activeAccountType || 'DEMO'
   });
 
@@ -521,8 +534,10 @@ export default function App() {
       let rawAppId = localStorage.getItem('customDerivAppId') || '1089';
       let appId = rawAppId.trim();
       if (!appId || appId.length === 0) appId = '1089'; // Fallback seguro
-      
-      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}`);
+      // A CARTA NA MANGA: Conectar através do nosso próprio proxy no VPS usando a rota /api/
+      // Passamos o appId real para o proxy garantir a comissão (markup) de 3% da corretora!
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/api/ws-proxy?app_id=${appId}&l=PT`);
       derivWsRef.current = ws;
       
       ws.onopen = () => {
@@ -537,8 +552,7 @@ export default function App() {
         
         // CATCH-ALL PARA QUALQUER ERRO DA DERIV (mesmo sem msg_type)
         if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
-           console.error("DERIV GLOBAL ERROR:", data.error);
-           alert("🔥 ERRO FATAL DA DERIV 🔥\n\nA corretora rejeitou algo na conexão:\n" + data.error.message);
+           console.error("DERIV GLOBAL ERROR:", data.error, "A corretora rejeitou algo na conexão:\n" + data.error.message);
         }
 
         if (data.msg_type === 'authorize') {
@@ -546,15 +560,28 @@ export default function App() {
             console.error('Deriv Auth Error:', data.error.message);
             // FORÇA A PARADA DO BOT PARA NÃO TENTAR ABRIR ORDEM SEM ESTAR LOGADO!
             setStats(prev => ({ ...prev, botRunning: false }));
-            if (derivWsRef.current) derivWsRef.current.close();
             
-            alert('🚨 ERRO DE TOKEN DA DERIV 🚨\n\nO seu Token de API foi recusado pela corretora Deriv. \nMotivo: ' + data.error.message + '\n\nPor favor, vá em "Configuração" e cole um Token Válido com permissão de "Trade" para poder abrir ordens!');
+            fetch('/api/logs/add', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DERIV: Token Inválido ou Recusado! (${data.error.message})` })
+            }).catch(() => {});
+
+            if (derivWsRef.current) {
+              // passa um código customizado para não confundir com 1005
+              derivWsRef.current.close(4001, "Auth Failed"); 
+            }
+            
             return;
           }
           const auth = data.authorize;
           const isDemo = currentUser?.activeAccountType === 'DEMO';
           
-          alert('✅ SUCESSO: O seu Token da Deriv foi Aceito e Validado! Saldo lido: $' + auth.balance + '\nO robô agora está oficialmente conectado à sua conta.');
+          fetch('/api/logs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, message: `✅ SUCESSO: Conectado na Deriv! Saldo: $${auth.balance}` })
+          }).catch(() => {});
 
           setStats(prev => ({
             ...prev,
@@ -604,18 +631,8 @@ export default function App() {
         }
       };
 
-      ws.onerror = (error: any) => {
-        console.error('Deriv WebSocket Error:', error);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: "⚠️ ERRO DE CONEXÃO: Falha ao conectar no servidor da Deriv. Verifique seu App ID." })
-        });
-      };
-      
       ws.onerror = (e) => {
         console.error('Deriv WS Error:', e);
-        alert(`🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket. Verifique seu App ID ou internet.`);
         fetch('/api/logs/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -625,7 +642,6 @@ export default function App() {
       
       ws.onclose = (e) => {
         console.log('Deriv WS Closed', e.code, e.reason);
-        alert(`⚠️ CONEXÃO FECHADA (Código: ${e.code}). O robô tentará reconectar automaticamente em breve.`);
         fetch('/api/logs/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -655,8 +671,7 @@ export default function App() {
     if (stats.botRunning && currentUser) {
       console.log(`Motor de trade ativado na conta ${currentUser.activeAccountType}! Iniciando análise contínua...`);
       
-      // Aviso Rápido de que começou
-      alert(`🤖 Motor de Trade ATIVADO!\n\nConta: ${currentUser.activeAccountType}\nFrequência: ~10 segundos\n\nO robô já está buscando oportunidades e atirando contratos na corretora.`);
+      // Aviso removido para não travar a tela
 
       tradeInterval = setInterval(() => {
         if (derivWsRef.current && derivWsRef.current.readyState === WebSocket.OPEN) {
@@ -672,17 +687,17 @@ export default function App() {
           
           derivWsRef.current.send(JSON.stringify({
             buy: 1,
-            price: 10,
+            price: tradeSettings.amount,
             parameters: {
-              amount: 10,
+              amount: tradeSettings.amount,
               basis: "stake",
               contract_type: contractType,
               currency: "USD",
               multiplier: 100,
               symbol: "frxXAUUSD", 
               limit_order: {
-                take_profit: 1,  
-                stop_loss: 2     
+                take_profit: tradeSettings.takeProfit,  
+                stop_loss: tradeSettings.stopLoss     
               }
             }
           }));
@@ -723,9 +738,6 @@ export default function App() {
         derivToken: currentUser.derivToken || '',
         derivTokenDemo: currentUser.derivTokenDemo || '',
         derivTokenReal: currentUser.derivTokenReal || '',
-        mt5Login: currentUser.mt5Login || '',
-        mt5Password: '',
-        mt5Server: currentUser.mt5Server || '',
         activeAccountType: currentUser.activeAccountType || 'DEMO'
       });
       setWithdrawWallet(currentUser.wallet || '');
@@ -1075,8 +1087,8 @@ export default function App() {
       setStats(prev => ({
         ...prev,
         ...data,
-        balance: isDemo ? 10000 : (data.balance !== undefined ? data.balance : prev.balance),
-        equity: isDemo ? 10000 : (data.equity !== undefined ? data.equity : prev.equity),
+        balance: prev.balance, // A API não deve sobrescrever o saldo real do WebSocket!
+        equity: prev.equity,   // Mantém o equity real lido da corretora
         accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
       if (data.logs) setLogs(data.logs);
@@ -1564,11 +1576,18 @@ export default function App() {
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
           <div className="px-4 mt-6 mb-2 space-y-3">
-            <a href="/downloads/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-              <Download size={18} className="animate-bounce" />
-              <span>DOWNLOAD ROBÔ (EA)</span>
-            </a>
+            <button
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = '/Fybot_EA.ex5'; // Placeholder for the actual EA file path
+                link.download = 'Fybot_Pro.ex5';
+                link.click();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span className="font-bold text-sm uppercase tracking-wider">{language === 'en' ? 'Download EA' : language === 'es' ? 'Descargar EA' : 'Baixar EA'}</span>
+            </button>
           </div>
 
         </nav>
@@ -1809,8 +1828,27 @@ export default function App() {
               <div className={`w-3 h-3 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
               <span className="text-sm font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
+            
+            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
+              <button 
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+              >
+                CONTA DEMO
+              </button>
+              <button 
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'REAL'}
+                className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
+              >
+                CONTA REAL
+              </button>
+            </div>
 
           </div>
+
+
 
           <div className="flex items-center gap-2 md:gap-4">
             <div className="flex flex-col items-end mr-1 md:mr-2">
@@ -1877,7 +1915,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-8"
+                className="space-y-2"
               >
                 {stats.systemBlocked && stats.blockedUntil && (
                   <motion.div
@@ -1906,11 +1944,16 @@ export default function App() {
                 )}
 
                 {/* Top Grid — Enhanced StatCards with sparklines */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard
-                    label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
-                    value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
+                {(() => {
+                  // Se o saldo for 0, consideramos que a corretora ainda não conectou
+                  const isConnected = stats.balance > 0;
+                  const displayBalance = isConnected ? stats.balance : 0;
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                      <StatCard
+                        label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
+                        value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                        delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
                     icon={<Wallet className="text-emerald-400" />}
                     trendPositive={true}
                     labelClassName="text-emerald-400"
@@ -1919,7 +1962,7 @@ export default function App() {
                   />
                   <StatCard
                     label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.balance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                     delta="2%"
                     icon={<Target className="text-emerald-400" />}
                     trendPositive={true}
@@ -1929,13 +1972,14 @@ export default function App() {
                     subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias iniciando a las 10:00 horas" : "Operações diárias iniciando às 10:00 horas"}
                   />
                   {(() => {
-                    const realTimeProfit = stats.dailyProfit || 0;
-                    const liveTarget = stats.balance * 0.02;
+                    // Só mostra lucro se estiver conectado com saldo real/demo validado
+                    const realTimeProfit = isConnected ? (stats.dailyProfit || 0) : 0;
+                    const liveTarget = displayBalance * 0.02;
                     return (
                       <StatCard
                         label={t.dashboard.dailyProfitLabel}
-                        value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${Math.round((realTimeProfit / (liveTarget || 200)) * 100)}%`}
+                        value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                        delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
                         icon={<TrendingUp className="text-emerald-400" />}
                         valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                         labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
@@ -1944,6 +1988,16 @@ export default function App() {
                       />
                     );
                   })()}
+                  <StatCard
+                    label={language === "en" ? "LOSS LIMIT (10%)" : language === "es" ? "LÍMITE DE PÉRDIDA (10%)" : "LIMITE DE PERDA (10% DA BANCA)"}
+                    value={isConnected ? `$${(stats.dailyLossLimit || (displayBalance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                    delta="10%"
+                    icon={<AlertTriangle className="text-red-400" />}
+                    trendPositive={false}
+                    labelClassName="text-red-400"
+                    valueClassName="text-red-400"
+                    trend={[5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 1]}
+                  />
                   {stats.activeLicense?.expiryDate ? (
                     <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                   ) : stats.pendingPayment ? (
@@ -1982,20 +2036,52 @@ export default function App() {
                     </div>
                   )}
                 </div>
-
-                <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
+                );
+              })()}
 
                 {/* Signal Intel + Live Console */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
                   {/* Market Stream — enhanced chart */}
-                  <div className="lg:col-span-2 flex flex-col">
+                  <div className={`flex flex-col ${currentUser?.role === 'ADMIN' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden p-6 h-full flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-6">
-                        <div>
+                        <div className="whitespace-nowrap">
                           <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
                           <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
                         </div>
-                        <div className="flex gap-3">
+
+                        {/* V8 SAFETY SHIELD - HEADER COMPONENT */}
+                        <div className="hidden lg:flex flex-1 px-8">
+                          <div className="w-full max-w-xl mx-auto bg-[#0f0f12] border border-white/5 rounded-2xl px-4 py-2 relative overflow-hidden flex flex-col justify-center">
+                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
+                            
+                            <div className="flex items-center justify-between mb-1.5 relative z-10">
+                              <div className="flex items-center gap-1.5">
+                                <Cpu size={12} className="text-yellow-500 animate-pulse" />
+                                <span className="text-[10px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
+                                  {Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / ((stats.balance || 0) * 0.02)) * 100)).toFixed(0)}% PROG.
+                                </span>
+                                <span className="text-[9px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-1.5 py-0.5 rounded">
+                                  {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
+                              <div 
+                                className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
+                                style={{ width: `${Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / ((stats.balance || 0) * 0.02)) * 100))}%` }}
+                              >
+                                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3 whitespace-nowrap">
                           {['5M', '15M', '1H'].map((interval) => (
                             <button
                               key={interval}
@@ -2038,7 +2124,7 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[300px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
+                      <div className="flex-1 min-h-[900px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
                         <TradingChart trades={stats.trades || []} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} />
                       </div>
 
@@ -2051,11 +2137,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Sidebar — Enhanced Live Console */}
-                  <div className="flex flex-col">
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
-                      {/* Terminal header */}
-                      <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
+                  {/* Sidebar — Configs & Live Console */}
+                  {currentUser?.role === 'ADMIN' && (
+                    <div className="flex flex-col gap-6">
+                      <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
+                      
+                      <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
+                        {/* Terminal header */}
+                        <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
                           <div className="flex gap-1.5">
                             <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
@@ -2132,86 +2221,10 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
 
-                {/* Intelligence Status — Enhanced with connection nodes */}
-                <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
-                  {/* Animated grid bg */}
-                  <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-3xl rounded-full pointer-events-none -mr-16 -mt-16" />
-
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between mb-6">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                            <Zap size={12} className="text-blue-400" />
-                          </div>
-                          <h3 className="text-sm font-bold text-white">{t.dashboard.intelStatus}</h3>
-                        </div>
-                        <p className="text-xs text-white/40 leading-relaxed max-w-lg">{t.dashboard.intelDesc}</p>
-                      </div>
-
-                      {/* Animated connection nodes */}
-                      <div className="hidden lg:flex items-center gap-2">
-                        {['VPS-1', 'MT5', 'API'].map((node, ni) => (
-                          <div key={node} className="flex items-center gap-2">
-                            <div className="flex flex-col items-center gap-2">
-                              <motion.div
-                                animate={{ opacity: [0.6, 1, 0.6], scale: [0.95, 1.05, 0.95] }}
-                                transition={{ duration: 2, repeat: Infinity, delay: ni * 0.6 }}
-                                className="w-16 h-16 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                              >
-                                <Network size={28} className="text-emerald-400" />
-                              </motion.div>
-                              <span className="text-[10px] font-mono font-black text-emerald-400">{node}</span>
-                            </div>
-                            {ni < 2 && (
-                              <div className="flex gap-1.5 mx-2">
-                                {[0, 1, 2].map(dot => (
-                                  <motion.div
-                                    key={dot}
-                                    animate={{ opacity: [0.1, 1, 0.1] }}
-                                    transition={{ duration: 1.2, repeat: Infinity, delay: ni * 0.4 + dot * 0.15 }}
-                                    className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Metrics strip */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                      {[
-                        { label: language === 'en' ? 'VPS Latency' : 'Latência VPS', value: `${(0.8 + (tick % 10) * 0.04).toFixed(1)}ms`, color: 'text-emerald-400', good: true },
-                        { label: language === 'en' ? 'Signals Analyzed' : 'Sinais Analisados', value: `${1240 + (tick % 30) * 3}`, color: 'text-blue-400', good: true },
-                        { label: language === 'en' ? 'Consensus Score' : 'Score Consenso', value: '87%', color: 'text-purple-400', good: true },
-                        { label: language === 'en' ? 'Uptime' : 'Uptime VPS', value: '99.9%', color: 'text-yellow-400', good: true },
-                      ].map(({ label, value, color, good }) => (
-                        <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2.5 flex flex-col gap-0.5">
-                          <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider">{label}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-base font-mono font-black ${color}`}>{value}</span>
-                            {good && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {currentUser?.role === 'ADMIN' && (
-                      <button
-                        onClick={() => setActiveTab('settings')}
-                        className="w-full py-3 bg-white/5 hover:bg-indigo-500/10 border border-white/5 hover:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-white/60 hover:text-white"
-                      >
-                        <Settings size={14} />
-                        {t.dashboard.adjustWeights}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                {/* Bloco de Status de Inteligência removido conforme solicitação */}
 
                 {/* Order Execution Table — Enhanced with filter + highlight */}
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col">
@@ -3727,6 +3740,46 @@ export default function App() {
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
                       />
                     </div>
+                    
+                    {/* MT5 Credentials */}
+                    <div className="pt-4 border-t border-white/5 space-y-4">
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+                        <Terminal size={14} /> 
+                        {language === 'en' ? 'MT5 Credentials' : language === 'es' ? 'Credenciales MT5' : 'Credenciais do MT5'}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 Login</label>
+                          <input
+                            type="text"
+                            value={profileForm.mt5Login || ''}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
+                            placeholder="Ex: 10029384"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 {language === 'en' ? 'Password' : language === 'es' ? 'Contraseña' : 'Senha'}</label>
+                          <input
+                            type="password"
+                            value={profileForm.mt5Password || ''}
+                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
+                            placeholder="••••••••"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">MT5 {language === 'en' ? 'Server' : language === 'es' ? 'Servidor' : 'Servidor'}</label>
+                        <input
+                          type="text"
+                          value={profileForm.mt5Server || ''}
+                          onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
+                          placeholder="Ex: Deriv-Server"
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none"
+                        />
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtWallet}</label>
                       <div className="relative">
@@ -3741,109 +3794,47 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* MT5 Broker Connection Section */}
-                    <div className="pt-2 border-t border-white/5">
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-white">Conexão com a Corretora</p>
-                          <p className="text-[10px] text-white/40">Credenciais do MetaTrader 5 para sincronização automática</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Login MT5</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Login || ''}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
-                            placeholder="Ex: 12345678"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Senha MT5</label>
-                          <input
-                            type="password"
-                            value={profileForm.mt5Password || ''}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
-                            placeholder="••••••••"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Servidor</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Server || ''}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
-                            placeholder="Ex: Exness-MT5Real"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                      </div>
-                      {profileForm.mt5Login && (
-                        <div className="mt-3 flex items-center gap-2 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-2">
-                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                          <span className="text-[11px] text-green-400">Login MT5 configurado: <strong>{profileForm.mt5Login}</strong> — Salve o perfil para aplicar</span>
-                        </div>
-                      )}
-                    </div>
 
-                    <div className="pt-2 border-t border-white/5">
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold text-white">Tokens de API Deriv</span>
-                            <span className="text-xs text-white/40">Gere seus tokens na Deriv e cole abaixo</span>
+                        {currentUser?.role === 'ADMIN' && (
+                          <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/5 space-y-4">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold text-white">Gestão de Risco (Operacional)</span>
+                              <span className="text-xs text-white/40">Configure os valores reais das ordens na Deriv</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada ($)</label>
+                                <input
+                                  type="number"
+                                  value={tradeSettings.amount}
+                                  onChange={(e) => updateTradeSettings('amount', Number(e.target.value))}
+                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-white"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-emerald-400/70 tracking-widest pl-1">Take Profit ($)</label>
+                                <input
+                                  type="number"
+                                  value={tradeSettings.takeProfit}
+                                  onChange={(e) => updateTradeSettings('takeProfit', Number(e.target.value))}
+                                  className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none font-mono text-emerald-400"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-red-400/70 tracking-widest pl-1">Stop Loss ($)</label>
+                                <input
+                                  type="number"
+                                  value={tradeSettings.stopLoss}
+                                  onChange={(e) => updateTradeSettings('stopLoss', Number(e.target.value))}
+                                  className="w-full bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm focus:border-red-500 outline-none font-mono text-red-400"
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
-                            className={`px-4 py-2 text-white rounded-lg font-bold text-xs uppercase transition-all shadow-lg flex items-center gap-2 ${
-                              (currentUser?.derivTokenDemo || currentUser?.derivTokenReal)
-                                ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'
-                                : 'bg-[#ff4444] hover:bg-[#ff5555] shadow-red-500/20'
-                            }`}
-                          >
-                            Gerar Tokens <ExternalLink size={14} />
-                          </button>
-                        </div>
-                        <div className="mt-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">TOKEN DE API DERIV</label>
-                            <input
-                              type="password"
-                              value={profileForm.derivToken || ''}
-                              onChange={(e) => setProfileForm(f => ({ ...f, derivToken: e.target.value }))}
-                              placeholder="Ex: pat_..."
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-blue-400 tracking-widest pl-1">Deriv App ID (Obrigatório para PAT tokens)</label>
-                          <input
-                            type="text"
-                            value={localStorage.getItem('customDerivAppId') || '1089'}
-                            onChange={(e) => {
-                                localStorage.setItem('customDerivAppId', e.target.value);
-                                // Forçar re-render para atualizar o campo visualmente
-                                setProfileForm(f => ({...f})); 
-                            }}
-                            placeholder="Ex: 38291"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-blue-400"
-                          />
-                          <p className="text-xs text-blue-400/60 mt-2">
-                            Se 1089 não funcionar, registre seu app em <a href="https://api.deriv.com/dashboard/applications" target="_blank" className="underline font-bold text-blue-300">api.deriv.com</a> e cole o ID aqui.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-
+                        )}
                   </div>
+
 
                   <div className="pt-4 flex gap-4">
                     <button

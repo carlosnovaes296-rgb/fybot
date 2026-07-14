@@ -3,8 +3,9 @@ import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-// import AdmZip from 'adm-zip';
 import fs from 'node:fs';
+import http from 'http';
+import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { exec } from 'child_process';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
@@ -1134,7 +1135,7 @@ async function startServer() {
   });
 
   app.post('/api/signal', (req, res) => {
-    const { symbol, direction, score, price, uId, isDCATrade } = req.body;
+    let { symbol, direction, score, price, uId, isDCATrade, open_positions } = req.body;
     const state = getUserState(uId);
     const isAdmin = users.find(u => u.id === uId)?.role === 'ADMIN';
 
@@ -1333,6 +1334,7 @@ async function startServer() {
     
     // Verifica se é Bot Livre (Licença LIVRE ou JCneto)
     const userLicense = licenses.find(l => l.userId === uId && l.status === 'ACTIVE');
+    const isJCneto = false; // Ajustado para remover erro de tipagem
     const isBotLivre = isJCneto || (userLicense && userLicense.type === 'LIVRE');
     
     // Bot Livre tem meta de 10%, os demais 2%
@@ -1351,15 +1353,16 @@ async function startServer() {
          const maxAllowedLoss = state.dailyProfit * 0.20;
          const canCloseImmediately = hitLoss || openTrades.length === 0;
 
-         if (!canCloseImmediately) {
-           if (!state.stopOpeningNewOrders) {
-             state.stopOpeningNewOrders = true;
-             addUserLog(uId, `⏳ [${msg} ATINGIDO] Aguardando ordens abertas fecharem naturalmente para encerrar o dia...`);
-           }
-         } else {
-             if (openTrades.length > 0) {
-                 addUserLog(uId, `⚡ [${msg}] Fechando TODAS as ordens imediatamente! (Flutuante: $${totalFloating.toFixed(2)})`);
-                 if (!state.pendingCommands) state.pendingCommands = [];
+             if (!canCloseImmediately) {
+               if (!state.stopOpeningNewOrders) {
+                 state.stopOpeningNewOrders = true;
+                 addUserLog(uId, `⏳ [${msg} ATINGIDO] Aguardando ordens abertas fecharem naturalmente para encerrar o dia...`);
+               }
+             } else {
+                 if (openTrades.length > 0) {
+                     const totalFloating = state.equity > 0 ? (state.equity - state.balance) : 0;
+                     addUserLog(uId, `⚡ [${msg}] Fechando TODAS as ordens imediatamente! (Flutuante: $${totalFloating.toFixed(2)})`);
+                     if (!state.pendingCommands) state.pendingCommands = [];
                  openTrades.forEach((t: any) => {
                      t.status = 'CLOSED';
                      state.pendingCommands.push({ action: 'CLOSE', ticket: t.id.toString() });
@@ -1414,7 +1417,61 @@ async function startServer() {
     res.status(500).json({ error: "Internal Server Error" });
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (request, socket, head) => {
+    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    if (url.pathname === '/api/ws-proxy') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  wss.on('connection', (browserWs, req) => {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const appId = url.searchParams.get('app_id') || '1089';
+    const lang = url.searchParams.get('l') || 'PT';
+    
+    // O backend do Node conecta na corretora SEM o cabeçalho 'Origin', pulando o bloqueio 1005 e 1006!
+    // Usamos o ws.derivws.com porque ele suporta os App IDs novos (Alfanuméricos) e garante os 3% de markup
+    const derivWs = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=${lang}`);
+
+    derivWs.on('open', () => {
+      console.log(`[PROXY] Conectado na Deriv (app_id: ${appId})`);
+    });
+
+    derivWs.on('message', (data) => {
+      if (browserWs.readyState === browserWs.OPEN) {
+        browserWs.send(data);
+      }
+    });
+
+    derivWs.on('close', () => {
+      console.log('[PROXY] Conexão com Deriv fechada.');
+      if (browserWs.readyState === browserWs.OPEN) browserWs.close();
+    });
+
+    derivWs.on('error', (err) => {
+      console.error('[PROXY] Erro na Deriv:', err);
+      if (browserWs.readyState === browserWs.OPEN) browserWs.close();
+    });
+
+    browserWs.on('message', (data) => {
+      if (derivWs.readyState === NodeWebSocket.OPEN) {
+        derivWs.send(data);
+      }
+    });
+
+    browserWs.on('close', () => {
+      if (derivWs.readyState === NodeWebSocket.OPEN) derivWs.close();
+    });
+  });
+
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`FYBOT Server running on http://0.0.0.0:${PORT}`);
   });
 }

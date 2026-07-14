@@ -1,7 +1,10 @@
 @echo off
 echo ==============================================
-echo INJETANDO O TOKEN DA DERIV NO SEU MT5...
+echo LIMPANDO O MT5 E RESTAURANDO O SEU PAINEL ORIGINAL
 echo ==============================================
+echo Instalando dependencias necessarias...
+call npm install ssh2
+echo Iniciando upload...
 node upload_final.cjs
 echo.
 pause
