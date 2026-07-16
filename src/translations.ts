@@ -129,14 +129,14 @@ export const translations = {
       period: "DAYS"
     },
     installation: {
-      title: "🚀 Initial Step: Download your Robot",
-      subTitle: "Version v8 Professional — Compatible with MetaTrader 5",
-      downEx5: "DOWNLOAD .EX5 ONLY",
-      downZip: "DOWNLOAD FULL PACKAGE (.ZIP)",
-      step1: "Extract the .zip or save the .ex5 file in an accessible folder.",
-      step2: "Open MetaTrader 5, go to File > Open Data Folder.",
-      step3: "Navigate to MQL5 > Experts and paste the robot file there.",
-      step4: "Restart MT5, find the robot in the Navigator and drag it to the chart."
+      title: "🚀 Initial Step: Connect your Account",
+      subTitle: "Native API Connection — No downloads required",
+      downEx5: "AUTHORIZE CONNECTION",
+      downZip: "VIEW SETTINGS",
+      step1: "Go to the Settings page in your dashboard.",
+      step2: "Click on 'Connect Deriv' to link your account.",
+      step3: "Authorize the application securely via OAuth.",
+      step4: "Your robot is ready to trade automatically in the cloud."
     },
     settings: {
       accountFinance: "Account & Finance",
@@ -304,14 +304,14 @@ export const translations = {
       period: "DIAS"
     },
     installation: {
-      title: "🚀 Passo Inicial: Baixar seu Robô",
-      subTitle: "Versão v8 Professional — Compatível para MetaTrader 5",
-      downEx5: "DOWNLOAD .EX5 APENAS",
-      downZip: "DOWNLOAD PACOTE COMPLETO (.ZIP)",
-      step1: "Extraia o .zip ou salve o arquivo .ex5 em uma pasta acessível.",
-      step2: "Abra o MetaTrader 5, vá em Arquivo > Abrir Pasta de Dados.",
-      step3: "Navegue até MQL5 > Experts e cole o arquivo do robô lá.",
-      step4: "Reinicie o MT5, localize o robô no Navegador e arraste para o gráfico."
+      title: "🚀 Passo Inicial: Conectar sua Conta",
+      subTitle: "Conexão Nativa API — Sem necessidade de downloads",
+      downEx5: "AUTORIZAR CONEXÃO",
+      downZip: "VER CONFIGURAÇÕES",
+      step1: "Vá para a página de Configurações no seu painel.",
+      step2: "Clique em 'Conectar Deriv' para vincular sua conta.",
+      step3: "Autorize o aplicativo de forma segura via OAuth.",
+      step4: "Seu robô está pronto para operar automaticamente na nuvem."
     },
     settings: {
       accountFinance: "Conta & Finanças",
@@ -479,14 +479,14 @@ export const translations = {
       period: "DÍAS"
     },
     installation: {
-      title: "🚀 Paso Inicial: Descargar su Robot",
-      subTitle: "Versión v8 Professional — Compatible con MetaTrader 5",
-      downEx5: "DESCARGAR .EX5 SOLO",
-      downZip: "DESCARGAR PAQUETE COMPLETO (.ZIP)",
-      step1: "Extraiga el .zip o guarde el archivo .ex5 en una carpeta accesible.",
-      step2: "Abra MetaTrader 5, vaya a Archivo > Abrir Carpeta de Datos.",
-      step3: "Navegue a MQL5 > Experts y pegue el archivo del robot allí.",
-      step4: "Reinicie MT5, localice el robot en el Navegador y arrástrelo al gráfico."
+      title: "🚀 Paso Inicial: Conectar su Cuenta",
+      subTitle: "Conexión Nativa API — Sin necesidad de descargas",
+      downEx5: "AUTORIZAR CONEXIÓN",
+      downZip: "VER CONFIGURACIÓN",
+      step1: "Vaya a la página de Configuración en su panel.",
+      step2: "Haga clic en 'Conectar Deriv' para vincular su cuenta.",
+      step3: "Autorice la aplicación de forma segura a través de OAuth.",
+      step4: "Su robot está listo para operar automáticamente en la nube."
     },
     settings: {
       accountFinance: "Cuenta y Finanzas",

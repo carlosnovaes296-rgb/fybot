@@ -294,23 +294,6 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
     }
   };
 
-  const handleSimulateGain = async (amount: number) => {
-    setSimulating(true);
-    try {
-      const res = await fetch('/api/daily-target/simulate-profit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profit: amount, userId })
-      });
-      if (res.ok) {
-        await fetchStatus();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSimulating(false);
-    }
-  };
 
   const floatingProfit = (stats.equity || 0) - (stats.balance || 0);
   const totalDailyProfit = stats.dailyProfit || 0;

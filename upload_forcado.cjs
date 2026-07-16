@@ -29,6 +29,7 @@ const uploadFile = (localPath, remotePath) => {
     conn.sftp((err, sftp) => {
       if (err) return reject(err);
       sftp.fastPut(localPath, remotePath, (err) => {
+        sftp.end(); // FECHA O CANAL SFTP AQUI! (Isso previne o erro de Channel open failure)
         if (err) return reject(err);
         resolve();
       });
@@ -54,17 +55,41 @@ conn.on('ready', async () => {
     console.log('📤 3. Enviando o TradingChart.tsx (o Gráfico Azul!)...');
     await uploadFile('./src/components/TradingChart.tsx', '/root/fybot/src/components/TradingChart.tsx');
     
+    console.log('🛠 Criando pastas do backend no VPS...');
+    await runCmd('mkdir -p /root/fybot/backend/deriv /root/fybot/backend/services');
+    
+    console.log('📤 4. Enviando backend/deriv e backend/services...');
+    await uploadFile('./backend/deriv/config.ts', '/root/fybot/backend/deriv/config.ts');
+    await uploadFile('./backend/deriv/oauth.ts', '/root/fybot/backend/deriv/oauth.ts');
+    await uploadFile('./backend/deriv/routes.ts', '/root/fybot/backend/deriv/routes.ts');
+    await uploadFile('./backend/deriv/websocket.ts', '/root/fybot/backend/deriv/websocket.ts');
+    await uploadFile('./backend/services/DerivBotEngine.ts', '/root/fybot/backend/services/DerivBotEngine.ts');
+    await uploadFile('./backend/services/derivService.ts', '/root/fybot/backend/services/derivService.ts');
+    
     console.log('🔍 Checando se o arquivo TradingChart chegou no VPS...');
     const lsOut = await runCmd('ls -la /root/fybot/src/components/ || true');
     console.log('Conteúdo da pasta components no VPS:\n', lsOut);
 
-    console.log('🛠 Limpando dependências ou caches se necessário...');
-    // As linhas de sed foram removidas para não quebrar a API V2 da Deriv!
-    console.log('⚙️ Instalando biblioteca do gráfico azul (lightweight-charts)...');
-    await runCmd(`cd /root/fybot && npm install lightweight-charts`);
+    console.log('🛠 Limpando dependências ou caches no VPS...');
+    await runCmd(`cd /root/fybot && rm -rf node_modules/lightweight-charts package-lock.json node_modules/.vite dist`);
+    
+    console.log('⚙️ Instalando bibliotecas corretas na versão 4 (lightweight-charts, express-session)...');
+    await runCmd(`cd /root/fybot && npm install && npm install lightweight-charts@4.1.1 express-session @types/express-session`);
 
-    console.log('📦 Reconstruindo o site...');
-    await runCmd(`cd /root/fybot && NODE_OPTIONS=--max-old-space-size=1024 npm run build`);
+    console.log('📦 Reconstruindo o site (com proteção contra falta de memória)...');
+    await runCmd(`
+      if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo "/swapfile none swap sw 0 0" >> /etc/fstab
+      fi
+      cd /root/fybot && NODE_OPTIONS=--max-old-space-size=1024 npm run build
+    `);
+    
+    console.log('🧹 Limpando trades simulados antigos do banco de dados...');
+    await runCmd(`node -e "const fs=require('fs'); try { let data=JSON.parse(fs.readFileSync('/root/fybot/db.json', 'utf8')); Object.values(data.userStates || {}).forEach(state => { state.trades = []; state.pnlHistory = []; }); fs.writeFileSync('/root/fybot/db.json', JSON.stringify(data, null, 2)); console.log('Trades limpos com sucesso!'); } catch(e) { console.log('Erro ao limpar db.json:', e.message); }"`);
     
     console.log('🛡️ Arrumando o Nginx do VPS para suportar WebSockets no Túnel...');
     await runCmd(`
@@ -72,7 +97,10 @@ conn.on('ready', async () => {
       for file in /etc/nginx/sites-available/*; do
         if grep -q "proxy_pass http://localhost:3000;" "$file"; then
           if ! grep -q "Upgrade" "$file"; then
-            sed -i '/proxy_pass http:\\/\\/localhost:3000;/a \\        proxy_set_header Upgrade $http_upgrade;\\n        proxy_set_header Connection "upgrade";' "$file"
+            sed -i 's|proxy_pass http://localhost:3000;|proxy_pass http://localhost:3000;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";|g' "$file"
+          fi
+          if ! grep -q "proxy_http_version 1.1;" "$file"; then
+            sed -i 's|proxy_pass http://localhost:3000;|proxy_pass http://localhost:3000;\n        proxy_http_version 1.1;|g' "$file"
           fi
         fi
       done

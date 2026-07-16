@@ -7,9 +7,6 @@ export interface User {
   wallet?: string;
   paymentWallet?: string;
   referralCode?: string;
-  mt5Login?: string;
-  mt5Password?: string;
-  mt5Server?: string;
   derivToken?: string;
 }
 
