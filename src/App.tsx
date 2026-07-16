@@ -87,8 +87,33 @@ import { Step } from './components/Step';
 import { BenefitCard, BenefitItem } from './components/BenefitCard';
 import { PricingCard } from './components/PricingCard';
 import { ConnectDeriv } from './components/ConnectDeriv';
+import { Trophy, ChevronDown, PlayCircle, LogIn, ChevronLeft, Check, MessageSquare, Plus, Shield, LayoutGrid, AlertCircle, ArrowUpRight, ArrowDownRight, Smartphone, Info } from 'lucide-react';
 import { TradingChart } from './components/TradingChart';
 
+// --- PKCE Auth Helpers ---
+function generateCodeVerifier() {
+  const array = new Uint32Array(56 / 2);
+  window.crypto.getRandomValues(array);
+  return Array.from(array, (dec) => ('0' + dec.toString(16)).slice(-2)).join('');
+}
+
+async function handleDerivPKCELogin(clientId: string) {
+  try {
+    const verifier = generateCodeVerifier();
+    localStorage.setItem('deriv_code_verifier', verifier);
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    const challenge = btoa(String.fromCharCode(...Array.from(new Uint8Array(digest)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    
+    // Tentativa com oauth.deriv.com que é a oficial
+    window.location.href = `https://oauth.deriv.com/oauth2/authorize?response_type=code&app_id=${clientId}&redirect_uri=https://fybot.life/dashboard&code_challenge=${challenge}&code_challenge_method=S256&scope=read+trade`;
+  } catch (e: any) {
+    alert("Error generating PKCE: " + e.message);
+  }
+}
+// --------------------
 
 
 /*
@@ -462,6 +487,78 @@ export default function App() {
 
   useEffect(() => {
     const search = window.location.search || window.location.hash;
+    
+    // Novo Fluxo PKCE (Authorization Code)
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    
+    if (code) {
+      const exchangeCode = async () => {
+         const codeVerifier = localStorage.getItem('deriv_code_verifier');
+         if (!codeVerifier) {
+            alert("Erro: Código Verificador PKCE não encontrado no navegador.");
+            return;
+         }
+         
+         try {
+             const response = await fetch('https://oauth.deriv.com/oauth2/token', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/x-www-form-urlencoded'
+                 },
+                 body: new URLSearchParams({
+                     grant_type: 'authorization_code',
+                     code: code,
+                     client_id: '33PZwcDs8NqrvpUw1vQIF',
+                     redirect_uri: 'https://fybot.life/dashboard',
+                     code_verifier: codeVerifier
+                 })
+             });
+             const data = await response.json();
+             
+             // Por enquanto, mostramos na tela para saber a estrutura do JSON!
+             alert("RESPOSTA DA DERIV (Por favor, tire print disto!): " + JSON.stringify(data));
+             
+             if (data.access_token) {
+                 // Salva temporariamente como Real e Demo para testar a conexão
+                 let derivTokenReal = data.access_token;
+                 let derivTokenDemo = data.access_token;
+                 let defaultToken = data.access_token;
+                 
+                 window.history.replaceState({}, document.title, window.location.pathname);
+                 const savedUserStr = localStorage.getItem('currentUser');
+                 if (savedUserStr) {
+                    const savedUser = JSON.parse(savedUserStr);
+                    fetch('/api/user/profile', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ 
+                        id: savedUser.id, 
+                        derivTokenDemo: derivTokenDemo,
+                        derivTokenReal: derivTokenReal,
+                        derivToken: defaultToken 
+                      })
+                    })
+                    .then(res => res.json())
+                    .then(apiData => {
+                      if (apiData.success) {
+                        setCurrentUser(apiData.user);
+                        localStorage.setItem('currentUser', JSON.stringify(apiData.user));
+                        window.location.reload();
+                      }
+                    });
+                 }
+             }
+         } catch (e: any) {
+             alert("Erro de comunicação com a Deriv: " + e.message);
+         }
+      };
+      
+      exchangeCode();
+      return;
+    }
+    
+    // Fluxo Antigo (Implicit) - Mantido por segurança
     if (search.includes('token1=')) {
       const params = new URLSearchParams(search.replace('#', '?'));
       
@@ -1500,9 +1597,7 @@ export default function App() {
                 {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
               </button>
               <button
-                onClick={() => {
-                  window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33PZwcDs8NqrvpUw1vQIF&redirect_uri=https://fybot.life/dashboard&l=PT&brand=deriv';
-                }}
+                onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
                 className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
               >
                 <Globe size={20} />
@@ -3757,9 +3852,7 @@ export default function App() {
                             
                             <button
                                 type="button"
-                                onClick={() => {
-                                  window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33PVKdgTEIn9JlNjX0izq&client_id=33PVKdgTEIn9JlNjX0izq&redirect_uri=https://fybot.life/dashboard&l=PT&brand=deriv';
-                                }}
+                                onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
                                 className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20 text-lg flex items-center justify-center gap-2 mb-2"
                               >
                                 <Globe size={24} />
