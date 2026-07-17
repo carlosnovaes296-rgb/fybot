@@ -35,9 +35,27 @@ conn.on('ready', () => {
       
       appStream.on('close', () => {
         console.log('📤 App.tsx uploaded!');
+
+        // Upload DerivBotEngine.ts
+        const derivBotContent = fs.readFileSync('./backend/services/DerivBotEngine.ts');
+        const derivBotStream = sftp.createWriteStream('/root/fybot/backend/services/DerivBotEngine.ts');
+        derivBotStream.write(derivBotContent);
+        derivBotStream.end();
+
+        derivBotStream.on('close', () => {
+          console.log('📤 DerivBotEngine.ts uploaded!');
+
+          // Upload Indicators.ts
+          const indContent = fs.readFileSync('./backend/services/Indicators.ts');
+          const indStream = sftp.createWriteStream('/root/fybot/backend/services/Indicators.ts');
+          indStream.write(indContent);
+          indStream.end();
+
+          indStream.on('close', () => {
+            console.log('📤 Indicators.ts uploaded!');
         
-        console.log('🔄 Rebuilding the frontend and restarting server...');
-        conn.exec('cd /root/fybot && npm run build && pm2 restart fybot', (err2, stream2) => {
+            console.log('🔄 Rebuilding the frontend and restarting server...');
+            conn.exec('cd /root/fybot && npm run build && pm2 restart fybot', (err2, stream2) => {
           if (err2) throw err2;
           stream2.on('close', () => {
             console.log('\n🎉 DONE! Backend and Frontend updated!');
@@ -45,6 +63,8 @@ conn.on('ready', () => {
           }).on('data', d => process.stdout.write(d))
             .stderr.on('data', d => process.stderr.write(d));
         }); // conn.exec
+          }); // indStream.on
+        }); // derivBotStream.on
       }); // appStream.on
     }); // typesStream.on
   }); // serverStream.on

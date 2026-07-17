@@ -66,7 +66,7 @@ async function startServer() {
 
   // INICIALIZA O NOVO MOTOR DE SINAIS (SMC / RSI / EMA)
   const botEngine = new DerivBotEngine();
-  botEngine.onSignal = (direction, price, reason) => {
+  botEngine.onSignal = (direction, price, reason, tp, sl) => {
     console.log(`[SINAL GERADO] ${direction} @ ${price} -> ${reason}`);
     // Itera todos os usuários
     users.forEach(user => {
@@ -75,8 +75,10 @@ async function startServer() {
          // Executa a compra usando o token do usuário!
          addUserLog(user.id, `🚀 [SINAL RECEBIDO] ${reason}. Executando ${direction} na Deriv!`);
          
-         // Abre uma conexão temporária para mandar a ordem (Pode ser otimizado futuramente com Pool de conexões)
-         const ws = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT`);
+         // Abre uma conexão temporária passando o Origin para não dar Erro 1006
+         const ws = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=33PZwcDs8NqrvpUw1vQIF&l=PT`, {
+           headers: { 'Origin': 'https://fybot.life' }
+         });
          ws.on('open', () => {
            ws.send(JSON.stringify({ authorize: user.derivToken }));
          });
@@ -96,8 +98,8 @@ async function startServer() {
                  multiplier: 100,
                  symbol: "frxXAUUSD", 
                  limit_order: {
-                   take_profit: 5,  // $5 TP
-                   stop_loss: 2     // $2 SL
+                   take_profit: tp || 5,
+                   stop_loss: sl || 2
                  }
                }
              }));
@@ -106,7 +108,7 @@ async function startServer() {
              if (data.error) {
                addUserLog(user.id, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message}`);
              } else {
-               addUserLog(user.id, `✅ [ORDEM ABERTA] Contrato ${data.buy.contract_id} aberto com sucesso! (TP: $5 / SL: $2)`);
+               addUserLog(user.id, `✅ [ORDEM ABERTA] Contrato ${data.buy.contract_id} aberto com sucesso! (TP: $${tp} / SL: $${sl})`);
                const realTrade = {
                  id: String(data.buy.contract_id),
                  symbol: "XAUUSD",

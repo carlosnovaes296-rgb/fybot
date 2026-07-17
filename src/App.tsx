@@ -101,14 +101,18 @@ async function handleDerivPKCELogin(clientId: string) {
   try {
     const verifier = generateCodeVerifier();
     localStorage.setItem('deriv_code_verifier', verifier);
-    
+
     const encoder = new TextEncoder();
     const data = encoder.encode(verifier);
     const digest = await window.crypto.subtle.digest('SHA-256', data);
     const challenge = btoa(String.fromCharCode(...Array.from(new Uint8Array(digest)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    
-    // Tentativa com oauth.deriv.com que é a oficial
-    window.location.href = `https://oauth.deriv.com/oauth2/authorize?response_type=code&app_id=${clientId}&redirect_uri=https://fybot.life/dashboard&code_challenge=${challenge}&code_challenge_method=S256&scope=read+trade`;
+
+    const arrayState = new Uint32Array(56 / 2);
+    window.crypto.getRandomValues(arrayState);
+    const state = Array.from(arrayState, (dec) => ('0' + dec.toString(16)).slice(-2)).join('');
+
+    const redirectUri = 'https://fybot.life/dashboard';
+    window.location.href = `https://auth.deriv.com/oauth2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
   } catch (e: any) {
     alert("Error generating PKCE: " + e.message);
   }
@@ -487,81 +491,81 @@ export default function App() {
 
   useEffect(() => {
     const search = window.location.search || window.location.hash;
-    
+
     // Novo Fluxo PKCE (Authorization Code)
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    
+
     if (code) {
       const exchangeCode = async () => {
-         const codeVerifier = localStorage.getItem('deriv_code_verifier');
-         if (!codeVerifier) {
-            alert("Erro: Código Verificador PKCE não encontrado no navegador.");
-            return;
-         }
-         
-         try {
-             const response = await fetch('https://oauth.deriv.com/oauth2/token', {
-                 method: 'POST',
-                 headers: {
-                     'Content-Type': 'application/x-www-form-urlencoded'
-                 },
-                 body: new URLSearchParams({
-                     grant_type: 'authorization_code',
-                     code: code,
-                     client_id: '33PZwcDs8NqrvpUw1vQIF',
-                     redirect_uri: 'https://fybot.life/dashboard',
-                     code_verifier: codeVerifier
-                 })
-             });
-             const data = await response.json();
-             
-             // Por enquanto, mostramos na tela para saber a estrutura do JSON!
-             alert("RESPOSTA DA DERIV (Por favor, tire print disto!): " + JSON.stringify(data));
-             
-             if (data.access_token) {
-                 // Salva temporariamente como Real e Demo para testar a conexão
-                 let derivTokenReal = data.access_token;
-                 let derivTokenDemo = data.access_token;
-                 let defaultToken = data.access_token;
-                 
-                 window.history.replaceState({}, document.title, window.location.pathname);
-                 const savedUserStr = localStorage.getItem('currentUser');
-                 if (savedUserStr) {
-                    const savedUser = JSON.parse(savedUserStr);
-                    fetch('/api/user/profile', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ 
-                        id: savedUser.id, 
-                        derivTokenDemo: derivTokenDemo,
-                        derivTokenReal: derivTokenReal,
-                        derivToken: defaultToken 
-                      })
-                    })
-                    .then(res => res.json())
-                    .then(apiData => {
-                      if (apiData.success) {
-                        setCurrentUser(apiData.user);
-                        localStorage.setItem('currentUser', JSON.stringify(apiData.user));
-                        window.location.reload();
-                      }
-                    });
-                 }
-             }
-         } catch (e: any) {
-             alert("Erro de comunicação com a Deriv: " + e.message);
-         }
+        const codeVerifier = localStorage.getItem('deriv_code_verifier');
+        if (!codeVerifier) {
+          alert("Erro: Código Verificador PKCE não encontrado no navegador.");
+          return;
+        }
+
+        try {
+          // Usando o endpoint oficial auth.deriv.com
+          const response = await fetch('https://auth.deriv.com/oauth2/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code: code,
+              client_id: '33PZwcDs8NqrvpUw1vQIF',
+              redirect_uri: 'https://fybot.life/dashboard',
+              code_verifier: codeVerifier
+            })
+          });
+          const data = await response.json();
+
+          // Token recebido com sucesso no formato V2.
+
+          if (data.access_token) {
+            // Salva temporariamente como Real e Demo para testar a conexão
+            let derivTokenReal = data.access_token;
+            let derivTokenDemo = data.access_token;
+            let defaultToken = data.access_token;
+
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const savedUserStr = localStorage.getItem('currentUser');
+            if (savedUserStr) {
+              const savedUser = JSON.parse(savedUserStr);
+              fetch('/api/user/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: savedUser.id,
+                  derivTokenDemo: derivTokenDemo,
+                  derivTokenReal: derivTokenReal,
+                  derivToken: defaultToken
+                })
+              })
+                .then(res => res.json())
+                .then(apiData => {
+                  if (apiData.success) {
+                    setCurrentUser(apiData.user);
+                    localStorage.setItem('currentUser', JSON.stringify(apiData.user));
+                    window.location.reload();
+                  }
+                });
+            }
+          }
+        } catch (e: any) {
+          alert("Erro de comunicação com a Deriv: " + e.message);
+        }
       };
-      
+
       exchangeCode();
       return;
     }
-    
+
     // Fluxo Antigo (Implicit) - Mantido por segurança
     if (search.includes('token1=')) {
       const params = new URLSearchParams(search.replace('#', '?'));
-      
+
       let derivTokenDemo = '';
       let derivTokenReal = '';
       let defaultToken = '';
@@ -578,7 +582,7 @@ export default function App() {
           }
         }
       }
-      
+
       if (!derivTokenDemo && !derivTokenReal) {
         defaultToken = params.get('token1') || '';
       }
@@ -592,25 +596,25 @@ export default function App() {
             fetch('/api/user/profile', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                id: savedUser.id, 
+              body: JSON.stringify({
+                id: savedUser.id,
                 derivTokenDemo: derivTokenDemo || savedUser.derivTokenDemo,
                 derivTokenReal: derivTokenReal || savedUser.derivTokenReal,
-                derivToken: defaultToken 
+                derivToken: defaultToken
               })
             })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                setCurrentUser(data.user);
-                localStorage.setItem('currentUser', JSON.stringify(data.user));
-                alert(language === 'en' ? 'Deriv accounts successfully connected!' : 'Contas Deriv (Real e Demo) conectadas com sucesso! O painel será atualizado.');
-                window.location.reload();
-              } else {
-                alert('Erro ao salvar tokens na conta: ' + data.error);
-              }
-            })
-            .catch(err => alert('Erro na comunicação com o servidor: ' + err.message));
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  setCurrentUser(data.user);
+                  localStorage.setItem('currentUser', JSON.stringify(data.user));
+                  alert(language === 'en' ? 'Deriv accounts successfully connected!' : 'Contas Deriv (Real e Demo) conectadas com sucesso! O painel será atualizado.');
+                  window.location.reload();
+                } else {
+                  alert('Erro ao salvar tokens na conta: ' + data.error);
+                }
+              })
+              .catch(err => alert('Erro na comunicação com o servidor: ' + err.message));
           } catch (e: any) {
             alert('Erro ao processar dados locais: ' + e.message);
           }
@@ -632,7 +636,7 @@ export default function App() {
 
     if (token1 && currentUser) {
       console.log('Tokens recebidos via OAuth:', acct1, acct2);
-      
+
       let derivTokenReal = currentUser.derivTokenReal;
       let derivTokenDemo = currentUser.derivTokenDemo;
 
@@ -652,16 +656,16 @@ export default function App() {
           updates: { derivTokenReal, derivTokenDemo }
         })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setCurrentUser(data.user);
-          alert('Conexão com a Deriv realizada com sucesso através de Autenticação Segura!');
-          // Limpa a URL para não vazar o token
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      })
-      .catch(err => console.error('Erro ao salvar token OAuth:', err));
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCurrentUser(data.user);
+            alert('Conexão com a Deriv realizada com sucesso através de Autenticação Segura!');
+            // Limpa a URL para não vazar o token
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        })
+        .catch(err => console.error('Erro ao salvar token OAuth:', err));
     }
   }, [currentUser]);
 
@@ -669,30 +673,30 @@ export default function App() {
   useEffect(() => {
     let ws: WebSocket;
     let pollInterval: any;
-    
+
     // Função principal de conexão
     const connectDeriv = () => {
       if (!currentUser || (!currentUser.derivTokenReal && !currentUser.derivTokenDemo)) return;
-      
+
       // Autentica assim que conectar
       const activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
       const tokenToSend = (activeToken || '').trim();
       if (!tokenToSend) return;
 
-      // CONECTA DIRETO NA DERIV! Como a Deriv exige número no WebSocket, usamos o 1089
-      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT`);
+      // O WebSocket da Deriv deve usar o MESMO App ID Alfanumérico usado no OAuth (PKCE)
+      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=33PZwcDs8NqrvpUw1vQIF&l=PT`);
       derivWsRef.current = ws;
-      
+
       ws.onopen = () => {
         ws.send(JSON.stringify({ authorize: tokenToSend }));
       };
-      
+
       ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
-        
+
         // CATCH-ALL PARA QUALQUER ERRO DA DERIV (mesmo sem msg_type)
         if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
-           console.error("DERIV GLOBAL ERROR:", data.error, "A corretora rejeitou algo na conexão:\n" + data.error.message);
+          console.error("DERIV GLOBAL ERROR:", data.error, "A corretora rejeitou algo na conexão:\n" + data.error.message);
         }
 
         if (data.msg_type === 'authorize') {
@@ -700,28 +704,28 @@ export default function App() {
             console.error('Deriv Auth Error:', data.error.message);
             // FORÇA A PARADA DO BOT PARA NÃO TENTAR ABRIR ORDEM SEM ESTAR LOGADO!
             setStats(prev => ({ ...prev, botRunning: false }));
-            
+
             fetch('/api/logs/add', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DERIV: ${data.error.message} (Por favor, crie um NOVO token na Deriv e verifique se copiou inteiro)` })
-            }).catch(() => {});
+            }).catch(() => { });
 
             if (derivWsRef.current) {
               // passa um código customizado para não confundir com 1005
-              derivWsRef.current.close(4001, "Auth Failed"); 
+              derivWsRef.current.close(4001, "Auth Failed");
             }
-            
+
             return;
           }
           const auth = data.authorize;
           const isDemo = currentUser?.activeAccountType === 'DEMO';
-          
+
           fetch('/api/logs/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: currentUser.id, message: `✅ SUCESSO: Conectado na Deriv! Saldo: $${auth.balance}` })
-          }).catch(() => {});
+          }).catch(() => { });
 
           setStats(prev => ({
             ...prev,
@@ -729,10 +733,10 @@ export default function App() {
             accountType: currentUser?.activeAccountType || (auth.is_virtual ? 'DEMO' : 'REAL'),
             currency: auth.currency || 'USD'
           }));
-          
-          // Subscreve ao saldo genérico ao vivo
-          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
-          
+
+          // Subscreve ao saldo genérico ao vivo pedindo TODAS as contas para mostrar o saldo real
+          ws.send(JSON.stringify({ balance: 1, account: 'all', subscribe: 1 }));
+
           // Mantém a conexão viva enviando ping a cada 30 segundos
           pollInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
@@ -740,22 +744,33 @@ export default function App() {
             }
           }, 30000);
         }
-        
+
         // Trata resposta do ping silenciosamente
         if (data.msg_type === 'ping') return;
-        
+
         // Atualização de saldo genérico (Opções)
         if (data.msg_type === 'balance') {
-          if (data.balance && data.balance.balance !== undefined) {
-            const isDemo = currentUser?.activeAccountType === 'DEMO';
+          if (data.balance) {
+            let currentBalance = data.balance.balance !== undefined ? data.balance.balance : 0;
+            
+            // Se a Deriv enviar múltiplas contas, soma tudo para mostrar o Total Value
+            if (data.balance.accounts) {
+              const accounts = data.balance.accounts;
+              let total = 0;
+              for (const key in accounts) {
+                total += accounts[key].balance || 0;
+              }
+              currentBalance = total;
+            }
+
             setStats(prev => ({
               ...prev,
-              balance: data.balance.balance,
-              equity: data.balance.balance
+              balance: currentBalance,
+              equity: currentBalance
             }));
           }
         }
-        
+
         // Confirmação de Ordem Aberta
         if (data.msg_type === 'buy') {
           if (data.error) {
@@ -777,16 +792,16 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket.` })
-        }).catch(() => {});
+        }).catch(() => { });
       };
-      
+
       ws.onclose = (e) => {
         console.log('Deriv WS Closed', e.code, e.reason);
         fetch('/api/logs/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: currentUser.id, message: `⚠️ WS FECHADO (Código: ${e.code}).${e.code === 4001 ? ' Falha de Autenticação.' : ' Tentando reconectar em 5s...'}` })
-        }).catch(() => {});
+        }).catch(() => { });
         clearInterval(pollInterval);
         if (e.code !== 4001) {
           setTimeout(connectDeriv, 5000);
@@ -1129,7 +1144,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...profileForm, id: currentUser.id })
       });
-      
+
       let data;
       try {
         data = await res.json();
@@ -1142,7 +1157,7 @@ export default function App() {
       console.log("Received profile response:", data);
       if (data.success) {
         let updatedUser = { ...currentUser, ...data.user };
-        
+
         // Atualiza com os tokens
         updatedUser.derivTokenDemo = profileForm.derivTokenDemo;
         updatedUser.derivTokenReal = profileForm.derivTokenReal;
@@ -1152,15 +1167,15 @@ export default function App() {
           await fetch('/api/user/profile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              id: updatedUser.id, 
+            body: JSON.stringify({
+              id: updatedUser.id,
               derivTokenDemo: updatedUser.derivTokenDemo,
               derivTokenReal: updatedUser.derivTokenReal,
-              derivToken: updatedUser.activeAccountType === 'REAL' ? updatedUser.derivTokenReal : updatedUser.derivTokenDemo 
+              derivToken: updatedUser.activeAccountType === 'REAL' ? updatedUser.derivTokenReal : updatedUser.derivTokenDemo
             })
           });
-        } catch (err) {}
-        
+        } catch (err) { }
+
         setCurrentUser(updatedUser);
         localStorage.setItem('currentUser', JSON.stringify(updatedUser));
         alert(language === 'en' ? "Profile updated successfully!" : language === 'es' ? "¡Perfil actualizado!" : "Perfil atualizado com sucesso!");
@@ -1394,10 +1409,10 @@ export default function App() {
     if (!currentUser) return;
     const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
     const newToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
-    
+
     if (!newToken || newToken.trim() === '') {
       alert(
-        newType === 'REAL' 
+        newType === 'REAL'
           ? "Você não configurou o Token da CONTA REAL! Vá em Configurações (engrenagem), cole seu token e CLIQUE EM 'SALVAR ALTERAÇÕES' no final da janela antes de tentar mudar."
           : "Você não configurou o Token da CONTA DEMO! Vá em Configurações (engrenagem), cole seu token e CLIQUE EM 'SALVAR ALTERAÇÕES' no final da janela antes de tentar mudar."
       );
@@ -1409,8 +1424,8 @@ export default function App() {
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: currentUser.id, 
+        body: JSON.stringify({
+          id: currentUser.id,
           activeAccountType: newType,
           derivToken: newToken
         })
@@ -1589,47 +1604,47 @@ export default function App() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
-                className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[16px] font-bold flex items-center justify-center gap-2"
-              >
-                <Users size={20} />
-                {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
-              </button>
-              <button
-                onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
-                className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
-              >
-                <Globe size={20} />
-                {language === 'en' ? 'Connect Deriv' : 'Conectar Deriv'}
-              </button>
-            </div>
-        </>
+                <button
+                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
+                  className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[16px] font-bold flex items-center justify-center gap-2"
+                >
+                  <Users size={20} />
+                  {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
+                </button>
+                <button
+                  onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
+                  className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
+                >
+                  <Globe size={20} />
+                  {language === 'en' ? 'Connect Deriv' : 'Conectar Deriv'}
+                </button>
+              </div>
+            </>
           )}
 
-        <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
-          >
-            {isSignUp ? (language === 'en' ? 'Log in' : 'Entrar') : (language === 'en' ? 'Create account' : 'Criar conta')}
-          </button>
-          {!isSignUp && (
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
             <button
-              onClick={() => alert(language === 'en' ? 'Contact support to reset your password.' : 'Entre em contato com o suporte para redefinir sua senha.')}
+              onClick={() => setIsSignUp(!isSignUp)}
               className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
             >
-              {language === 'en' ? 'Forgot password' : 'Esqueci minha senha'}
+              {isSignUp ? (language === 'en' ? 'Log in' : 'Entrar') : (language === 'en' ? 'Create account' : 'Criar conta')}
             </button>
-          )}
-        </div>
+            {!isSignUp && (
+              <button
+                onClick={() => alert(language === 'en' ? 'Contact support to reset your password.' : 'Entre em contato com o suporte para redefinir sua senha.')}
+                className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
+              >
+                {language === 'en' ? 'Forgot password' : 'Esqueci minha senha'}
+              </button>
+            )}
+          </div>
 
-        <div className="mt-6 text-center">
-          <p className="text-[20px] text-white/50 font-medium">
-            Fybot © 2026
-          </p>
-        </div>
-      </motion.div>
+          <div className="mt-6 text-center">
+            <p className="text-[20px] text-white/50 font-medium">
+              Fybot © 2026
+            </p>
+          </div>
+        </motion.div>
       </div >
     );
   }
@@ -1921,16 +1936,16 @@ export default function App() {
               <div className={`w-3 h-3 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
               <span className="text-sm font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
-            
+
             <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
-              <button 
+              <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'DEMO'}
                 className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
               >
                 CONTA DEMO
               </button>
-              <button 
+              <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'REAL'}
                 className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
@@ -1983,14 +1998,14 @@ export default function App() {
             <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
           </div>
           <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            <button 
+            <button
               onClick={toggleAccountType}
               disabled={loading || currentUser?.activeAccountType === 'DEMO'}
               className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
             >
               DEMO
             </button>
-            <button 
+            <button
               onClick={toggleAccountType}
               disabled={loading || currentUser?.activeAccountType === 'REAL'}
               className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
@@ -2047,90 +2062,90 @@ export default function App() {
                         label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
                         value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
-                    icon={<Wallet className="text-emerald-400" />}
-                    trendPositive={true}
-                    labelClassName="text-emerald-400"
-                    valueClassName="text-emerald-400"
-                    trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
-                  />
-                  <StatCard
-                    label={t.dashboard.dailyTargetLabel}
-                    value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
-                    delta="2%"
-                    icon={<Target className="text-emerald-400" />}
-                    trendPositive={true}
-                    labelClassName="text-emerald-400"
-                    valueClassName="text-emerald-400"
-                    trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                    subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias iniciando a las 10:00 horas" : "Operações diárias iniciando às 10:00 horas"}
-                  />
-                  {(() => {
-                    // Só mostra lucro se estiver conectado com saldo real/demo validado
-                    const realTimeProfit = isConnected ? (stats.dailyProfit || 0) : 0;
-                    const liveTarget = displayBalance * 0.02;
-                    return (
-                      <StatCard
-                        label={t.dashboard.dailyProfitLabel}
-                        value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
-                        delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
-                        icon={<TrendingUp className="text-emerald-400" />}
-                        valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
-                        labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
-                        trendPositive={realTimeProfit >= 0}
-                        subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias comenzando a las 10:00 AM" : "Operações diárias iniciando às 10:00 horas"}
+                        icon={<Wallet className="text-emerald-400" />}
+                        trendPositive={true}
+                        labelClassName="text-emerald-400"
+                        valueClassName="text-emerald-400"
+                        trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                       />
-                    );
-                  })()}
-                  <StatCard
-                    label={language === "en" ? "LOSS LIMIT (10%)" : language === "es" ? "LÍMITE DE PÉRDIDA (10%)" : "LIMITE DE PERDA (10% DA BANCA)"}
-                    value={isConnected ? `$${(stats.dailyLossLimit || (displayBalance * 0.10))?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
-                    delta="10%"
-                    icon={<AlertTriangle className="text-red-400" />}
-                    trendPositive={false}
-                    labelClassName="text-red-400"
-                    valueClassName="text-red-400"
-                    trend={[5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 1]}
-                  />
-                  {stats.activeLicense?.expiryDate ? (
-                    <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
-                  ) : stats.pendingPayment ? (
-                    <div
-                      onClick={() => setActiveTab('plans')}
-                      className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-6 cursor-pointer hover:bg-amber-500/20 transition-all group relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <Clock size={48} className="text-amber-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1">{t.admin.pendingVerification}</p>
-                      <p className="text-lg font-bold text-white mb-2">
-                        {language === 'en' ? 'Awaiting Verification' : language === 'es' ? 'Verificación Pendiente' : 'Aguardando Verificação'}
-                      </p>
-                      <div className="flex items-center gap-1 text-[10px] text-amber-300 font-bold uppercase">
-                        {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
-                      </div>
+                      <StatCard
+                        label={t.dashboard.dailyTargetLabel}
+                        value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                        delta="2%"
+                        icon={<Target className="text-emerald-400" />}
+                        trendPositive={true}
+                        labelClassName="text-emerald-400"
+                        valueClassName="text-emerald-400"
+                        trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
+                        subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias iniciando a las 10:00 horas" : "Operações diárias iniciando às 10:00 horas"}
+                      />
+                      {(() => {
+                        // Só mostra lucro se estiver conectado com saldo real/demo validado
+                        const realTimeProfit = isConnected ? (stats.dailyProfit || 0) : 0;
+                        const liveTarget = displayBalance * 0.02;
+                        return (
+                          <StatCard
+                            label={t.dashboard.dailyProfitLabel}
+                            value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                            delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
+                            icon={<TrendingUp className="text-emerald-400" />}
+                            valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
+                            labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
+                            trendPositive={realTimeProfit >= 0}
+                            subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias comenzando a las 10:00 AM" : "Operações diárias iniciando às 10:00 horas"}
+                          />
+                        );
+                      })()}
+                      <StatCard
+                        label={language === "en" ? "LOSS LIMIT (10%)" : language === "es" ? "LÍMITE DE PÉRDIDA (10%)" : "LIMITE DE PERDA (10% DA BANCA)"}
+                        value={isConnected ? `$0.00` : 'Conectando...'}
+                        delta="10%"
+                        icon={<AlertTriangle className="text-red-400" />}
+                        trendPositive={false}
+                        labelClassName="text-red-400"
+                        valueClassName="text-red-400"
+                        trend={[5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 1]}
+                      />
+                      {stats.activeLicense?.expiryDate ? (
+                        <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
+                      ) : stats.pendingPayment ? (
+                        <div
+                          onClick={() => setActiveTab('plans')}
+                          className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-6 cursor-pointer hover:bg-amber-500/20 transition-all group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <Clock size={48} className="text-amber-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1">{t.admin.pendingVerification}</p>
+                          <p className="text-lg font-bold text-white mb-2">
+                            {language === 'en' ? 'Awaiting Verification' : language === 'es' ? 'Verificación Pendiente' : 'Aguardando Verificação'}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-amber-300 font-bold uppercase">
+                            {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setActiveTab('plans')}
+                          className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <CreditCard size={48} className="text-red-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">
+                            {language === 'en' ? 'License Required' : language === 'es' ? 'Licencia Requerida' : 'Licença Requerida'}
+                          </p>
+                          <p className="text-lg font-bold text-white mb-2">
+                            {language === 'en' ? 'No Active License' : language === 'es' ? 'Sin Licencia Activa' : 'Sem Licença Ativa'}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-red-300 font-bold uppercase">
+                            {language === 'en' ? 'Acquire License' : language === 'es' ? 'Adquirir Licencia' : 'Adquirir Licença'} <ArrowRight size={10} />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div
-                      onClick={() => setActiveTab('plans')}
-                      className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <CreditCard size={48} className="text-red-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">
-                        {language === 'en' ? 'License Required' : language === 'es' ? 'Licencia Requerida' : 'Licença Requerida'}
-                      </p>
-                      <p className="text-lg font-bold text-white mb-2">
-                        {language === 'en' ? 'No Active License' : language === 'es' ? 'Sin Licencia Activa' : 'Sem Licença Ativa'}
-                      </p>
-                      <div className="flex items-center gap-1 text-[10px] text-red-300 font-bold uppercase">
-                        {language === 'en' ? 'Acquire License' : language === 'es' ? 'Adquirir Licencia' : 'Adquirir Licença'} <ArrowRight size={10} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                );
-              })()}
+                  );
+                })()}
 
                 {/* Signal Intel + Live Console */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
@@ -2149,7 +2164,7 @@ export default function App() {
                         <div className="hidden lg:flex flex-1 px-8">
                           <div className="w-full max-w-xl mx-auto bg-[#0f0f12] border border-white/5 rounded-2xl px-4 py-2 relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
-                            
+
                             <div className="flex items-center justify-between mb-1.5 relative z-10">
                               <div className="flex items-center gap-1.5">
                                 <Cpu size={12} className="text-yellow-500 animate-pulse" />
@@ -2166,7 +2181,7 @@ export default function App() {
                             </div>
 
                             <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
-                              <div 
+                              <div
                                 className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
                                 style={{ width: `${Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / ((stats.balance || 0) * 0.02)) * 100))}%` }}
                               >
@@ -2236,86 +2251,86 @@ export default function App() {
                   {currentUser?.role === 'ADMIN' && (
                     <div className="flex flex-col gap-6">
                       <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
-                      
+
                       <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
                         {/* Terminal header */}
                         <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex gap-1.5">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex gap-1.5">
+                              <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
+                            </div>
+                            <Terminal size={13} className="text-emerald-500/60" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
                           </div>
-                          <Terminal size={13} className="text-emerald-500/60" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                              <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
+                            </div>
+                            {logs.length > 0 && (
+                              <button
+                                onClick={() => setLogs([])}
+                                title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
+                              >
+                                <Trash2 size={10} className="group-hover:scale-110 transition-transform" />
+                                <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
+                                  {language === 'en' ? 'Clear' : language === 'es' ? 'Limpiar' : 'Limpar'}
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                            <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
-                          </div>
-                          {logs.length > 0 && (
-                            <button
-                              onClick={() => setLogs([])}
-                              title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
-                            >
-                              <Trash2 size={10} className="group-hover:scale-110 transition-transform" />
-                              <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
-                                {language === 'en' ? 'Clear' : language === 'es' ? 'Limpiar' : 'Limpar'}
-                              </span>
-                            </button>
+
+
+                        {/* Log entries with categories */}
+                        <div
+                          ref={logContainerRef}
+                          className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
+                          style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
+                        >
+                          {logs.length === 0 && (
+                            <div className="flex items-center gap-2 text-white/20 py-4">
+                              <span className="text-emerald-500/40">$</span>
+                              <span className="animate-pulse">Aguardando eventos do sistema...</span>
+                            </div>
                           )}
+                          {logs.map((log, i) => {
+                            const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
+                            const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
+                            const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
+                            const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
+                            const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
+                            const isLatest = i === logs.length - 1;
+
+                            let iconEl = <span className="text-white/20 shrink-0">›</span>;
+                            let textColor = 'text-white/40';
+
+                            if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
+                            else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
+                            else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
+                            else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
+                            else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
+
+                            return (
+                              <motion.div
+                                key={`${i}-${log.slice(0, 10)}`}
+                                initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
+                              >
+                                <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
+                                {iconEl}
+                                <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
+                              </motion.div>
+                            );
+                          })}
                         </div>
-                      </div>
-
-
-                      {/* Log entries with categories */}
-                      <div
-                        ref={logContainerRef}
-                        className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
-                        style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
-                      >
-                        {logs.length === 0 && (
-                          <div className="flex items-center gap-2 text-white/20 py-4">
-                            <span className="text-emerald-500/40">$</span>
-                            <span className="animate-pulse">Aguardando eventos do sistema...</span>
-                          </div>
-                        )}
-                        {logs.map((log, i) => {
-                          const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
-                          const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
-                          const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
-                          const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
-                          const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
-                          const isLatest = i === logs.length - 1;
-
-                          let iconEl = <span className="text-white/20 shrink-0">›</span>;
-                          let textColor = 'text-white/40';
-
-                          if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
-                          else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
-                          else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
-                          else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
-                          else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
-
-                          return (
-                            <motion.div
-                              key={`${i}-${log.slice(0, 10)}`}
-                              initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ duration: 0.25 }}
-                              className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
-                            >
-                              <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
-                              {iconEl}
-                              <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
-                            </motion.div>
-                          );
-                        })}
                       </div>
                     </div>
-                  </div>
                   )}
                 </div>
 
@@ -3837,11 +3852,11 @@ export default function App() {
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
                       />
                     </div>
-                    
+
                     {/* Deriv Connection */}
                     <div className="pt-4 border-t border-white/5 space-y-4">
                       <h4 className="text-xs font-bold text-[#ff444f] uppercase tracking-widest flex items-center gap-2">
-                        <Globe size={14} /> 
+                        <Globe size={14} />
                         {language === 'en' ? 'Deriv API Connection' : language === 'es' ? 'Conexión API Deriv' : 'Conexão API Deriv'}
                       </h4>
                       <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-4">
@@ -3849,17 +3864,17 @@ export default function App() {
                           <div className="flex flex-col w-full">
                             <span className="text-sm font-bold text-white">{language === 'en' ? 'Authorize Trading' : language === 'es' ? 'Autorizar Operaciones' : 'Autorizar Operações'}</span>
                             <span className="text-xs text-white/40 mb-4">{language === 'en' ? 'Connect your Deriv account or paste token below' : language === 'es' ? 'Conecte su cuenta de Deriv o pegue su token abajo' : 'Conecte sua conta da Deriv ou cole seu token de API abaixo'}</span>
-                            
+
                             <button
-                                type="button"
-                                onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
-                                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20 text-lg flex items-center justify-center gap-2 mb-2"
-                              >
-                                <Globe size={24} />
-                                {language === 'en' ? 'CONNECT DERIV AUTOMATICALLY' : language === 'es' ? 'CONECTAR DERIV AUTOMÁTICAMENTE' : 'CONECTAR DERIV AUTOMATICAMENTE'}
+                              type="button"
+                              onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
+                              className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20 text-lg flex items-center justify-center gap-2 mb-2"
+                            >
+                              <Globe size={24} />
+                              {language === 'en' ? 'CONNECT DERIV AUTOMATICALLY' : language === 'es' ? 'CONECTAR DERIV AUTOMÁTICAMENTE' : 'CONECTAR DERIV AUTOMATICAMENTE'}
                             </button>
                             <span className="text-[10px] text-center text-blue-300 font-bold uppercase tracking-widest">
-                                (RECOMENDADO: Clique acima para nunca mais precisar de token)
+                              (RECOMENDADO: Clique acima para nunca mais precisar de token)
                             </span>
                           </div>
                         </div>
@@ -3873,7 +3888,7 @@ export default function App() {
                               <p>3. Faça isso logado na sua conta Demo e cole no campo "Demo". Depois mude para a conta Real na Deriv, crie outro token, e cole no campo "Real".</p>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-2">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA DEMO)</label>
                             <div className="relative">
@@ -3887,7 +3902,7 @@ export default function App() {
                               />
                             </div>
                           </div>
-                          
+
                           <div className="space-y-2">
                             <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA REAL)</label>
                             <div className="relative">
@@ -3919,44 +3934,44 @@ export default function App() {
                     </div>
 
 
-                        {currentUser?.role === 'ADMIN' && (
-                          <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/5 space-y-4">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-bold text-white">Gestão de Risco (Operacional)</span>
-                              <span className="text-xs text-white/40">Configure os valores reais das ordens na Deriv</span>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                              <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada ($)</label>
-                                <input
-                                  type="number"
-                                  value={tradeSettings.amount}
-                                  onChange={(e) => updateTradeSettings('amount', Number(e.target.value))}
-                                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-white"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-emerald-400/70 tracking-widest pl-1">Take Profit ($)</label>
-                                <input
-                                  type="number"
-                                  value={tradeSettings.takeProfit}
-                                  onChange={(e) => updateTradeSettings('takeProfit', Number(e.target.value))}
-                                  className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none font-mono text-emerald-400"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-red-400/70 tracking-widest pl-1">Stop Loss ($)</label>
-                                <input
-                                  type="number"
-                                  value={tradeSettings.stopLoss}
-                                  onChange={(e) => updateTradeSettings('stopLoss', Number(e.target.value))}
-                                  className="w-full bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm focus:border-red-500 outline-none font-mono text-red-400"
-                                />
-                              </div>
-                            </div>
+                    {currentUser?.role === 'ADMIN' && (
+                      <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/5 space-y-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-white">Gestão de Risco (Operacional)</span>
+                          <span className="text-xs text-white/40">Configure os valores reais das ordens na Deriv</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada ($)</label>
+                            <input
+                              type="number"
+                              value={tradeSettings.amount}
+                              onChange={(e) => updateTradeSettings('amount', Number(e.target.value))}
+                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-white"
+                            />
                           </div>
-                        )}
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-emerald-400/70 tracking-widest pl-1">Take Profit ($)</label>
+                            <input
+                              type="number"
+                              value={tradeSettings.takeProfit}
+                              onChange={(e) => updateTradeSettings('takeProfit', Number(e.target.value))}
+                              className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none font-mono text-emerald-400"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase font-bold text-red-400/70 tracking-widest pl-1">Stop Loss ($)</label>
+                            <input
+                              type="number"
+                              value={tradeSettings.stopLoss}
+                              onChange={(e) => updateTradeSettings('stopLoss', Number(e.target.value))}
+                              className="w-full bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm focus:border-red-500 outline-none font-mono text-red-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
 
