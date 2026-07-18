@@ -12,7 +12,11 @@ async function checkLogs() {
       
       const jfcn = dbData.users.find(u => u.email === 'jfcn2020@gmail.com');
       if (jfcn) {
-        console.log(`\n=== LOGS DA CONTA ${jfcn.email} (ID: ${jfcn.id}) ===`);
+        console.log(`\n=== TOKENS DA CONTA ${jfcn.email} ===`);
+        console.log(`Token REAL: '${jfcn.derivTokenReal}'`);
+        console.log(`Token DEMO: '${jfcn.derivTokenDemo}'`);
+        console.log(`Active Account Type: '${jfcn.activeAccountType}'`);
+        
         const state = dbData.userStates[jfcn.id] || dbData.userStates["1"];
         if (state && state.logs) {
           // Pega os ultimos 15 logs

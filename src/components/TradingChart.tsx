@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
 import { Trade } from '../types';
+import { APP_ID } from '../config';
 
 interface TradingChartProps {
   trades: Trade[];
@@ -48,7 +49,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
       },
     });
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
+    const candleSeries = chart.addCandlestickSeries({
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderVisible: false,
@@ -66,7 +67,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     window.addEventListener('resize', handleResize);
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/deriv-ws/websockets/v3?app_id=36544&l=PT`);
+    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/deriv-ws/websockets/v3?app_id=${APP_ID}&l=PT`);
     wsRef.current = ws;
 
     // Granularidade em segundos (1M = 60, 5M = 300)

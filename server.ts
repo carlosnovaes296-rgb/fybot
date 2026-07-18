@@ -71,16 +71,22 @@ async function startServer() {
     // Itera todos os usuários
     users.forEach(user => {
       const state = getUserState(user.id);
-      if (state.botRunning && user.derivToken) {
+      const activeToken = user.activeAccountType === 'REAL' ? user.derivTokenReal : user.derivTokenDemo;
+      const tokenToUse = activeToken || user.derivToken;
+
+      if (state.botRunning && tokenToUse) {
          // Executa a compra usando o token do usuário!
          addUserLog(user.id, `🚀 [SINAL RECEBIDO] ${reason}. Executando ${direction} na Deriv!`);
          
-         // Abre uma conexão temporária passando o Origin para não dar Erro 1006
-         const ws = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=33PZwcDs8NqrvpUw1vQIF&l=PT`, {
-           headers: { 'Origin': 'https://fybot.life' }
+         // Executa a compra usando o token tradicional e o App ID antigo (36544) que fura bloqueios!
+         const ws = new NodeWebSocket(`wss://frontend.binaryws.com/websockets/v3?app_id=36544&l=PT`, {
+           headers: { 
+             'Origin': 'https://app.deriv.com',
+             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
+           }
          });
          ws.on('open', () => {
-           ws.send(JSON.stringify({ authorize: user.derivToken }));
+           ws.send(JSON.stringify({ authorize: tokenToUse }));
          });
          ws.on('message', (msg) => {
            const data = JSON.parse(msg.toString());
@@ -593,6 +599,31 @@ async function startServer() {
       addUserLog(userId, message);
     }
     res.json({ success: true });
+  });
+
+  // PROXY PARA O OTP DA DERIV (Evita erro de CORS do navegador)
+  app.post('/api/deriv/otp', async (req, res) => {
+    const { patToken, appId, accountId } = req.body;
+    try {
+      const url = `https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${patToken}`,
+          'Deriv-App-ID': appId,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('[PROXY OTP] Erro da Deriv:', data);
+        return res.status(response.status).json(data);
+      }
+      res.json(data);
+    } catch (err: any) {
+      console.error('[PROXY OTP] Erro interno:', err.message);
+      res.status(500).json({ error: { message: err.message } });
+    }
   });
 
   app.get('/api/trades', (req, res) => {
@@ -1291,41 +1322,49 @@ async function startServer() {
     const appId = url.searchParams.get('app_id') || '36544';
     const lang = url.searchParams.get('l') || 'PT';
     
-    // O backend do Node conecta na corretora COM o cabeçalho 'Origin' forjado para burlar bloqueios do Cloudflare/Deriv!
-    // Mudamos para frontend.binaryws.com e forjamos o fingerprint TLS (ciphers) para burlar o bloqueio Cloudflare contra NodeJS
-    const derivWs = new NodeWebSocket(`wss://frontend.binaryws.com/websockets/v3?app_id=${appId}&l=${lang}`, {
+    // O backend do Node conecta na corretora COM cabeçalhos.
+    // Cria a conexão COM A DERIV com a Origin correta para o app_id 36544
+    const derivWs = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=${lang}`, {
       headers: {
-        'Origin': 'https://app.deriv.com',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache'
-      },
-      ciphers: 'TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK'
+        'Origin': 'https://fybot.life',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+      }
     });
+
+    // Buffer to hold messages from the browser until the Deriv connection is fully open
+    let messageQueue: any[] = [];
 
     derivWs.on('open', () => {
       console.log(`[PROXY] Conectado na Deriv (app_id: ${appId})`);
+      // Send any queued messages that arrived while connecting
+      while (messageQueue.length > 0) {
+        const msg = messageQueue.shift();
+        derivWs.send(msg);
+      }
     });
 
     derivWs.on('message', (data) => {
+      console.log(`[PROXY] Recebeu da Deriv: ${data.toString().substring(0, 200)}`);
       if (browserWs.readyState === browserWs.OPEN) {
         browserWs.send(data);
       }
     });
 
-    derivWs.on('close', () => {
-      console.log('[PROXY] Conexão com Deriv fechada.');
+    derivWs.on('close', (code, reason) => {
+      console.log(`[PROXY] Conexão com Deriv fechada. Code: ${code}, Reason: ${reason.toString()}`);
       if (browserWs.readyState === browserWs.OPEN) browserWs.close();
     });
 
     derivWs.on('error', (err) => {
-      console.error('[PROXY] Erro na Deriv:', err);
-      if (browserWs.readyState === browserWs.OPEN) browserWs.close();
+      console.error(`[PROXY] Erro na conexão com Deriv:`, err.message);
     });
 
     browserWs.on('message', (data) => {
       if (derivWs.readyState === NodeWebSocket.OPEN) {
         derivWs.send(data);
+      } else if (derivWs.readyState === NodeWebSocket.CONNECTING) {
+        // Se a Deriv ainda está conectando, guarda a mensagem para enviar logo depois!
+        messageQueue.push(data);
       }
     });
 

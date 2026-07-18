@@ -28,6 +28,13 @@ import {
   Trash2,
   Network,
   Share2,
+} from 'lucide-react';
+
+// OTP helper and config for Deriv authentication
+import { getOtpWebSocketUrl } from './api/derivOtp';
+import { APP_ID, ACCOUNT_ID } from './config';
+
+import {
   DollarSign,
   Users,
   Lock,
@@ -89,6 +96,7 @@ import { PricingCard } from './components/PricingCard';
 import { ConnectDeriv } from './components/ConnectDeriv';
 import { Trophy, ChevronDown, PlayCircle, LogIn, ChevronLeft, Check, MessageSquare, Plus, Shield, LayoutGrid, AlertCircle, ArrowUpRight, ArrowDownRight, Smartphone, Info } from 'lucide-react';
 import { TradingChart } from './components/TradingChart';
+import { PAT_TOKEN } from './config';
 
 // --- PKCE Auth Helpers ---
 function generateCodeVerifier() {
@@ -495,6 +503,14 @@ export default function App() {
     // Novo Fluxo PKCE (Authorization Code)
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const errorParam = urlParams.get('error');
+    const errorDesc = urlParams.get('error_description');
+
+    if (errorParam) {
+      alert("A Deriv negou o acesso: " + errorParam + " - " + (errorDesc || ""));
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
 
     if (code) {
       const exchangeCode = async () => {
@@ -520,8 +536,6 @@ export default function App() {
             })
           });
           const data = await response.json();
-
-          // Token recebido com sucesso no formato V2.
 
           if (data.access_token) {
             // Salva temporariamente como Real e Demo para testar a conexão
@@ -552,6 +566,8 @@ export default function App() {
                   }
                 });
             }
+          } else {
+            alert("Falha na Deriv: " + JSON.stringify(data));
           }
         } catch (e: any) {
           alert("Erro de comunicação com a Deriv: " + e.message);
@@ -681,41 +697,49 @@ export default function App() {
       // Autentica assim que conectar
       const activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
       const tokenToSend = (activeToken || '').trim();
-      if (!tokenToSend) return;
+      
+      if (!tokenToSend) {
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: `⚠️ ERRO: Token da ${currentUser.activeAccountType} está VAZIO! Vá na Engrenagem e salve a chave de acesso.` })
+        }).catch(() => { });
+        return;
+      }
 
-      // O WebSocket da Deriv deve usar o MESMO App ID Alfanumérico usado no OAuth (PKCE)
-      ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=33PZwcDs8NqrvpUw1vQIF&l=PT`);
+      // REMOVIDO: Fluxo OTP. Voltando ao fluxo clássico de "authorize"
+      // porque PAT tokens funcionam perfeitamente com "authorize" se o token for válido e correto!
+      const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
+      ws = new WebSocket(wsUrl);
       derivWsRef.current = ws;
 
       ws.onopen = () => {
+        console.log('[FYBOT] WebSocket conectado. Enviando authorize...');
         ws.send(JSON.stringify({ authorize: tokenToSend }));
       };
 
       ws.onmessage = (msg) => {
         const data = JSON.parse(msg.data);
 
-        // CATCH-ALL PARA QUALQUER ERRO DA DERIV (mesmo sem msg_type)
         if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
-          console.error("DERIV GLOBAL ERROR:", data.error, "A corretora rejeitou algo na conexão:\n" + data.error.message);
+          console.error("Autorização falhou:", data.error.message);
+          fetch('/api/logs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DA DERIV: ${data.error.message} (Isso significa que o Token copiado está INVÁLIDO. Gere um novo com as caixinhas READ e TRADE marcadas)` })
+          }).catch(() => { });
         }
 
         if (data.msg_type === 'authorize') {
           if (data.error) {
             console.error('Deriv Auth Error:', data.error.message);
-            // FORÇA A PARADA DO BOT PARA NÃO TENTAR ABRIR ORDEM SEM ESTAR LOGADO!
             setStats(prev => ({ ...prev, botRunning: false }));
-
             fetch('/api/logs/add', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DERIV: ${data.error.message} (Por favor, crie um NOVO token na Deriv e verifique se copiou inteiro)` })
+              body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DERIV: ${data.error.message} (Gere um NOVO token na Deriv e verifique se copiou inteiro)` })
             }).catch(() => { });
-
-            if (derivWsRef.current) {
-              // passa um código customizado para não confundir com 1005
-              derivWsRef.current.close(4001, "Auth Failed");
-            }
-
+            if (derivWsRef.current) derivWsRef.current.close(4001, "Auth Failed");
             return;
           }
           const auth = data.authorize;
@@ -734,7 +758,7 @@ export default function App() {
             currency: auth.currency || 'USD'
           }));
 
-          // Subscreve ao saldo genérico ao vivo pedindo TODAS as contas para mostrar o saldo real
+          // Subscreve ao saldo genérico ao vivo
           ws.send(JSON.stringify({ balance: 1, account: 'all', subscribe: 1 }));
 
           // Mantém a conexão viva enviando ping a cada 30 segundos
@@ -752,8 +776,6 @@ export default function App() {
         if (data.msg_type === 'balance') {
           if (data.balance) {
             let currentBalance = data.balance.balance !== undefined ? data.balance.balance : 0;
-            
-            // Se a Deriv enviar múltiplas contas, soma tudo para mostrar o Total Value
             if (data.balance.accounts) {
               const accounts = data.balance.accounts;
               let total = 0;
@@ -762,12 +784,7 @@ export default function App() {
               }
               currentBalance = total;
             }
-
-            setStats(prev => ({
-              ...prev,
-              balance: currentBalance,
-              equity: currentBalance
-            }));
+            setStats(prev => ({ ...prev, balance: currentBalance, equity: currentBalance }));
           }
         }
 
@@ -776,11 +793,10 @@ export default function App() {
           if (data.error) {
             console.error('Erro ao abrir ordem na Deriv:', data.error.message);
             alert('ERRO AO ABRIR ORDEM DERIV: ' + data.error.message);
-            setStats(prev => ({ ...prev, botRunning: false })); // Para o bot ao errar
+            setStats(prev => ({ ...prev, botRunning: false })); 
           } else {
             const buyInfo = data.buy;
             console.log('ORDEM DERIV ABERTA COM SUCESSO!', buyInfo);
-            // Mostrar notificação de sucesso
             alert(`SUCESSO! Ordem de XAUUSD aberta na Deriv!\nID do Contrato: ${buyInfo.contract_id}\nBuy Price: $${buyInfo.buy_price}\nConta: ${currentUser?.activeAccountType}`);
           }
         }
@@ -1137,7 +1153,9 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      if (profileForm.derivToken) profileForm.derivToken = profileForm.derivToken.trim();
+      if (profileForm.derivToken) profileForm.derivToken = profileForm.derivToken.replace(/\s+/g, '');
+      if (profileForm.derivTokenDemo) profileForm.derivTokenDemo = profileForm.derivTokenDemo.replace(/\s+/g, '');
+      if (profileForm.derivTokenReal) profileForm.derivTokenReal = profileForm.derivTokenReal.replace(/\s+/g, '');
 
       const res = await fetch('/api/user/profile', {
         method: 'POST',
@@ -1612,7 +1630,7 @@ export default function App() {
                   {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
                 </button>
                 <button
-                  onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
+                  onClick={() => window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33RkaEP2HoES8eKvLTykz'}
                   className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
                 >
                   <Globe size={20} />
@@ -3867,7 +3885,7 @@ export default function App() {
 
                             <button
                               type="button"
-                              onClick={() => handleDerivPKCELogin('33PZwcDs8NqrvpUw1vQIF')}
+                              onClick={() => window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33RkaEP2HoES8eKvLTykz'}
                               className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20 text-lg flex items-center justify-center gap-2 mb-2"
                             >
                               <Globe size={24} />

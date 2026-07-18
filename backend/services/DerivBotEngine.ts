@@ -3,13 +3,16 @@ import { Indicators, Candle } from './Indicators.ts';
 
 export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
-    private appId = '36544'; // Use same App ID as frontend for WS API
+    private appId = '36544'; // Usamos o App ID numérico antigo (livre de bloqueio Cloudflare)
     private symbol = 'frxXAUUSD';
     private isConnected = false;
     
     // Armazenamento de Histórico OHLC
     private candlesM15: Candle[] = [];
     private candlesH1: Candle[] = [];
+    
+    // Cooldown para evitar spam de ordens
+    private lastSignalTime: number = 0;
     
     // Callbacks to notify server.ts
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
@@ -213,6 +216,13 @@ export class DerivBotEngine {
         }
 
         if (signal && this.onSignal) {
+            // Verifica cooldown de 5 minutos (300000 ms) para não flodar a Deriv!
+            const now = Date.now();
+            if (now - this.lastSignalTime < 300000) {
+                return; // Ignora o sinal, ainda no cooldown
+            }
+            this.lastSignalTime = now;
+
             // SL = 1.5x ATR H1 convertidos grosseiramente para financeiro, ou base $2
             const baseStake = 10;
             const volatilityMultiplier = (currentAtrH1 / currentPrice) * 1000; // Normaliza a volatilidade
