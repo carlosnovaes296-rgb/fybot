@@ -692,10 +692,16 @@ export default function App() {
 
     // Função principal de conexão
     const connectDeriv = () => {
-      if (!currentUser || (!currentUser.derivTokenReal && !currentUser.derivTokenDemo)) return;
+      if (!currentUser) return;
 
       // Autentica assim que conectar
-      const activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+      let activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+      
+      // FALLBACK PAT TOKEN
+      if (!activeToken || activeToken.trim() === '') {
+        activeToken = PAT_TOKEN;
+      }
+      
       const tokenToSend = (activeToken || '').trim();
       
       if (!tokenToSend) {

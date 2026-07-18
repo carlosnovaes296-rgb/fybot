@@ -67,7 +67,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     window.addEventListener('resize', handleResize);
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/deriv-ws/websockets/v3?app_id=${APP_ID}&l=PT`);
+    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
     wsRef.current = ws;
 
     // Granularidade em segundos (1M = 60, 5M = 300)
