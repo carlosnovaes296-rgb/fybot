@@ -694,15 +694,8 @@ export default function App() {
     const connectDeriv = () => {
       if (!currentUser) return;
 
-      // Autentica assim que conectar
-      let activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
-      
-      // FALLBACK PAT TOKEN
-      if (!activeToken || activeToken.trim() === '') {
-        activeToken = PAT_TOKEN;
-      }
-      
-      const tokenToSend = (activeToken || '').trim();
+      // IGNORA O BANCO DE DADOS E FORÇA O USO DA CHAVE MESTRA
+      const tokenToSend = PAT_TOKEN.trim();
       
       if (!tokenToSend) {
         fetch('/api/logs/add', {
