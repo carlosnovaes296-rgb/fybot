@@ -4,83 +4,132 @@ import config from "./config";
 
 const router = Router();
 
+// Rota de login OAuth - usa App ID 33RnO3OxGcvL8DIYeklO0
 router.get("/login", (req, res) => {
-    // Generate PKCE for this login attempt
-    const pkce = generatePKCE();
-    
-    // Save the code_verifier securely in the user's session
-    (req.session as any).code_verifier = pkce.verifier;
-    
-    // Generate a secure state token
+    const { appId } = req.query;
     const state = Date.now().toString();
-
-    res.redirect(
-        getOAuthURL(state, pkce.challenge)
-    );
+    res.redirect(getOAuthURL(state, ''));
 });
 
+// Callback: Deriv devolve os tokens diretamente na URL
+// Formato: ?acct1=CR...&token1=a1-...&cur1=USD&acct2=VRT...&token2=a1-...&cur2=USD
 router.get("/callback", async (req, res) => {
     try {
-        const code = req.query.code as string;
-        
-        // Em casos legados ou de fallback (quando Deriv devolve o token direto na URL)
-        const legacyToken = req.query.token1 as string;
-        const legacyAccount = req.query.acct1 as string;
-        
-        if (legacyToken) {
-            return res.redirect(`/?token1=${legacyToken}&acct1=${legacyAccount}`);
+        const { token1, acct1, cur1, token2, acct2, cur2 } = req.query;
+
+        if (!token1) {
+            console.error("Callback sem token:", req.query);
+            return res.redirect('/?error=no_token');
         }
-        
-        if (!code) {
-            return res.status(400).send(`Código de autorização OAuth (PKCE) não recebido da Deriv. Retorno: ${JSON.stringify(req.query)}`);
-        }
-        
-        // Recover the code_verifier from the session
-        const code_verifier = (req.session as any).code_verifier;
-        
-        if (!code_verifier) {
-            return res.status(400).send("Sessão expirada ou code_verifier inválido. Por favor, tente fazer login novamente a partir do FyBot.");
-        }
-        
-        // Prepare the payload for the token exchange
-        // O Endpoint oficial da Deriv para trocar o code pelo token via OAuth 2.0 / OIDC
-        const tokenEndpoint = "https://oauth.deriv.com/oauth2/token";
-        
+
+        // Redireciona para o frontend com os tokens recebidos
         const params = new URLSearchParams();
-        params.append("client_id", config.appId);
-        params.append("grant_type", "authorization_code");
-        params.append("code", code);
-        params.append("redirect_uri", config.redirectUri);
-        params.append("code_verifier", code_verifier);
-        
-        // Fetch the Access Token from Deriv
-        const response = await fetch(tokenEndpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: params
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            console.error("Deriv OAuth Exchange Error:", data);
-            return res.status(500).send("Falha ao resgatar o Token na Deriv: " + JSON.stringify(data));
-        }
-        
-        // data.access_token contém o token real para a conta
-        const token = data.access_token;
-        const account = data.client_id || data.account_id || "Deriv-PKCE";
-        
-        // Limpar o verifier da sessão por segurança
-        delete (req.session as any).code_verifier;
-        
-        return res.redirect(`/?token1=${token}&acct1=${account}`);
-        
+        if (token1) params.set('token1', token1 as string);
+        if (acct1)  params.set('acct1',  acct1  as string);
+        if (cur1)   params.set('cur1',   cur1   as string);
+        if (token2) params.set('token2', token2 as string);
+        if (acct2)  params.set('acct2',  acct2  as string);
+        if (cur2)   params.set('cur2',   cur2   as string);
+
+        return res.redirect(`/?${params.toString()}`);
+
     } catch (error) {
         console.error("Callback Error:", error);
         res.status(500).send("Erro interno ao processar o login da Deriv.");
+    }
+});
+
+// ============================================================
+// ROTA OTP: Obtém URL do WebSocket via OTP (novo fluxo da API v1)
+// O frontend chama este endpoint para obter a URL de conexão
+// ============================================================
+router.post("/otp", async (req, res) => {
+    try {
+        const { patToken, appId, accountId } = req.body;
+
+        if (!patToken || !appId) {
+            return res.status(400).json({ error: { message: 'patToken e appId são obrigatórios' } });
+        }
+
+        const headers: Record<string, string> = {
+            'Authorization': `Bearer ${patToken}`,
+            'Deriv-App-ID': appId,
+            'Content-Type': 'application/json',
+        };
+
+        // Sempre busca as contas para obter o saldo atualizado
+        const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
+        const accountsData: any = await accountsRes.json();
+        if (!accountsRes.ok) {
+            return res.status(accountsRes.status).json({ error: accountsData });
+        }
+
+        const accounts: any[] = accountsData.data || [];
+        const realAcc = accounts.find((a: any) => a.account_type === 'real');
+        const demoAcc = accounts.find((a: any) => a.account_type === 'demo');
+
+        const { accountType } = req.body;
+        const targetAcc = accountType === 'DEMO' ? demoAcc : realAcc;
+
+        // Usa accountId fornecido OU o da conta selecionada
+        const resolvedAccountId = accountId || targetAcc?.account_id;
+        if (!resolvedAccountId) {
+            return res.status(404).json({ error: { message: `Conta ${accountType} não encontrada` } });
+        }
+
+        // Pede o OTP para a conta resolvida
+        const otpRes = await fetch(
+            `https://api.derivws.com/trading/v1/options/accounts/${resolvedAccountId}/otp`,
+            { method: 'POST', headers, body: '{}' }
+        );
+        const otpData: any = await otpRes.json();
+
+        if (!otpRes.ok) {
+            return res.status(otpRes.status).json({ error: otpData });
+        }
+
+        // Retorna URL, accountId, saldo e info das contas para o frontend
+        return res.json({
+            data: {
+                url: otpData.data?.url,
+                account_id: resolvedAccountId,
+                balance: targetAcc?.balance || '0',
+                currency: targetAcc?.currency || 'USD',
+                accounts: {
+                    real: realAcc || null,
+                    demo: demoAcc || null,
+                }
+            }
+        });
+    } catch (error: any) {
+        console.error('[OTP Route Error]', error);
+        return res.status(500).json({ error: { message: error.message } });
+    }
+});
+
+
+// ============================================================
+// ROTA ACCOUNTS: Lista contas da Deriv (real e demo)
+// ============================================================
+router.get("/accounts", async (req, res) => {
+    try {
+        const patToken = req.headers['x-pat-token'] as string;
+        const appId = req.headers['x-app-id'] as string;
+
+        if (!patToken || !appId) {
+            return res.status(400).json({ error: { message: 'Headers x-pat-token e x-app-id são obrigatórios' } });
+        }
+
+        const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
+            headers: {
+                'Authorization': `Bearer ${patToken}`,
+                'Deriv-App-ID': appId,
+            }
+        });
+        const accountsData = await accountsRes.json();
+        return res.json(accountsData);
+    } catch (error: any) {
+        return res.status(500).json({ error: { message: error.message } });
     }
 });
 

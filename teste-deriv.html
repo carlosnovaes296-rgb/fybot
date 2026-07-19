@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste de Token Deriv</title>
+</head>
+<body>
+    <h2>Teste de Conexão WebSocket Deriv</h2>
+    <p>Token Testado: pat_7a731ec31b5cfba1d04963a0759eeafdbd1cee08c0aef2fa92ab004652d01268</p>
+    <div id="resultado" style="font-family: monospace; white-space: pre-wrap; background: #222; color: #0f0; padding: 20px;">
+Conectando...
+    </div>
+
+    <script>
+        const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089&l=PT');
+        const token = 'pat_7a731ec31b5cfba1d04963a0759eeafdbd1cee08c0aef2fa92ab004652d01268';
+        const log = (msg) => {
+            document.getElementById('resultado').innerText += '\n' + msg;
+            console.log(msg);
+        };
+
+        ws.onopen = function() {
+            log('WebSocket Aberto! Enviando token...');
+            ws.send(JSON.stringify({ authorize: token }));
+        };
+
+        ws.onmessage = function(msg) {
+            const data = JSON.parse(msg.data);
+            log('MENSAGEM RECEBIDA: ' + JSON.stringify(data, null, 2));
+            if (data.error) {
+                log('ERRO DA DERIV: ' + data.error.message);
+            } else if (data.authorize) {
+                log('SUCESSO! Autorizado como: ' + data.authorize.loginid + ' | Saldo: ' + data.authorize.balance);
+            }
+        };
+
+        ws.onerror = function(err) {
+            log('Erro no WebSocket: ' + err);
+        };
+
+        ws.onclose = function() {
+            log('WebSocket Fechado.');
+        };
+    </script>
+</body>
+</html>

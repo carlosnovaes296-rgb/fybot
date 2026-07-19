@@ -66,8 +66,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     };
     window.addEventListener('resize', handleResize);
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
+    // Para dados de gráfico (candles/ticks) usa sempre o endpoint público
+    // Usamos o App ID numérico antigo (36544) livre de bloqueio Cloudflare para evitar o erro 1006 (WS FECHADO)
+    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`);
     wsRef.current = ws;
 
     // Granularidade em segundos (1M = 60, 5M = 300)
@@ -82,7 +83,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
         adjust_start_time: 1,
         count: 500,
         end: 'latest',
-        start: 1,
         style: 'candles',
         granularity: granularity,
         subscribe: 1
@@ -91,9 +91,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
 
     ws.onopen = () => {
       if (derivToken) {
-         ws.send(JSON.stringify({ authorize: derivToken }));
+        ws.send(JSON.stringify({ authorize: derivToken }));
       } else {
-         requestCandles();
+        requestCandles();
       }
     };
 
@@ -112,109 +112,105 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     };
 
     ws.onmessage = (msg) => {
-      const data = JSON.parse(msg.data);
-      
-      if (data.msg_type === 'authorize') {
-         requestCandles();
-         // Pede o histórico de lucros
-         ws.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
-         // Pede as posições abertas
-         ws.send(JSON.stringify({ portfolio: 1 }));
-         // Subscreve às posições abertas para receber atualizações em tempo real (incluindo entry_spot, tp, sl)
-         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
-      }
+      try {
+        const data = JSON.parse(msg.data);
+        
+        if (data.msg_type === 'authorize') {
+           requestCandles();
+           // Pede o histórico de lucros
+           ws.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
+           // Pede as posições abertas
+           ws.send(JSON.stringify({ portfolio: 1 }));
+           // Subscreve às posições abertas para receber atualizações em tempo real (incluindo entry_spot, tp, sl)
+           ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
+        }
 
-      if (data.msg_type === 'profit_table' && data.profit_table) {
-         const closedTrades: Trade[] = data.profit_table.transactions.map((tx: any) => ({
-            id: tx.contract_id.toString(),
-            symbol: symbol,
-            lot: 0,
-            type: tx.shortcode.includes('UP') ? 'BUY' : 'SELL',
-            openPrice: 0,
-            time: new Date(tx.purchase_time * 1000).toISOString(),
-            status: 'CLOSED',
-            profit: Number(tx.sell_price) - Number(tx.buy_price),
-            closeTime: new Date(tx.sell_time * 1000).toISOString()
-         }));
-         emitTrades(closedTrades);
-      }
+        if (data.msg_type === 'profit_table' && data.profit_table) {
+           const closedTrades: Trade[] = data.profit_table.transactions.map((tx: any) => ({
+              id: tx.contract_id.toString(),
+              symbol: symbol,
+              lot: 0,
+              type: tx.shortcode.includes('UP') ? 'BUY' : 'SELL',
+              openPrice: 0,
+              time: new Date(tx.purchase_time * 1000).toISOString(),
+              status: 'CLOSED',
+              profit: Number(tx.sell_price) - Number(tx.buy_price),
+              closeTime: new Date(tx.sell_time * 1000).toISOString()
+           }));
+           emitTrades(closedTrades);
+        }
 
-      if (data.msg_type === 'portfolio' && data.portfolio) {
-         const openTrades: Trade[] = data.portfolio.contracts.map((c: any) => ({
-            id: c.contract_id.toString(),
-            symbol: symbol,
-            lot: 0,
-            type: c.contract_type.includes('UP') ? 'BUY' : 'SELL',
-            openPrice: 0, 
-            time: new Date(c.purchase_time * 1000).toISOString(),
-            status: 'OPEN',
-            profit: 0
-         }));
-         emitTrades(openTrades);
-      }
+        if (data.msg_type === 'portfolio' && data.portfolio) {
+           const openTrades: Trade[] = data.portfolio.contracts.map((tx: any) => ({
+              id: tx.contract_id.toString(),
+              symbol: symbol,
+              lot: 0,
+              type: tx.shortcode.includes('UP') ? 'BUY' : 'SELL',
+              openPrice: 0,
+              time: new Date(tx.date_start * 1000).toISOString(),
+              status: 'OPEN',
+              profit: 0
+           }));
+           emitTrades(openTrades);
+        }
 
-      // Recebendo atualização ao vivo dos contratos abertos (inclui preço de entrada exato e TP/SL)
-      if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
-         const c = data.proposal_open_contract;
-         const entryPrice = Number(c.entry_tick || c.current_spot);
-         const type = c.contract_type.includes('UP') ? 'BUY' : 'SELL';
-         const profit = Number(c.profit);
-         
-         // Para multiplicadores, TP/SL são enviados como valores financeiros.
-         // Vamos tentar extrair os limites de preço se disponíveis na API, 
-         // ou usar os próprios valores fornecidos. Se a Deriv não devolver price lines no limit_order, 
-         // usaremos os spots exatos (se houver cancel_level ou barrier).
-         let tpPrice = undefined;
-         let slPrice = undefined;
-         
-         if (c.limit_order) {
-           // Algumas contas retornam os niveis exatos (p.ex: take_profit.display_name ou algo parecido)
-           // Se não, não temos como desenhar o SL/TP exato sem recalcular o multiplicador no client, 
-           // mas podemos guardar a informação.
-         }
+        // Recebendo atualização ao vivo dos contratos abertos (inclui preço de entrada exato e TP/SL)
+        if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
+           const c = data.proposal_open_contract;
+           const entryPrice = Number(c.entry_tick || c.current_spot);
+           const type = c.contract_type.includes('UP') ? 'BUY' : 'SELL';
+           const profit = Number(c.profit);
+           
+           let tpPrice = undefined;
+           let slPrice = undefined;
+           
+           if (c.limit_order) {}
 
-         const openTrade: Trade = {
-            id: c.contract_id.toString(),
-            symbol: symbol,
-            lot: 0,
-            type: type as 'BUY' | 'SELL',
-            openPrice: entryPrice, 
-            time: new Date(c.purchase_time * 1000).toISOString(),
-            status: c.is_sold ? 'CLOSED' : 'OPEN',
-            profit: profit,
-            tp: tpPrice,
-            sl: slPrice
-         };
-         
-         if (c.is_sold) {
-            openTrade.closeTime = new Date(c.sell_time * 1000).toISOString();
-         }
-         
-         emitTrades([openTrade]);
-      }
+           const openTrade: Trade = {
+              id: c.contract_id.toString(),
+              symbol: symbol,
+              lot: 0,
+              type: type as 'BUY' | 'SELL',
+              openPrice: entryPrice, 
+              time: new Date(c.purchase_time * 1000).toISOString(),
+              status: c.is_sold ? 'CLOSED' : 'OPEN',
+              profit: profit,
+              tp: tpPrice,
+              sl: slPrice
+           };
+           
+           if (c.is_sold) {
+              openTrade.closeTime = new Date(c.sell_time * 1000).toISOString();
+           }
+           
+           emitTrades([openTrade]);
+        }
 
-      // Histórico Inicial de Velas
-      if (data.msg_type === 'candles' && data.candles) {
-        const cData = data.candles.map((c: any) => ({
-          time: c.epoch,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close
-        }));
-        candleSeries.setData(cData);
-      }
-      
-      // Vela ao vivo
-      if (data.msg_type === 'ohlc' && data.ohlc) {
-        const c = data.ohlc;
-        candleSeries.update({
-          time: c.open_time,
-          open: Number(c.open),
-          high: Number(c.high),
-          low: Number(c.low),
-          close: Number(c.close)
-        });
+        // Histórico Inicial de Velas
+        if (data.msg_type === 'candles' && data.candles) {
+          const cData = data.candles.map((c: any) => ({
+            time: c.epoch,
+            open: Number(c.open),
+            high: Number(c.high),
+            low: Number(c.low),
+            close: Number(c.close)
+          }));
+          candleSeries.setData(cData);
+        }
+        
+        // Vela ao vivo
+        if (data.msg_type === 'ohlc' && data.ohlc) {
+          const c = data.ohlc;
+          candleSeries.update({
+            time: c.open_time,
+            open: Number(c.open),
+            high: Number(c.high),
+            low: Number(c.low),
+            close: Number(c.close)
+          });
+        }
+      } catch (err) {
+        console.error("Erro no WebSocket onmessage:", err);
       }
     };
 
@@ -227,79 +223,86 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
 
   // 3. Efeito separado para desenhar as ordens (TP/SL/Markers) quando `trades` atualiza
   useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-
-    // Limpa linhas antigas
-    priceLinesRef.current.forEach(line => series.removePriceLine(line));
-    priceLinesRef.current = [];
-
-    const markers: any[] = [];
-
-    trades.forEach(trade => {
-      // Desenha setas para todas as trades (abertas e fechadas) se tiverem tempo
-      if (trade.time) {
-         const tradeTime = Math.floor(new Date(trade.time).getTime() / 1000);
-         markers.push({
-           time: tradeTime,
-           position: trade.type === 'BUY' ? 'belowBar' : 'aboveBar',
-           color: trade.type === 'BUY' ? '#22c55e' : '#ef4444',
-           shape: trade.type === 'BUY' ? 'arrowUp' : 'arrowDown',
-           text: trade.type === 'BUY' ? 'Buy' : 'Sell'
-         });
-      }
-
-      // Se a ordem estiver aberta e tiver TP/SL
-      if (trade.status === 'OPEN' && trade.openPrice) {
-         // Linha de Entrada
-         const entryLine = series.createPriceLine({
-            price: trade.openPrice,
-            color: '#3b82f6', // Azul
-            lineWidth: 2,
-            lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
-            title: `ENTRY (${trade.type})`,
-         });
-         priceLinesRef.current.push(entryLine);
-
-         if (trade.tp) {
-            const tpLine = series.createPriceLine({
-               price: trade.tp,
-               color: '#22c55e',
-               lineWidth: 2,
-               lineStyle: LineStyle.Solid,
-               axisLabelVisible: true,
-               title: 'TP',
-            });
-            priceLinesRef.current.push(tpLine);
-         }
-
-         if (trade.sl) {
-            const slLine = series.createPriceLine({
-               price: trade.sl,
-               color: '#ef4444',
-               lineWidth: 2,
-               lineStyle: LineStyle.Solid,
-               axisLabelVisible: true,
-               title: 'SL',
-            });
-            priceLinesRef.current.push(slLine);
-         }
-      }
-    });
-
-    // Ordena os markers por tempo (obrigatório do lightweight-charts)
-    markers.sort((a, b) => a.time - b.time);
-    
-    // Filtra marcadores duplicados no mesmo timestamp exato
-    const uniqueMarkers = markers.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
-    
     try {
-       series.setMarkers(uniqueMarkers);
-    } catch(e) {
-       console.error("Erro ao desenhar markers", e);
-    }
+      if (!seriesRef.current) return;
+      const series = seriesRef.current;
 
+      // Limpa linhas antigas
+      priceLinesRef.current.forEach(line => {
+         try { series.removePriceLine(line); } catch(e) {}
+      });
+      priceLinesRef.current = [];
+
+      const markers: any[] = [];
+
+      trades.forEach(trade => {
+        if (trade.time) {
+           const tradeTime = Math.floor(new Date(trade.time).getTime() / 1000);
+           if (!isNaN(tradeTime)) {
+              const safeProfit = trade.profit !== undefined ? Number(trade.profit) : 0;
+              markers.push({
+                time: tradeTime,
+                position: trade.type === 'BUY' ? 'belowBar' : 'aboveBar',
+                color: trade.type === 'BUY' ? '#22c55e' : '#ef4444',
+                shape: trade.type === 'BUY' ? 'arrowUp' : 'arrowDown',
+                text: trade.status === 'CLOSED' && !isNaN(safeProfit)
+                      ? `${trade.type === 'BUY' ? 'Buy' : 'Sell'} [$${safeProfit.toFixed(2)}]` 
+                      : (trade.type === 'BUY' ? 'Buy' : 'Sell')
+              });
+           }
+        }
+
+        // Se a ordem estiver aberta e tiver TP/SL
+        if (trade.status === 'OPEN' && trade.openPrice && Number(trade.openPrice) > 0) {
+           // Linha de Entrada com Lucro em Tempo Real
+           const safeProfit = trade.profit !== undefined ? Number(trade.profit) : 0;
+           const profitText = !isNaN(safeProfit) && safeProfit !== 0 ? ` [$${safeProfit.toFixed(2)}]` : '';
+           const entryLine = series.createPriceLine({
+              price: Number(trade.openPrice),
+              color: safeProfit > 0 ? '#22c55e' : (safeProfit < 0 ? '#ef4444' : '#3b82f6'),
+              lineWidth: 2,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `ENTRY (${trade.type})${profitText}`,
+           });
+           priceLinesRef.current.push(entryLine);
+
+           if (trade.tp !== undefined && trade.tp !== null && Number(trade.tp) > 0) {
+              const tpLine = series.createPriceLine({
+                 price: Number(trade.tp),
+                 color: '#22c55e',
+                 lineWidth: 2,
+                 lineStyle: LineStyle.Solid,
+                 axisLabelVisible: true,
+                 title: 'TP',
+              });
+              priceLinesRef.current.push(tpLine);
+           }
+
+           if (trade.sl !== undefined && trade.sl !== null && Number(trade.sl) > 0) {
+              const slLine = series.createPriceLine({
+                 price: Number(trade.sl),
+                 color: '#ef4444',
+                 lineWidth: 2,
+                 lineStyle: LineStyle.Solid,
+                 axisLabelVisible: true,
+                 title: 'SL',
+              });
+              priceLinesRef.current.push(slLine);
+           }
+        }
+      });
+
+      // Ordena os markers por tempo (obrigatório do lightweight-charts)
+      markers.sort((a, b) => a.time - b.time);
+      
+      // Filtra marcadores duplicados no mesmo timestamp exato
+      const uniqueMarkers = markers.filter((v, i, a) => a.findIndex(t => t.time === v.time) === i);
+      
+      series.setMarkers(uniqueMarkers);
+    } catch(err) {
+       console.error("Erro critico no useEffect do grafico:", err);
+    }
   }, [trades]);
 
   return (

@@ -394,7 +394,8 @@ export default function App() {
   const [tradeSettings, setTradeSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('fybotTradeSettings');
-      return saved ? JSON.parse(saved) : { amount: 10, takeProfit: 1, stopLoss: 2 };
+      const parsed = saved ? JSON.parse(saved) : {};
+      return { amount: parsed.amount ?? 10, takeProfit: parsed.takeProfit ?? 1, stopLoss: parsed.stopLoss ?? 2 };
     } catch {
       return { amount: 10, takeProfit: 1, stopLoss: 2 };
     }
@@ -530,7 +531,7 @@ export default function App() {
             body: new URLSearchParams({
               grant_type: 'authorization_code',
               code: code,
-              client_id: '33PZwcDs8NqrvpUw1vQIF',
+              client_id: '33RnO3OxGcvL8DIYeklO0',
               redirect_uri: 'https://fybot.life/dashboard',
               code_verifier: codeVerifier
             })
@@ -691,11 +692,13 @@ export default function App() {
     let pollInterval: any;
 
     // Função principal de conexão
-    const connectDeriv = () => {
+    const connectDeriv = async () => {
       if (!currentUser) return;
 
-      // IGNORA O BANCO DE DADOS E FORÇA O USO DA CHAVE MESTRA
-      const tokenToSend = PAT_TOKEN.trim();
+      // Autentica assim que conectar
+      let activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+      
+      const tokenToSend = (activeToken || '').trim();
       
       if (!tokenToSend) {
         fetch('/api/logs/add', {
@@ -706,15 +709,68 @@ export default function App() {
         return;
       }
 
-      // REMOVIDO: Fluxo OTP. Voltando ao fluxo clássico de "authorize"
-      // porque PAT tokens funcionam perfeitamente com "authorize" se o token for válido e correto!
-      const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
+      // Fluxo OTP oficial da nova API Deriv v1
+      // 1. Backend chama GET /options/accounts -> acha o accountId correto
+      // 2. Backend chama POST /options/accounts/{accountId}/otp -> obtém URL com OTP
+      // 3. Frontend conecta nessa URL dinâmica
+      let wsUrl: string;
+      try {
+        const otpResp = await fetch('/api/deriv/otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patToken: tokenToSend,
+            appId: APP_ID,
+            accountType: currentUser.activeAccountType,
+            // Não passamos accountId - o backend vai descobrir automaticamente
+          })
+        });
+        const otpData = await otpResp.json();
+        if (!otpResp.ok || !otpData?.data?.url) {
+          const errMsg = otpData?.error?.message || 'Falha ao obter URL via OTP';
+          fetch('/api/logs/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO OTP: ${errMsg}` })
+          }).catch(() => {});
+          setStats(prev => ({ ...prev, botRunning: false }));
+          return;
+        }
+        wsUrl = otpData.data.url;
+        // Saldo já vem da chamada REST - define imediatamente sem precisar do WebSocket
+        const balanceFromRest = parseFloat(otpData.data.balance || '0');
+        const currencyFromRest = otpData.data.currency || 'USD';
+        setStats(prev => ({
+          ...prev,
+          balance: balanceFromRest,
+          currency: currencyFromRest,
+        }));
+        // Inicia o polling de saldo a cada 60s
+        startBalancePoll(tokenToSend, APP_ID);
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: `✅ OTP obtido! Saldo: $${balanceFromRest} ${currencyFromRest}. Conectando WebSocket...` })
+        }).catch(() => {});
+      } catch (otpErr: any) {
+        fetch('/api/logs/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO OTP: ${otpErr.message}` })
+        }).catch(() => {});
+        setStats(prev => ({ ...prev, botRunning: false }));
+        return;
+      }
+
       ws = new WebSocket(wsUrl);
       derivWsRef.current = ws;
 
+
       ws.onopen = () => {
-        console.log('[FYBOT] WebSocket conectado. Enviando authorize...');
-        ws.send(JSON.stringify({ authorize: tokenToSend }));
+        console.log('[FYBOT] WebSocket OTP conectado! Validando conexão...');
+        // Suporte confirmou: primeiro frame deve ser {"time":1} para validar
+        // Não enviar authorize nem balance (estes não existem na API v1)
+        ws.send(JSON.stringify({ time: 1 }));
       };
 
       ws.onmessage = (msg) => {
@@ -753,7 +809,7 @@ export default function App() {
           setStats(prev => ({
             ...prev,
             balance: auth.balance,
-            accountType: currentUser?.activeAccountType || (auth.is_virtual ? 'DEMO' : 'REAL'),
+            accountType: auth.is_virtual ? 'DEMO' : 'REAL',
             currency: auth.currency || 'USD'
           }));
 
@@ -822,6 +878,30 @@ export default function App() {
           setTimeout(connectDeriv, 5000);
         }
       };
+    };
+
+    // ── Polling de saldo via REST a cada 60s ──────────────────────
+    // Mantém o saldo atualizado independente do estado do WebSocket
+    const startBalancePoll = (patToken: string, appId: string) => {
+      clearInterval(pollInterval);
+      pollInterval = setInterval(async () => {
+        try {
+          const r = await fetch('/api/deriv/otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patToken, appId })
+          });
+          if (!r.ok) return;
+          const d = await r.json();
+          if (d?.data?.balance) {
+            setStats(prev => ({
+              ...prev,
+              balance: parseFloat(d.data.balance),
+              currency: d.data.currency || 'USD',
+            }));
+          }
+        } catch (_) { /* ignora erros silenciosamente */ }
+      }, 60000); // a cada 60 segundos
     };
 
     connectDeriv();
@@ -1403,7 +1483,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: stats.botRunning ? 'stop' : 'start',
-          userId: currentUser?.id
+          userId: currentUser?.id,
+          tradeSettings: tradeSettings
         })
       });
       const data = await res.json();
@@ -1629,7 +1710,7 @@ export default function App() {
                   {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
                 </button>
                 <button
-                  onClick={() => window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33RkaEP2HoES8eKvLTykz'}
+                  onClick={() => handleDerivPKCELogin('33RnO3OxGcvL8DIYeklO0')}
                   className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
                 >
                   <Globe size={20} />
@@ -3882,55 +3963,58 @@ export default function App() {
                             <span className="text-sm font-bold text-white">{language === 'en' ? 'Authorize Trading' : language === 'es' ? 'Autorizar Operaciones' : 'Autorizar Operações'}</span>
                             <span className="text-xs text-white/40 mb-4">{language === 'en' ? 'Connect your Deriv account or paste token below' : language === 'es' ? 'Conecte su cuenta de Deriv o pegue su token abajo' : 'Conecte sua conta da Deriv ou cole seu token de API abaixo'}</span>
 
-                            <button
-                              type="button"
-                              onClick={() => window.location.href = 'https://oauth.deriv.com/oauth2/authorize?app_id=33RkaEP2HoES8eKvLTykz'}
-                              className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-blue-500/20 text-lg flex items-center justify-center gap-2 mb-2"
-                            >
-                              <Globe size={24} />
-                              {language === 'en' ? 'CONNECT DERIV AUTOMATICALLY' : language === 'es' ? 'CONECTAR DERIV AUTOMÁTICAMENTE' : 'CONECTAR DERIV AUTOMATICAMENTE'}
-                            </button>
-                            <span className="text-[10px] text-center text-blue-300 font-bold uppercase tracking-widest">
-                              (RECOMENDADO: Clique acima para nunca mais precisar de token)
-                            </span>
-                          </div>
-                        </div>
-                        <div className="space-y-4 border-t border-white/5 pt-4">
-                          <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl flex items-start gap-3">
-                            <AlertTriangle className="text-blue-400 shrink-0 mt-0.5" size={16} />
-                            <div className="text-xs text-blue-200">
-                              <p className="font-bold mb-1">Como pegar seus Tokens API?</p>
-                              <p>1. Acesse <a href="https://app.deriv.com/account/api-token" target="_blank" className="text-blue-400 underline font-bold">app.deriv.com/account/api-token</a></p>
-                              <p>2. Crie um token marcando as opções <b>Trade</b> (Negociar).</p>
-                              <p>3. Faça isso logado na sua conta Demo e cole no campo "Demo". Depois mude para a conta Real na Deriv, crie outro token, e cole no campo "Real".</p>
-                            </div>
-                          </div>
+                            <div className="flex flex-col gap-3">
+                              <button
+                                type="button"
+                                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg text-sm flex items-center justify-center gap-2 mb-2"
+                              >
+                                <Globe size={18} />
+                                {language === 'en' ? 'GET TOKENS ON DERIV' : 'PEGAR TOKENS NO SITE DA DERIV'}
+                              </button>
 
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA DEMO)</label>
-                            <div className="relative">
-                              <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                              <input
-                                type="password"
-                                value={profileForm.derivTokenDemo || ''}
-                                onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                                placeholder="pat_..."
-                                className="w-full bg-black/20 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-amber-400 outline-none font-mono text-white"
-                              />
-                            </div>
-                          </div>
+                              <div className="space-y-4 border-t border-white/5 pt-4">
+                                <div className="space-y-2">
+                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                    🔴 Token da Conta Real
+                                  </label>
+                                  <div className="relative">
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                    <input
+                                      type="text"
+                                      value={profileForm.derivTokenReal || ''}
+                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                                      placeholder="Cole o token da conta REAL aqui (pat_...)"
+                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
+                                    />
+                                  </div>
+                                </div>
 
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Token API (CONTA REAL)</label>
-                            <div className="relative">
-                              <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                              <input
-                                type="password"
-                                value={profileForm.derivTokenReal || ''}
-                                onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
-                                placeholder="pat_..."
-                                className="w-full bg-black/20 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-400 outline-none font-mono text-white"
-                              />
+                                <div className="space-y-2">
+                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                    🟢 Token da Conta Demo
+                                  </label>
+                                  <div className="relative">
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                    <input
+                                      type="text"
+                                      value={profileForm.derivTokenDemo || ''}
+                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                                      placeholder="Cole o token da conta DEMO aqui (pat_...)"
+                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
+                                    />
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={updateProfile}
+                                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold transition-all text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                                >
+                                  <Save size={18} />
+                                  {language === 'en' ? 'Save Tokens' : 'Salvar Tokens'}
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -3960,7 +4044,7 @@ export default function App() {
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada ($)</label>
+                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada (Stake $)</label>
                             <input
                               type="number"
                               value={tradeSettings.amount}

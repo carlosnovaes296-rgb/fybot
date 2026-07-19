@@ -57,17 +57,40 @@ conn.on('ready', () => {
                 
                 chartStream.on('close', () => {
                   console.log('📤 TradingChart.tsx uploaded!');
-                  
-                  // Now restart PM2
-                  console.log('🔄 Rebuilding the frontend and restarting server...');
-                  conn.exec('cd /root/fybot && npm run build && pm2 restart 0', (errExec, streamExec) => {
-                    if (errExec) throw errExec;
-                    streamExec.on('data', (data) => process.stdout.write(data.toString()));
-                    streamExec.stderr.on('data', (data) => process.stderr.write(data.toString()));
-                    streamExec.on('close', () => {
-                      console.log('\\n🎉 DONE! Backend and Frontend updated com sucesso no VPS!');
-                      conn.end();
-                    });
+
+                  // Upload backend/deriv/routes.ts e config.ts (OAuth fix)
+                  conn.exec('mkdir -p /root/fybot/backend/deriv', (errDir, streamDir) => {
+                    if (errDir) throw errDir;
+                    streamDir.on('close', () => {
+                      const routesContent = fs.readFileSync('./backend/deriv/routes.ts');
+                      const routesStream = sftp.createWriteStream('/root/fybot/backend/deriv/routes.ts');
+                      routesStream.write(routesContent);
+                      routesStream.end();
+                      routesStream.on('close', () => {
+                        console.log('📤 backend/deriv/routes.ts uploaded!');
+
+                        // Upload backend/deriv/config.ts (OAuth App ID)
+                        const bConfigContent = fs.readFileSync('./backend/deriv/config.ts');
+                        const bConfigStream = sftp.createWriteStream('/root/fybot/backend/deriv/config.ts');
+                        bConfigStream.write(bConfigContent);
+                        bConfigStream.end();
+                        bConfigStream.on('close', () => {
+                          console.log('📤 backend/deriv/config.ts uploaded!');
+
+                          // Now restart PM2
+                          console.log('🔄 Rebuilding the frontend and restarting server...');
+                          conn.exec('cd /root/fybot && npm run build && pm2 restart 0', (errExec, streamExec) => {
+                            if (errExec) throw errExec;
+                            streamExec.on('data', (data) => process.stdout.write(data.toString()));
+                            streamExec.stderr.on('data', (data) => process.stderr.write(data.toString()));
+                            streamExec.on('close', () => {
+                              console.log('\\n🎉 DONE! Backend and Frontend updated com sucesso no VPS!');
+                              conn.end();
+                            });
+                          });
+                        });
+                      });
+                    }).resume();
                   });
                 });
               }); // serverStream.on

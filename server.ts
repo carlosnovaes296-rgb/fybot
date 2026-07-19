@@ -93,19 +93,25 @@ async function startServer() {
            if (data.msg_type === 'authorize') {
              // Compra um contrato MULTUP ou MULTDOWN na Deriv baseado na direção
              const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
+             
+             // Pega os valores da UI, se existirem, senão usa padrão
+             const userAmount = state.tradeSettings?.amount || 10;
+             const userTP = state.tradeSettings?.takeProfit || tp || 5;
+             const userSL = state.tradeSettings?.stopLoss || sl || 2;
+
              ws.send(JSON.stringify({
                buy: 1,
-               price: 10, // Stake padrão de $10 (Pode puxar de config depois)
+               price: userAmount, 
                parameters: {
-                 amount: 10,
+                 amount: userAmount,
                  basis: "stake",
                  contract_type: contractType,
                  currency: "USD",
                  multiplier: 100,
                  symbol: "frxXAUUSD", 
                  limit_order: {
-                   take_profit: tp || 5,
-                   stop_loss: sl || 2
+                   take_profit: userTP,
+                   stop_loss: userSL
                  }
                }
              }));
@@ -115,6 +121,18 @@ async function startServer() {
                addUserLog(user.id, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message}`);
              } else {
                addUserLog(user.id, `✅ [ORDEM ABERTA] Contrato ${data.buy.contract_id} aberto com sucesso! (TP: $${tp} / SL: $${sl})`);
+               let tpPrice = 0;
+               let slPrice = 0;
+               const multiplier = 100;
+               
+               if (direction === 'BUY') {
+                 tpPrice = price + (price * userTP) / (userAmount * multiplier);
+                 slPrice = price - (price * userSL) / (userAmount * multiplier);
+               } else {
+                 tpPrice = price - (price * userTP) / (userAmount * multiplier);
+                 slPrice = price + (price * userSL) / (userAmount * multiplier);
+               }
+
                const realTrade = {
                  id: String(data.buy.contract_id),
                  symbol: "XAUUSD",
@@ -123,7 +141,9 @@ async function startServer() {
                  openPrice: price,
                  time: new Date().toISOString(),
                  status: 'OPEN',
-                 profit: 0
+                 profit: 0,
+                 tp: tpPrice,
+                 sl: slPrice
                };
                state.trades.unshift(realTrade);
              }
@@ -963,8 +983,12 @@ async function startServer() {
   });
 
   app.post('/api/control', (req, res) => {
-    const { action, userId } = req.body;
+    const { action, userId, tradeSettings } = req.body;
     const state = getUserState(userId);
+
+    if (tradeSettings) {
+      state.tradeSettings = tradeSettings;
+    }
 
     if (action === 'start') {
       const user = users.find(u => u.id === userId);
