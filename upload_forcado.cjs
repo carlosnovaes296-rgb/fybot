@@ -15,10 +15,10 @@ const runCmd = (cmd) => {
         }
       }).on('data', (data) => {
         out += data;
-        process.stdout.write(data.toString());
+        // process.stdout.write(data.toString());
       }).stderr.on('data', (data) => {
         out += data;
-        process.stderr.write(data.toString());
+        // process.stderr.write(data.toString());
       });
     });
   });

@@ -3,7 +3,8 @@ import { Indicators, Candle } from './Indicators.ts';
 
 export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
-    private appId = '36544'; // Usamos o App ID numérico antigo (livre de bloqueio Cloudflare)
+    private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
+    // Usando Ouro (XAUUSD) oficialmente agora
     private symbol = 'frxXAUUSD';
     private isConnected = false;
     
@@ -16,6 +17,8 @@ export class DerivBotEngine {
     
     // Callbacks to notify server.ts
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
+    public onRegimeChange?: (regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL') => void;
+    private lastRegime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
 
     constructor() {
         this.connect();
@@ -132,7 +135,27 @@ export class DerivBotEngine {
     }
 
     private analyzeMarket() {
-        if (this.candlesM15.length < 50 || this.candlesH1.length < 50) return;
+        if (this.candlesM15.length < 50 || this.candlesH1.length < 50) {
+            console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/50 | H1: ${this.candlesH1.length}/50`);
+            return;
+        }
+
+        // --- FILTRO DE HORÁRIO (SEXTA 15:00 A DOMINGO 21:00) ---
+        const nowUtc = new Date();
+        const day = nowUtc.getUTCDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
+        const hour = nowUtc.getUTCHours();
+        
+        let isBlockedTime = false;
+        if (day === 5 && hour >= 15) isBlockedTime = true; // Sexta depois das 15h
+        if (day === 6) isBlockedTime = true;               // Sábado inteiro
+        if (day === 0 && hour < 21) isBlockedTime = true;  // Domingo antes das 21h
+
+        if (isBlockedTime) {
+            if (nowUtc.getSeconds() % 60 === 0) {
+                console.log(`[DerivBotEngine] 🛡️ Operações bloqueadas pelo horário do fim de semana (Sexta 15h - Domingo 21h).`);
+            }
+            return;
+        }
 
         // --- PREPARAÇÃO DE DADOS ---
         const currentPrice = this.candlesM15[this.candlesM15.length - 1].close;
@@ -169,6 +192,13 @@ export class DerivBotEngine {
             }
         }
 
+        if (regime !== this.lastRegime) {
+            this.lastRegime = regime;
+            if (this.onRegimeChange) {
+                this.onRegimeChange(regime);
+            }
+        }
+
         // --- SUPORTE E RESISTÊNCIA (PIVOTS M15) ---
         const pivots = this.getPivots(this.candlesM15, 30);
         const nearestRes = pivots.highs.find(h => h > currentPrice) || currentPrice + (currentAtrM15 * 2);
@@ -178,50 +208,62 @@ export class DerivBotEngine {
         let signal: 'BUY' | 'SELL' | null = null;
         let score = 40; // Base score
 
-        // Log de Monitoramento Constante (A cada atualização de M15 ou apenas a cada X tempo)
-        // Para não flodar o console, vamos logar apenas quando a vela de M15 fechar ou o score for alto
-        // Como M15 demora 15 minutos para fechar, vamos adicionar um log de status
+        // Log de Monitoramento a cada 30 segundos para debugging
         const agora = new Date();
-        if (agora.getSeconds() === 0 && (agora.getMinutes() % 5 === 0)) {
-            // Apenas para mostrar no log a cada 5 minutos que o bot está escaneando!
-            console.log(`[SCANNING] Regime: ${regime} | ADX: ${currentAdx.toFixed(1)} | Preço: ${currentPrice} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`);
+        if (agora.getSeconds() % 30 === 0) {
+            console.log(`[SCANNING] Regime: ${regime} | ADX: ${currentAdx.toFixed(1)} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(4)} | EMA: ${currentEma.toFixed(4)} | S/R: [${nearestSup.toFixed(4)} - ${nearestRes.toFixed(4)}]`);
         }
 
-        // Condições de Compra
-        if (regime === 'TREND_UP' || (regime === 'LATERAL' && currentPrice <= nearestSup + (currentAtrM15 * 0.2))) {
-            if (currentRsi < 45) { // Pullback acontecendo
-                score += 15; // Preço perto da EMA/Suporte
-                if (currentAdx > 30) score += 20; // Tendência muito forte
-                if (currentPrice > currentEma) score += 10;
-                
-                // Evitar comprar colado numa resistência
-                if ((nearestRes - currentPrice) > currentAtrM15 * 0.5) {
-                    if (score >= 55) signal = 'BUY';
-                }
+        // Condições de Compra (MODO CONSERVADOR)
+        if (regime === 'TREND_UP') {
+            const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
+            if (currentRsi < 40 && !isNearResistance) { // Pullback PROFUNDO ou força compradora + Bloqueio S/R
+                score += 20;
+                if (currentAdx > 25) score += 20;
+                if (currentPrice > currentEma) score += 15;
+                if (score >= 50) signal = 'BUY'; // Score exigente (Focinheira)
+            } else if (isNearResistance) {
+                console.log(`[BLOQUEIO S/R] Compra em TREND_UP bloqueada: preço muito próximo da resistência (${nearestRes.toFixed(4)})`);
             }
-        }
-
-        // Condições de Venda
-        if (regime === 'TREND_DOWN' || (regime === 'LATERAL' && currentPrice >= nearestRes - (currentAtrM15 * 0.2))) {
-            if (currentRsi > 55) { // Pullback acontecendo
+        } else if (regime === 'LATERAL' && currentPrice <= nearestSup + (currentAtrM15 * 0.5)) {
+            if (currentRsi < 35) {
                 score += 15;
-                if (currentAdx > 30) score += 20;
-                if (currentPrice < currentEma) score += 10;
-                
-                // Evitar vender colado num suporte
-                if ((currentPrice - nearestSup) > currentAtrM15 * 0.5) {
-                    if (score >= 55) signal = 'SELL';
-                }
+                if (score >= 50) signal = 'BUY'; // Perto do suporte em lateral
             }
         }
+
+        // Condições de Venda (MODO CONSERVADOR)
+        if (regime === 'TREND_DOWN') {
+            const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
+            if (currentRsi > 60 && !isNearSupport) { // Pullback PROFUNDO ou força vendedora + Bloqueio S/R
+                score += 20;
+                if (currentAdx > 25) score += 20;
+                if (currentPrice < currentEma) score += 15;
+                if (score >= 50) signal = 'SELL'; // Score exigente (Focinheira)
+            } else if (isNearSupport) {
+                console.log(`[BLOQUEIO S/R] Venda em TREND_DOWN bloqueada: preço muito próximo do suporte (${nearestSup.toFixed(4)})`);
+            }
+        } else if (regime === 'LATERAL' && currentPrice >= nearestRes - (currentAtrM15 * 0.5)) {
+            if (currentRsi > 65) {
+                score += 15;
+                if (score >= 50) signal = 'SELL'; // Perto da resistência em lateral
+            }
+        }
+        
+        console.log(`[ANÁLISE] Regime: ${regime} | Score: ${score} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
+
 
         if (signal && this.onSignal) {
-            // Verifica cooldown de 5 minutos (300000 ms) para não flodar a Deriv!
+            // Cooldown de 60 segundos para teste (produção: 300000 = 5min)
             const now = Date.now();
-            if (now - this.lastSignalTime < 300000) {
-                return; // Ignora o sinal, ainda no cooldown
+            const cooldownMs = 60000; // 60 segundos para testes
+            if (now - this.lastSignalTime < cooldownMs) {
+                const remaining = Math.ceil((cooldownMs - (now - this.lastSignalTime)) / 1000);
+                console.log(`[DerivBotEngine] Cooldown ativo. Próximo sinal em ${remaining}s.`);
+                return;
             }
             this.lastSignalTime = now;
+            console.log(`[DerivBotEngine] ⚡ SINAL GERADO: ${signal} | Score: ${score} | Notificando servidor...`);
 
             // SL = 1.5x ATR H1 convertidos grosseiramente para financeiro, ou base $2
             const baseStake = 10;

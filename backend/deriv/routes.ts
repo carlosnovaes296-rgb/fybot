@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { getOAuthURL, generatePKCE } from "./oauth";
-import config from "./config";
+import { getOAuthURL, generatePKCE } from "./oauth.ts";
+import config from "./config.ts";
 
 const router = Router();
 
@@ -59,7 +59,14 @@ router.post("/otp", async (req, res) => {
 
         // Sempre busca as contas para obter o saldo atualizado
         const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
-        const accountsData: any = await accountsRes.json();
+        const textRes = await accountsRes.text();
+        let accountsData: any;
+        try {
+            accountsData = JSON.parse(textRes);
+        } catch (e) {
+            return res.status(401).json({ error: { message: textRes || 'Invalid or expired token' } });
+        }
+
         if (!accountsRes.ok) {
             return res.status(accountsRes.status).json({ error: accountsData });
         }

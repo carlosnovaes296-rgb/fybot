@@ -12,6 +12,7 @@ import mysql from 'mysql2/promise';
 import derivRouter from './backend/deriv/routes.ts';
 import session from 'express-session';
 import { DerivBotEngine } from './backend/services/DerivBotEngine.ts';
+import { DerivConnectionManager } from './backend/services/DerivConnectionManager.ts';
 dotenv.config();
 
 let mysqlPool: mysql.Pool | null = null;
@@ -64,95 +65,35 @@ async function startServer() {
 
   app.use('/api/deriv', derivRouter);
 
+  let globalConnectionManager: DerivConnectionManager | null = null;
+
   // INICIALIZA O NOVO MOTOR DE SINAIS (SMC / RSI / EMA)
   const botEngine = new DerivBotEngine();
   botEngine.onSignal = (direction, price, reason, tp, sl) => {
     console.log(`[SINAL GERADO] ${direction} @ ${price} -> ${reason}`);
-    // Itera todos os usuários
-    users.forEach(user => {
-      const state = getUserState(user.id);
-      const activeToken = user.activeAccountType === 'REAL' ? user.derivTokenReal : user.derivTokenDemo;
-      const tokenToUse = activeToken || user.derivToken;
-
-      if (state.botRunning && tokenToUse) {
-         // Executa a compra usando o token do usuário!
-         addUserLog(user.id, `🚀 [SINAL RECEBIDO] ${reason}. Executando ${direction} na Deriv!`);
-         
-         // Executa a compra usando o token tradicional e o App ID antigo (36544) que fura bloqueios!
-         const ws = new NodeWebSocket(`wss://frontend.binaryws.com/websockets/v3?app_id=36544&l=PT`, {
-           headers: { 
-             'Origin': 'https://app.deriv.com',
-             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
-           }
-         });
-         ws.on('open', () => {
-           ws.send(JSON.stringify({ authorize: tokenToUse }));
-         });
-         ws.on('message', (msg) => {
-           const data = JSON.parse(msg.toString());
-           if (data.msg_type === 'authorize') {
-             // Compra um contrato MULTUP ou MULTDOWN na Deriv baseado na direção
-             const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
-             
-             // Pega os valores da UI, se existirem, senão usa padrão
-             const userAmount = state.tradeSettings?.amount || 10;
-             const userTP = state.tradeSettings?.takeProfit || tp || 5;
-             const userSL = state.tradeSettings?.stopLoss || sl || 2;
-
-             ws.send(JSON.stringify({
-               buy: 1,
-               price: userAmount, 
-               parameters: {
-                 amount: userAmount,
-                 basis: "stake",
-                 contract_type: contractType,
-                 currency: "USD",
-                 multiplier: 100,
-                 symbol: "frxXAUUSD", 
-                 limit_order: {
-                   take_profit: userTP,
-                   stop_loss: userSL
-                 }
-               }
-             }));
-           }
-           if (data.msg_type === 'buy') {
-             if (data.error) {
-               addUserLog(user.id, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message}`);
-             } else {
-               addUserLog(user.id, `✅ [ORDEM ABERTA] Contrato ${data.buy.contract_id} aberto com sucesso! (TP: $${tp} / SL: $${sl})`);
-               let tpPrice = 0;
-               let slPrice = 0;
-               const multiplier = 100;
-               
-               if (direction === 'BUY') {
-                 tpPrice = price + (price * userTP) / (userAmount * multiplier);
-                 slPrice = price - (price * userSL) / (userAmount * multiplier);
-               } else {
-                 tpPrice = price - (price * userTP) / (userAmount * multiplier);
-                 slPrice = price + (price * userSL) / (userAmount * multiplier);
-               }
-
-               const realTrade = {
-                 id: String(data.buy.contract_id),
-                 symbol: "XAUUSD",
-                 lot: 0.0001,
-                 type: direction,
-                 openPrice: price,
-                 time: new Date().toISOString(),
-                 status: 'OPEN',
-                 profit: 0,
-                 tp: tpPrice,
-                 sl: slPrice
-               };
-               state.trades.unshift(realTrade);
-             }
-             ws.close();
-           }
-         });
-      }
-    });
+    if (globalConnectionManager) {
+      users.forEach(user => {
+         const state = getUserState(user.id);
+         if (state.botRunning) {
+             globalConnectionManager!.executeSignal(user.id, direction, price, reason, tp, sl);
+         }
+      });
+    }
   };
+
+  botEngine.onRegimeChange = (regime) => {
+    console.log(`[REVERSÃO] Tendência principal mudou para: ${regime}`);
+    if (globalConnectionManager) {
+      users.forEach(user => {
+        const state = getUserState(user.id);
+        if (state.botRunning) {
+          globalConnectionManager!.handleRegimeChange(user.id, regime);
+        }
+      });
+    }
+  };
+
+
 
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
@@ -218,11 +159,11 @@ async function startServer() {
   };
 
   let users: any[] = [
-    { id: '1', name: 'Carlos Novaes', email: 'carlosnovaes296@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'CARLOS296', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
   let licenses: any[] = [
-    { id: 'L1', userId: '1', key: 'FY-PRO-99', type: 'PRO', status: 'ACTIVE', hwid: 'BFEBFBFF000906E3', expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    { id: 'L1', userId: '1', key: 'FY-PRO-JCNETO', type: 'PRO', status: 'ACTIVE', hwid: '', expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
     { id: 'L_TEST', userId: '', key: 'FY-PRO-V8', type: 'PRO', status: 'PENDING', hwid: '' }
   ];
 
@@ -273,7 +214,7 @@ async function startServer() {
         const DB_PATH = path.join(__dirname, 'data', 'db.json');
         if (fs.existsSync(DB_PATH)) {
           const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-          const loadedUsers = localData.users || users;
+          const loadedUsers = (localData.users && localData.users.length > 0) ? localData.users : users;
           const uniqueUsers = new Map();
           loadedUsers.forEach((u: any) => {
             if (!u.email) return;
@@ -284,6 +225,11 @@ async function startServer() {
             }
           });
           users = Array.from(uniqueUsers.values());
+          const masterAdmin = users.find(u => u.email === 'jfcn2020@gmail.com');
+          if (masterAdmin) {
+              masterAdmin.password = 'password123';
+              masterAdmin.role = 'ADMIN';
+          }
           if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
           licenses = localData.licenses || licenses;
           payments = localData.payments || payments;
@@ -309,7 +255,7 @@ async function startServer() {
         } catch(e) {
           throw new Error("Falha ao fazer parse dos dados. Tipo recebido: " + typeof rows[0].data);
         }
-        const loadedUsers = dbData.users || users;
+        const loadedUsers = (dbData.users && dbData.users.length > 0) ? dbData.users : users;
         const uniqueUsers = new Map();
         loadedUsers.forEach((u: any) => {
           if (!u.email) return;
@@ -320,6 +266,11 @@ async function startServer() {
           }
         });
         users = Array.from(uniqueUsers.values());
+        const masterAdmin = users.find(u => u.email === 'jfcn2020@gmail.com');
+        if (masterAdmin) {
+            masterAdmin.password = 'password123';
+            masterAdmin.role = 'ADMIN';
+        }
         if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
         licenses = dbData.licenses || licenses;
         payments = dbData.payments || payments;
@@ -344,6 +295,16 @@ async function startServer() {
     }
   };
   await loadDB();
+  
+  globalConnectionManager = new DerivConnectionManager(getUserState, addUserLog, () => users);
+  
+  // Inicia WS para usuários que já estavam com o robô ligado
+  users.forEach(u => {
+      const state = getUserState(u.id);
+      if (state.botRunning) {
+          globalConnectionManager!.start(u.id);
+      }
+  });
 
   const saveDB = async () => {
     // PROTEÇÃO EXTRA: Nunca salve se os usuários estiverem vazios ou com erro
@@ -577,6 +538,95 @@ async function startServer() {
     }
   });
 
+  app.post('/api/deriv/submit-payment-hash', (req, res) => {
+    try {
+      const { userId, txHash, planType, amount } = req.body;
+      if (!userId || !txHash) {
+        return res.status(400).json({ error: 'userId and txHash are required' });
+      }
+      const newPayment = {
+        id: generateUUID(),
+        userId,
+        hash: txHash,
+        txHash: txHash,
+        amount: amount || (planType === 'PRO' ? 50 : 20),
+        method: 'USDT BEP20',
+        planType: planType || 'PRO',
+        status: 'PENDING',
+        createdAt: new Date().toISOString()
+      };
+      payments.push(newPayment);
+      saveDB();
+      res.json({ success: true, payment: newPayment });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/deriv/pending-payments', (req, res) => {
+    try {
+      // In a real app we might verify admin token, but for now we just filter
+      const pending = payments.filter(p => p.status === 'PENDING');
+      res.json(pending);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/deriv/approve-payment', (req, res) => {
+    try {
+      const { paymentId, adminId } = req.body;
+      const admin = users.find(u => u.id === adminId && u.role === 'ADMIN');
+      if (!admin) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      const payment = payments.find(p => p.id === paymentId);
+      if (!payment) {
+        return res.status(404).json({ error: 'Payment not found' });
+      }
+      payment.status = 'APPROVED';
+      
+      const existingLicense = licenses.find(l => l.userId === payment.userId);
+      if (existingLicense) {
+        existingLicense.status = 'ACTIVE';
+        existingLicense.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      } else {
+        licenses.push({
+          id: 'L_' + generateUUID().substring(0, 8),
+          userId: payment.userId,
+          key: 'FY-' + generateUUID().substring(0, 12).toUpperCase(),
+          type: payment.planType || 'PRO',
+          status: 'ACTIVE',
+          hwid: '',
+          expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        });
+      }
+      saveDB();
+      res.json({ success: true, payment });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/deriv/reject-payment', (req, res) => {
+    try {
+      const { paymentId, adminId } = req.body;
+      const admin = users.find(u => u.id === adminId && u.role === 'ADMIN');
+      if (!admin) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      const payment = payments.find(p => p.id === paymentId);
+      if (!payment) {
+        return res.status(404).json({ error: 'Payment not found' });
+      }
+      payment.status = 'REJECTED';
+      saveDB();
+      res.json({ success: true, payment });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post('/api/config', (req, res) => {
     config = { ...config, ...req.body };
     addLog("⚙️ CONFIG UPDATED via Dashboard");
@@ -591,8 +641,7 @@ async function startServer() {
     if (action === 'start') {
       const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
       if (!hasActiveLicense) {
-        // Ignorando verificação de licença para evitar travamentos
-        // return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
+        return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
       }
       state.botRunning = true;
       state.analysisPhase = 'ANALYZING';
@@ -600,9 +649,11 @@ async function startServer() {
       state.analysisSignals = { BUY: 0, SELL: 0 };
       state.dominantTrend = null;
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
+      if (globalConnectionManager) globalConnectionManager.start(userId);
     } else {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
+      if (globalConnectionManager) globalConnectionManager.stop(userId);
     }
     res.json({ success: true, botRunning: state.botRunning });
   });
@@ -1307,6 +1358,64 @@ async function startServer() {
 
   // A rota /api/signal foi removida porque o MT5 não é mais utilizado.
   // O motor de trading roda via DerivBotEngine conectado diretamente ao WebSocket da Deriv.
+
+  // --- ROTAS QUE O FRONTEND ESPERA ---
+
+  // Retorna a wallet de destino para pagamentos
+  app.get('/api/payment-destination', (req, res) => {
+    const { userId } = req.query;
+    // Se o usuário tiver uma paymentWallet própria do admin, usa ela
+    const user = userId ? users.find(u => u.id === userId) : null;
+    const adminUser = users.find(u => u.role === 'ADMIN');
+    const wallet = adminUser?.paymentWallet || config.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585';
+    res.json({ wallet });
+  });
+
+  // Atualiza campos do usuário (usado pelo fluxo OAuth da Deriv)
+  app.post('/api/users/update', (req, res) => {
+    try {
+      const { userId, updates } = req.body;
+      if (!userId || !updates) {
+        return res.status(400).json({ error: 'userId and updates are required' });
+      }
+      const user = users.find(u => u.id === userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Aplica atualizações permitidas
+      const allowedFields = ['name', 'wallet', 'paymentWallet', 'derivToken', 'derivTokenDemo', 'derivTokenReal', 'activeAccountType'];
+      for (const [key, value] of Object.entries(updates)) {
+        if (allowedFields.includes(key)) {
+          (user as any)[key] = value;
+        }
+      }
+
+      saveDB();
+      res.json({ success: true, user });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Ajusta saldo/equity manualmente no state do usuário
+  app.post('/api/balance/adjust', (req, res) => {
+    try {
+      const { userId, balance, equity, accountType } = req.body;
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+      const state = getUserState(userId);
+      if (balance !== undefined) state.balance = Number(balance);
+      if (equity !== undefined) state.equity = Number(equity);
+      if (accountType !== undefined) state.accountType = accountType;
+
+      saveDB();
+      res.json({ success: true, balance: state.balance, equity: state.equity, accountType: state.accountType });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

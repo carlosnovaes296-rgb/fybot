@@ -34,10 +34,13 @@ export interface License {
 export interface Payment {
   id: string;
   userId: string;
-  amount: number;
-  method: string;
+  amount?: number;
+  method?: string;
   status: string;
-  hash: string;
+  hash?: string;
+  txHash?: string;
+  planType?: string;
+  createdAt?: string;
 }
 
 export interface Trade {

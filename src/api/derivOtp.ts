@@ -3,7 +3,8 @@ export async function getOtpWebSocketUrl(
   patToken: string,
   appId: string,
   accountId: string,
-): Promise<string> {
+  accountType: string = 'DEMO',
+): Promise<{ url: string; balance: string; currency: string }> {
   const url = `/api/deriv/otp`;
 
   const resp = await fetch(url, {
@@ -11,7 +12,7 @@ export async function getOtpWebSocketUrl(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ patToken, appId, accountId })
+    body: JSON.stringify({ patToken, appId, accountId, accountType })
   });
 
   if (!resp.ok) {
@@ -23,5 +24,9 @@ export async function getOtpWebSocketUrl(
   if (!data?.data?.url) {
     throw new Error('OTP response missing URL');
   }
-  return data.data.url;
+  return {
+    url: data.data.url,
+    balance: data.data.balance || '0',
+    currency: data.data.currency || 'USD',
+  };
 }

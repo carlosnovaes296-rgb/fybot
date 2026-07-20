@@ -34,6 +34,11 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
     }
   };
 
+  const handleOAuthConnect = () => {
+    const appId = '33SRHHormRjw8l1LxKtKl';
+    window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${appId}&l=PT`;
+  };
+
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
       <motion.div
@@ -80,25 +85,41 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
             </ol>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm text-gray-400">Token de API da Deriv</label>
-            <input
-              type="text"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="Cole seu token aqui..."
-              className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#ff4d4d] transition-colors"
-            />
-          </div>
+          <div className="space-y-4 pt-2">
+            <button
+              onClick={handleOAuthConnect}
+              className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              <Globe size={20} />
+              CONECTAR AUTOMATICAMENTE (RECOMENDADO)
+            </button>
 
-          <button
-            onClick={handleConnect}
-            disabled={!token || loading}
-            className="w-full bg-gradient-to-r from-[#ff4d4d] to-[#cc0000] hover:from-[#ff6666] hover:to-[#e60000] text-white font-medium py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? 'Conectando...' : 'Conectar Conta'}
-            {!loading && <ArrowRight size={20} />}
-          </button>
+            <div className="relative flex items-center py-2">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink-0 mx-4 text-gray-500 text-sm">OU CONECTAR MANUALMENTE</span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-gray-400">Token de API da Deriv (Legado)</label>
+              <input
+                type="text"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Cole seu token de 15 caracteres..."
+                className="w-full bg-[#0a0a0f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#ff4d4d] transition-colors"
+              />
+            </div>
+
+            <button
+              onClick={handleConnect}
+              disabled={!token || loading}
+              className="w-full bg-gradient-to-r from-[#ff4d4d] to-[#cc0000] hover:from-[#ff6666] hover:to-[#e60000] text-white font-medium py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? 'Conectando...' : 'Conectar Manualmente'}
+              {!loading && <ArrowRight size={20} />}
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>

@@ -407,7 +407,7 @@ export default function App() {
     localStorage.setItem('fybotTradeSettings', JSON.stringify(updated));
   };
 
-  const hasActiveLicense = currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
+  const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
   const chartDataMap = {
     '7D': [
@@ -463,8 +463,7 @@ export default function App() {
   const fetchPaymentDestination = async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/payment-destination?userId=${currentUser.id}&t=${Date.now()}`);
-      const data = await res.json();
+      const data = await safeFetch(`/api/payment-destination?userId=${currentUser.id}&t=${Date.now()}`);
       if (data && data.wallet) {
         setTargetPaymentWallet(data.wallet);
       } else {
@@ -686,234 +685,177 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Efeito para recuperar o usuário logado
+  // Efeito para conectar à Deriv e mostrar o saldo na dashboard
   useEffect(() => {
-    let ws: WebSocket;
-    let pollInterval: any;
+    if (!currentUser) return;
 
-    // Função principal de conexão
-    const connectDeriv = async () => {
-      if (!currentUser) return;
+    let ws: WebSocket | null = null;
+    let pingInterval: any = null;
+    let reconnectTimeout: any = null;
+    let isMounted = true;
 
-      // Autentica assim que conectar
-      let activeToken = currentUser.activeAccountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
-      
-      const tokenToSend = (activeToken || '').trim();
-      
-      if (!tokenToSend) {
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `⚠️ ERRO: Token da ${currentUser.activeAccountType} está VAZIO! Vá na Engrenagem e salve a chave de acesso.` })
-        }).catch(() => { });
-        return;
-      }
+    const accountType = currentUser.activeAccountType || 'DEMO';
+    const activeToken = accountType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+    // Usa o token específico da conta, ou o genérico, ou o PAT do config como último recurso
+    const tokenToSend = (activeToken || currentUser.derivToken || PAT_TOKEN || '').trim();
 
-      // Fluxo OTP oficial da nova API Deriv v1
-      // 1. Backend chama GET /options/accounts -> acha o accountId correto
-      // 2. Backend chama POST /options/accounts/{accountId}/otp -> obtém URL com OTP
-      // 3. Frontend conecta nessa URL dinâmica
-      let wsUrl: string;
-      try {
-        const otpResp = await fetch('/api/deriv/otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            patToken: tokenToSend,
-            appId: APP_ID,
-            accountType: currentUser.activeAccountType,
-            // Não passamos accountId - o backend vai descobrir automaticamente
-          })
-        });
-        const otpData = await otpResp.json();
-        if (!otpResp.ok || !otpData?.data?.url) {
-          const errMsg = otpData?.error?.message || 'Falha ao obter URL via OTP';
-          fetch('/api/logs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO OTP: ${errMsg}` })
-          }).catch(() => {});
-          setStats(prev => ({ ...prev, botRunning: false }));
-          return;
+    // O PAT token a usar no OTP é sempre o do usuário (derivToken), não o do config
+    const patForOtp = (currentUser.derivToken || PAT_TOKEN || '').trim();
+
+    const setupWsHandlers = (socket: WebSocket, isOtpAuth: boolean) => {
+      derivWsRef.current = socket;
+
+      socket.onopen = () => {
+        if (!isMounted || !socket) return;
+        if (!isOtpAuth && tokenToSend && !tokenToSend.startsWith('pat_')) {
+          socket.send(JSON.stringify({ authorize: tokenToSend }));
         }
-        wsUrl = otpData.data.url;
-        // Saldo já vem da chamada REST - define imediatamente sem precisar do WebSocket
-        const balanceFromRest = parseFloat(otpData.data.balance || '0');
-        const currencyFromRest = otpData.data.currency || 'USD';
-        setStats(prev => ({
-          ...prev,
-          balance: balanceFromRest,
-          currency: currencyFromRest,
-        }));
-        // Inicia o polling de saldo a cada 60s
-        startBalancePoll(tokenToSend, APP_ID);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `✅ OTP obtido! Saldo: $${balanceFromRest} ${currencyFromRest}. Conectando WebSocket...` })
-        }).catch(() => {});
-      } catch (otpErr: any) {
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO OTP: ${otpErr.message}` })
-        }).catch(() => {});
-        setStats(prev => ({ ...prev, botRunning: false }));
-        return;
-      }
-
-      ws = new WebSocket(wsUrl);
-      derivWsRef.current = ws;
-
-
-      ws.onopen = () => {
-        console.log('[FYBOT] WebSocket OTP conectado! Validando conexão...');
-        // Suporte confirmou: primeiro frame deve ser {"time":1} para validar
-        // Não enviar authorize nem balance (estes não existem na API v1)
-        ws.send(JSON.stringify({ time: 1 }));
       };
 
-      ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
+      socket.onmessage = (msg) => {
+        if (!isMounted) return;
+        try {
+          const data = JSON.parse(msg.data);
 
-        if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'proposal') {
-          console.error("Autorização falhou:", data.error.message);
-          fetch('/api/logs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DA DERIV: ${data.error.message} (Isso significa que o Token copiado está INVÁLIDO. Gere um novo com as caixinhas READ e TRADE marcadas)` })
-          }).catch(() => { });
-        }
-
-        if (data.msg_type === 'authorize') {
-          if (data.error) {
-            console.error('Deriv Auth Error:', data.error.message);
-            setStats(prev => ({ ...prev, botRunning: false }));
+          if (data.msg_type === 'authorize') {
+            if (data.error) {
+              fetch('/api/logs/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id, message: `🚨 Token inválido: ${data.error.message}. Verifique o token em Configurações.` })
+              }).catch(() => {});
+              socket.close(4001, 'Auth Failed');
+              return;
+            }
+            const auth = data.authorize;
+            setStats(prev => ({ ...prev, balance: auth.balance, equity: auth.balance, currency: auth.currency || 'USD' }));
             fetch('/api/logs/add', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DERIV: ${data.error.message} (Gere um NOVO token na Deriv e verifique se copiou inteiro)` })
-            }).catch(() => { });
-            if (derivWsRef.current) derivWsRef.current.close(4001, "Auth Failed");
-            return;
+              body: JSON.stringify({ userId: currentUser.id, message: `✅ Conectado! Conta ${accountType} | Saldo: $${auth.balance} ${auth.currency}` })
+            }).catch(() => {});
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ balance: 1, account: 'current', subscribe: 1 }));
+            }
+            clearInterval(pingInterval);
+            pingInterval = setInterval(() => {
+              if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ ping: 1 }));
+            }, 30000);
           }
-          const auth = data.authorize;
-          const isDemo = currentUser?.activeAccountType === 'DEMO';
 
-          fetch('/api/logs/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, message: `✅ SUCESSO: Conectado na Deriv! Saldo: $${auth.balance}` })
-          }).catch(() => { });
+          if (data.msg_type === 'balance' && data.balance) {
+            const bal = data.balance.balance ?? 0;
+            if (bal > 0) setStats(prev => ({ ...prev, balance: bal, equity: bal }));
+            // Inicia ping para manter conexão viva (para conexões OTP que não passam por authorize)
+            if (!pingInterval) {
+              clearInterval(pingInterval);
+              pingInterval = setInterval(() => {
+                if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ ping: 1 }));
+              }, 30000);
+            }
+          }
 
+          if (data.msg_type === 'ping') return;
+
+          if (data.msg_type === 'buy') {
+            if (data.error) console.error('Erro ao abrir ordem:', data.error.message);
+            else console.log('Ordem aberta com sucesso!', data.buy);
+          }
+
+        } catch (e) { /* ignora erros de parse */ }
+      };
+
+      socket.onerror = () => {};
+
+      socket.onclose = (e) => {
+        clearInterval(pingInterval);
+        pingInterval = null;
+        if (!isMounted) return;
+        if (e.code === 4001) return;
+        reconnectTimeout = setTimeout(connect, 10000);
+      };
+    };
+
+    const connectDirect = (token: string) => {
+      console.log('[BALANCE WS] Conectando diretamente com API token...');
+      try {
+        ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT');
+        setupWsHandlers(ws, false);
+      } catch (e) {
+        console.error('[BALANCE WS] Falha ao criar WebSocket:', e);
+      }
+    };
+
+    const connectViaOtp = async (tokenToUse: string = patForOtp, isFallback: boolean = false) => {
+      try {
+        console.log(`[BALANCE WS] Usando fluxo OTP. PAT: ${tokenToUse.substring(0, 20)}...`);
+        // Usa o PAT token fornecido para autenticar
+        const otpResult = await getOtpWebSocketUrl(tokenToUse, APP_ID, '', accountType);
+        console.log('[BALANCE WS] OTP ok! Saldo:', otpResult.balance, otpResult.currency);
+
+        // Mostra o saldo imediatamente sem esperar pelo WebSocket
+        if (parseFloat(otpResult.balance) > 0) {
           setStats(prev => ({
             ...prev,
-            balance: auth.balance,
-            accountType: auth.is_virtual ? 'DEMO' : 'REAL',
-            currency: auth.currency || 'USD'
+            balance: parseFloat(otpResult.balance),
+            equity: parseFloat(otpResult.balance),
+            currency: otpResult.currency || 'USD',
           }));
-
-          // Subscreve ao saldo genérico ao vivo
-          ws.send(JSON.stringify({ balance: 1, account: 'all', subscribe: 1 }));
-
-          // Mantém a conexão viva enviando ping a cada 30 segundos
-          pollInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ ping: 1 }));
-            }
-          }, 30000);
         }
 
-        // Trata resposta do ping silenciosamente
-        if (data.msg_type === 'ping') return;
-
-        // Atualização de saldo genérico (Opções)
-        if (data.msg_type === 'balance') {
-          if (data.balance) {
-            let currentBalance = data.balance.balance !== undefined ? data.balance.balance : 0;
-            if (data.balance.accounts) {
-              const accounts = data.balance.accounts;
-              let total = 0;
-              for (const key in accounts) {
-                total += accounts[key].balance || 0;
-              }
-              currentBalance = total;
-            }
-            setStats(prev => ({ ...prev, balance: currentBalance, equity: currentBalance }));
+        ws = new WebSocket(otpResult.url);
+        setupWsHandlers(ws, true);
+        ws.addEventListener('open', () => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ balance: 1, account: 'current', subscribe: 1 }));
           }
+        }, { once: true });
+      } catch (err: any) {
+        console.warn('[BALANCE WS] OTP falhou:', err.message);
+        
+        // Se falhou com o token do usuário, tenta usar o token mestre do config.ts como fallback
+        if (!isFallback && tokenToUse !== PAT_TOKEN && PAT_TOKEN) {
+          console.log('[BALANCE WS] Tentando token mestre (config.ts) como fallback...');
+          return connectViaOtp(PAT_TOKEN, true);
         }
 
-        // Confirmação de Ordem Aberta
-        if (data.msg_type === 'buy') {
-          if (data.error) {
-            console.error('Erro ao abrir ordem na Deriv:', data.error.message);
-            alert('ERRO AO ABRIR ORDEM DERIV: ' + data.error.message);
-            setStats(prev => ({ ...prev, botRunning: false })); 
-          } else {
-            const buyInfo = data.buy;
-            console.log('ORDEM DERIV ABERTA COM SUCESSO!', buyInfo);
-            alert(`SUCESSO! Ordem de XAUUSD aberta na Deriv!\nID do Contrato: ${buyInfo.contract_id}\nBuy Price: $${buyInfo.buy_price}\nConta: ${currentUser?.activeAccountType}`);
-          }
-        }
-      };
-
-      ws.onerror = (e) => {
-        console.error('Deriv WS Error:', e);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `🚨 ERRO DE CONEXÃO WS: Ocorreu um erro no nível de rede WebSocket.` })
-        }).catch(() => { });
-      };
-
-      ws.onclose = (e) => {
-        console.log('Deriv WS Closed', e.code, e.reason);
-        fetch('/api/logs/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: currentUser.id, message: `⚠️ WS FECHADO (Código: ${e.code}).${e.code === 4001 ? ' Falha de Autenticação.' : ' Tentando reconectar em 5s...'}` })
-        }).catch(() => { });
-        clearInterval(pollInterval);
-        if (e.code !== 4001) {
-          setTimeout(connectDeriv, 5000);
-        }
-      };
-    };
-
-    // ── Polling de saldo via REST a cada 60s ──────────────────────
-    // Mantém o saldo atualizado independente do estado do WebSocket
-    const startBalancePoll = (patToken: string, appId: string) => {
-      clearInterval(pollInterval);
-      pollInterval = setInterval(async () => {
-        try {
-          const r = await fetch('/api/deriv/otp', {
+        // Se o token não for PAT, tenta conexão direta com API token normal (a1-...)
+        if (tokenToSend && !tokenToSend.startsWith('pat_')) {
+          connectDirect(tokenToSend);
+        } else {
+           fetch('/api/logs/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patToken, appId })
-          });
-          if (!r.ok) return;
-          const d = await r.json();
-          if (d?.data?.balance) {
-            setStats(prev => ({
-              ...prev,
-              balance: parseFloat(d.data.balance),
-              currency: d.data.currency || 'USD',
-            }));
-          }
-        } catch (_) { /* ignora erros silenciosamente */ }
-      }, 60000); // a cada 60 segundos
+            body: JSON.stringify({ userId: currentUser.id, message: `🚨 Token inválido: ${err.message}. Atualize seu Token em Configurações.` })
+          }).catch(() => {});
+        }
+      }
     };
 
-    connectDeriv();
+    const connect = () => {
+      if (!isMounted) return;
+      // PAT token → fluxo OTP via proxy seguro
+      // API token (a1-...) → authorize direto no WebSocket
+      if (!tokenToSend || tokenToSend.startsWith('pat_')) {
+        connectViaOtp();
+      } else {
+        connectDirect(tokenToSend);
+      }
+    };
+
+    connect();
 
     return () => {
+      isMounted = false;
+      clearInterval(pingInterval);
+      clearTimeout(reconnectTimeout);
       if (ws) {
-        ws.onclose = null; // evita reconexões em loop no desmonte
+        ws.onclose = null;
         ws.close();
       }
       derivWsRef.current = null;
     };
-  }, [currentUser?.derivTokenDemo, currentUser?.derivTokenReal, currentUser?.activeAccountType]);
+  }, [currentUser?.derivTokenDemo, currentUser?.derivTokenReal, currentUser?.activeAccountType, currentUser?.derivToken]);
 
   // Lógica Principal de Operação do Bot (Motor de Trade Contínuo)
   // O MOTOR REAL AGORA RODA NO SERVIDOR (server.ts)!
@@ -1068,9 +1010,10 @@ export default function App() {
   };
 
   const approvePayment = async (id: string) => {
-    await fetch(`/api/admin/payments/${id}/approve`, {
+    await fetch(`/api/deriv/approve-payment`, {
       method: 'POST',
-      headers: { 'x-admin-userid': currentUser?.id || '' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: id, adminId: currentUser?.id })
     });
     fetchAdminData();
   };
@@ -1114,9 +1057,10 @@ export default function App() {
   };
 
   const rejectPayment = async (id: string) => {
-    await fetch(`/api/admin/payments/${id}/reject`, {
+    await fetch(`/api/deriv/reject-payment`, {
       method: 'POST',
-      headers: { 'x-admin-userid': currentUser?.id || '' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paymentId: id, adminId: currentUser?.id })
     });
     fetchAdminData();
   };
@@ -1294,8 +1238,9 @@ export default function App() {
       setStats(prev => ({
         ...prev,
         ...data,
-        balance: prev.balance, // A API não deve sobrescrever o saldo real do WebSocket!
-        equity: prev.equity,   // Mantém o equity real lido da corretora
+        // Usa o saldo do WebSocket se já tiver sido atualizado, senão usa o do servidor (DB)
+        balance: prev.balance > 0 ? prev.balance : (data.balance ?? 0),
+        equity: prev.equity > 0 ? prev.equity : (data.equity ?? data.balance ?? 0),
         accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
       if (data.logs) setLogs(data.logs);
@@ -1359,13 +1304,13 @@ export default function App() {
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/payments', {
+      const res = await fetch('/api/deriv/submit-payment-hash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          planType: showPaymentModal.title,
+          txHash: paymentHash,
           amount: showPaymentModal.price,
-          method: 'USDT BEP20',
-          hash: paymentHash,
           userId: currentUser?.id
         })
       });
@@ -2332,8 +2277,8 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[900px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
-                        <TradingChart trades={trades} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} onTradesUpdate={setTrades} />
+                      <div className="flex-1 min-h-[900px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
+                        <TradingChart trades={trades} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} />
                       </div>
 
                       {/* Strategy Gauges — circular */}
@@ -2733,7 +2678,7 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-                  <div className="h-[400px] w-full">
+                  <div className="h-[400px] w-full flex flex-col">
                     <TradingChart trades={trades} />
                   </div>
                 </div>
@@ -2884,14 +2829,13 @@ export default function App() {
                     title="LÍDER VIP"
                     titleColor="text-[#f59e0b] uppercase tracking-wider font-black"
                     price={0}
-                    customPriceText="VITALÍCIO"
+                    customPriceText="180 DIAS"
                     desc={t.plans.card4Desc}
                     descSize="text-sm font-medium leading-relaxed"
                     descColor="text-white/80"
                     features={t.plans.card4Features}
                     language={language}
                     image="/fybot-logo.png.png"
-                    onBuy={() => setShowPaymentModal({ title: "LÍDER VIP", price: 1000 })}
                   />
                 </div>
 
@@ -4035,44 +3979,6 @@ export default function App() {
                     </div>
 
 
-                    {currentUser?.role === 'ADMIN' && (
-                      <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/5 space-y-4">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-white">Gestão de Risco (Operacional)</span>
-                          <span className="text-xs text-white/40">Configure os valores reais das ordens na Deriv</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Valor da Entrada (Stake $)</label>
-                            <input
-                              type="number"
-                              value={tradeSettings.amount}
-                              onChange={(e) => updateTradeSettings('amount', Number(e.target.value))}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-white"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-emerald-400/70 tracking-widest pl-1">Take Profit ($)</label>
-                            <input
-                              type="number"
-                              value={tradeSettings.takeProfit}
-                              onChange={(e) => updateTradeSettings('takeProfit', Number(e.target.value))}
-                              className="w-full bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none font-mono text-emerald-400"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-red-400/70 tracking-widest pl-1">Stop Loss ($)</label>
-                            <input
-                              type="number"
-                              value={tradeSettings.stopLoss}
-                              onChange={(e) => updateTradeSettings('stopLoss', Number(e.target.value))}
-                              className="w-full bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm focus:border-red-500 outline-none font-mono text-red-400"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
 

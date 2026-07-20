@@ -124,8 +124,8 @@ export const translations = {
       card3Desc: "Maximum performance for professional capital.",
       card3Features: ["90 Days License"],
       card4Title: "Partnership License",
-      card4Desc: "Activate 5 Institutional Pro licenses on your first level and become a Leader.",
-      card4Features: ["Lifetime Access"],
+      card4Desc: "Activate 5 Free Bots on your first level.",
+      card4Features: ["Gain free access to trade 24 hours.", "For 180 days"],
       period: "DAYS"
     },
     installation: {
@@ -299,8 +299,8 @@ export const translations = {
       card3Desc: "Máxima performance para capital profissional.",
       card3Features: ["Licença de 90 dias"],
       card4Title: "Licença Parceria",
-      card4Desc: "Ativar 5 licenças Institucional Pro em seu primeiro nível e torne-se Líder.",
-      card4Features: ["Acesso Vitalício"],
+      card4Desc: "Ativar 5 Bot livre em seu primeiro nível.",
+      card4Features: ["Ganha acesso livre para operar 24 horas.", "Durante 180 dias"],
       period: "DIAS"
     },
     installation: {
@@ -474,8 +474,8 @@ export const translations = {
       card3Desc: "Máximo rendimiento para capital profesional.",
       card3Features: ["Licencia de 90 días"],
       card4Title: "Licencia Asociación",
-      card4Desc: "Active 5 licencias Institucional Pro en su primer nivel y conviértase en Líder.",
-      card4Features: ["Acceso Vitalicio"],
+      card4Desc: "Activar 5 Bot libre en su primer nivel.",
+      card4Features: ["Gana acceso libre para operar 24 horas.", "Durante 180 días"],
       period: "DÍAS"
     },
     installation: {
