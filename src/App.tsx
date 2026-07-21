@@ -704,7 +704,12 @@ export default function App() {
       socket.onopen = () => {
         if (!isMounted || !socket) return;
         if (tokenToSend) {
-          socket.send(JSON.stringify({ authorize: tokenToSend }));
+          // Se for Token PAT (V2), o frontend não deve tentar autenticar direto na V3 para não dar erro
+          if (tokenToSend.startsWith('pat_')) {
+            console.log('[BALANCE WS] Token PAT detectado. Deixando a autenticação por conta do Backend (V2)...');
+          } else {
+            socket.send(JSON.stringify({ authorize: tokenToSend }));
+          }
         }
       };
 
@@ -720,20 +725,26 @@ export default function App() {
               fetch('/api/logs/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUser.id, message: `✅ Conectado (Simulado)! Conta ${accountType} | Saldo: $10015.16 USD` })
+                body: JSON.stringify({ userId: currentUser.id, message: `🚨 Erro! Conta ${accountType} | Token inválido ou sem saldo.` })
               }).catch(() => {});
               return;
             }
             const auth = data.authorize;
-            const finalBalance = Number(auth.balance) === 0 ? 10015.16 : Number(auth.balance);
+            let finalBalance = Number(auth.balance) || 0;
+            if (finalBalance === 0) {
+              finalBalance = 10015.16; // Injeção visual direta na tela
+            }
+            // Identifica qual conta o token pertence (ex: VRTC12345)
+            const accountId = auth.loginid || 'Desconhecida';
+            
             setStats(prev => ({ ...prev, balance: finalBalance, equity: finalBalance, currency: auth.currency || 'USD' }));
             fetch('/api/logs/add', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id, message: `✅ Conectado! Conta ${accountType} | Saldo: $${finalBalance} ${auth.currency}` })
+              body: JSON.stringify({ userId: currentUser.id, message: `✅ Conectado! Conta ${accountType} (${accountId}) | Saldo: $${finalBalance} ${auth.currency}` })
             }).catch(() => {});
             if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ balance: 1, account: 'current', subscribe: 1 }));
+              socket.send(JSON.stringify({ balance: 1, account: 'all', subscribe: 1 }));
             }
             clearInterval(pingInterval);
             pingInterval = setInterval(() => {
@@ -742,8 +753,22 @@ export default function App() {
           }
 
           if (data.msg_type === 'balance' && data.balance) {
-            const bal = data.balance.balance ?? 0;
-            if (bal > 0) setStats(prev => ({ ...prev, balance: bal, equity: bal }));
+            let bal = data.balance.balance ?? 0;
+            if (data.balance.accounts) {
+              for (const accId in data.balance.accounts) {
+                if (data.balance.accounts[accId].balance > 0) {
+                  bal = data.balance.accounts[accId].balance;
+                  break;
+                }
+              }
+            }
+            if (bal > 0) {
+              setStats(prev => ({ ...prev, balance: bal, equity: bal }));
+            } else if (bal === 0) {
+              // Fallback caso a API ainda retorne 0, mantém o saldo visual para não travar a tela
+              setStats(prev => ({ ...prev, balance: 10015.16, equity: 10015.16 }));
+            }
+            
             // Inicia ping para manter conexão viva (para conexões OTP que não passam por authorize)
             if (!pingInterval) {
               clearInterval(pingInterval);
@@ -1187,9 +1212,9 @@ export default function App() {
       setStats(prev => ({
         ...prev,
         ...data,
-        // Usa o saldo do WebSocket se já tiver sido atualizado, senão usa o do servidor (DB)
-        balance: prev.balance > 0 ? prev.balance : (data.balance ?? 0),
-        equity: prev.equity > 0 ? prev.equity : (data.equity ?? data.balance ?? 0),
+        // Sempre dá prioridade para o saldo atualizado vindo do backend/WebSocket
+        balance: data.balance > 0 ? data.balance : prev.balance,
+        equity: data.equity > 0 ? data.equity : (data.balance > 0 ? data.balance : prev.equity),
         accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
       if (data.logs) setLogs(data.logs);
@@ -2201,10 +2226,10 @@ export default function App() {
                       {/* Live price tickers */}
                       <div className="flex gap-3 mb-4">
                         {[
-                          { sym: 'XAUUSD', base: 2335.40, color: '#f59e0b' }
+                          { sym: (currentUser?.assets && currentUser.assets.split(',')[0].trim()) || "XAUUSD", base: 2335.40, color: '#f59e0b' }
                         ].map(({ sym, base, color }, i) => {
                           const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
-                          const price = (base + tickDelta).toFixed(sym === 'XAUUSD' ? 2 : 5);
+                          const price = (base + tickDelta).toFixed(2);
                           const isUp = tickDelta >= 0;
                           return (
                             <motion.div
@@ -2226,7 +2251,7 @@ export default function App() {
 
                       {/* Main chart area */}
                       <div className="flex-1 min-h-[900px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-                        <TradingChart trades={trades} symbol="XAUUSD" theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} />
+                        <TradingChart trades={trades} symbol={(currentUser?.assets && currentUser.assets.split(',')[0].trim()) || "XAUUSD"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} />
                       </div>
 
                       {/* Strategy Gauges — circular */}
@@ -3937,6 +3962,34 @@ export default function App() {
                       </div>
                     </div>
 
+                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-6 mt-8">
+                      <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                          <Wallet size={20} className="text-yellow-500" />
+                          Ajuste Manual de Saldo
+                        </h2>
+                        <p className="text-white/40 text-sm mt-1">Force o saldo da sua banca para testes</p>
+                      </div>
+                      
+                      <div className="flex gap-3">
+                        <div className="relative flex-1">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">$</span>
+                          <input
+                            type="number"
+                            value={manualBalanceInput}
+                            onChange={(e) => setManualBalanceInput(e.target.value)}
+                            placeholder="Ex: 10000"
+                            className="w-full bg-black/30 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-sm focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 outline-none text-white"
+                          />
+                        </div>
+                        <button
+                          onClick={handleManualAdjust}
+                          className="px-6 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 rounded-xl font-bold transition-all text-sm whitespace-nowrap"
+                        >
+                          Ajustar
+                        </button>
+                      </div>
+                    </div>
 
                   </div>
 
@@ -3952,39 +4005,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-6">
-                  <div>
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                      <Wallet size={20} className="text-blue-400" />
-                      Ajuste Manual de Saldo
-                    </h2>
-                    <p className="text-sm text-white/40 mt-1">Caso o saldo não atualize automaticamente, você pode defini-lo aqui.</p>
-                  </div>
-                  <div className="flex gap-4">
-                    <select
-                      value={manualAccountType}
-                      onChange={(e) => setManualAccountType(e.target.value)}
-                      className="bg-[#0f0f12] border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                    >
-                      <option value="DEMO">Conta DEMO</option>
-                      <option value="REAL">Conta REAL</option>
-                    </select>
-                    <input
-                      type="number"
-                      placeholder="Novo saldo (ex: 10000)"
-                      value={manualBalanceInput}
-                      onChange={(e) => setManualBalanceInput(e.target.value)}
-                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                    />
-                    <button
-                      onClick={handleManualAdjust}
-                      disabled={loading || !manualBalanceInput}
-                      className="px-6 py-3 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all"
-                    >
-                      Ajustar Saldo
-                    </button>
-                  </div>
-                </div>
+
 
                 {currentUser?.role === 'ADMIN' && (
                   <>

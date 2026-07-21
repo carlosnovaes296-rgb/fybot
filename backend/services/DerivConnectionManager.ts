@@ -32,9 +32,66 @@ export class DerivConnectionManager {
     let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`;
     let needsAuthCommand = true;
 
+    // --- NOVA ARQUITETURA V2 (OTP) ---
+    try {
+        const appId = "33TxY3I7FXDKJMpuS6uIC";
+        const origin = "https://fybot.life";
+        const BASE = "https://api.derivws.com/trading/v1";
+        
+        const headers = {
+            'Authorization': `Bearer ${tokenToUse}`,
+            'Deriv-App-ID': appId,
+            'Origin': origin,
+            'Content-Type': 'application/json'
+        };
+
+        this.addUserLog(userId, `📡 Identificando a conta na API V2...`);
+        const resContas = await fetch(`${BASE}/options/accounts`, { headers });
+        const contasData = await resContas.json();
+        
+        const contasArray = contasData.accounts || contasData.data || contasData;
+        if (Array.isArray(contasArray) && contasArray.length > 0) {
+            const isDemo = user.activeAccountType === 'DEMO';
+            const contaAlvo = contasArray.find((a: any) => isDemo ? a.is_virtual : !a.is_virtual) || contasArray[0];
+            
+            // Log detalhado para sabermos o formato real que a Deriv devolveu
+            this.addUserLog(userId, `🔍 Conta encontrada: ${JSON.stringify(contaAlvo)}`);
+            
+            // A API V2 da Deriv geralmente retorna o loginid como identificador principal
+            const accountId = contaAlvo.loginid || contaAlvo.account_id || contaAlvo.id || contaAlvo.client_id || contaAlvo.oauth_client_id;
+            
+            if (!accountId) {
+                 this.addUserLog(userId, `⚠️ Erro: Não foi possível extrair o ID da conta do objeto acima.`);
+                 throw new Error("Account ID missing");
+            }
+
+            this.addUserLog(userId, `📡 Solicitando URL Segura (OTP) para a conta ${accountId}...`);
+            const resOtp = await fetch(`${BASE}/options/accounts/${accountId}/otp`, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({})
+            });
+            const otpData = await resOtp.json();
+            
+            const urlSegura = otpData?.data?.url || otpData.ws_url || otpData.websocket_url || otpData.url;
+            if (urlSegura) {
+                wsUrl = urlSegura;
+                needsAuthCommand = false;
+                this.addUserLog(userId, `🎉 URL Mágica Autenticada gerada! Conectando...`);
+            } else {
+                this.addUserLog(userId, `⚠️ Erro ao gerar OTP. Detalhes: ${JSON.stringify(otpData)}`);
+            }
+        } else {
+            this.addUserLog(userId, `⚠️ Falha ao listar contas: ${JSON.stringify(contasData)}`);
+        }
+    } catch (e: any) {
+        this.addUserLog(userId, `⚠️ Erro de rede na V2, caindo para o Fallback V3: ${e.message}`);
+    }
+    // ---------------------------------
+
     const ws = new NodeWebSocket(wsUrl, {
       headers: { 
-        'Origin': 'https://app.deriv.com',
+        'Origin': 'https://fybot.life',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
       }
     });
@@ -43,11 +100,12 @@ export class DerivConnectionManager {
     this.userPeakProfits.set(userId, {});
 
     ws.on('open', () => {
-      this.addUserLog(userId, `✅ [WS] Conectado à Deriv. Autenticando...`);
+      this.addUserLog(userId, `✅ [WS] Conectado à Deriv!`);
       if (needsAuthCommand) {
+        this.addUserLog(userId, `Autenticando via fluxo clássico V3...`);
         ws.send(JSON.stringify({ authorize: tokenToUse }));
       } else {
-        // Já autorizado via OTP
+        // Já autorizado via OTP, iniciar inscrições direto
         ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
       }
@@ -118,8 +176,11 @@ export class DerivConnectionManager {
       if (data.msg_type === 'buy') {
         if (data.error) {
           this.addUserLog(userId, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message}`);
+          console.error(`[DerivConnectionManager] Erro na compra para ${userId}:`, data.error.message);
+          this.addUserLog(userId, `🚨 Erro da Corretora ao abrir ordem: ${data.error.message}`);
         } else {
-          this.addUserLog(userId, `✅ [ORDEM ABERTA] Contrato ${data.buy.contract_id} aberto na Deriv!`);
+          console.log(`[DerivConnectionManager] Ordem aberta com sucesso para ${userId}!`);
+          this.addUserLog(userId, `🚀 Ordem aberta na corretora com sucesso! ID: ${data.buy.transaction_id || data.buy.contract_id}`);
         }
       }
       
@@ -163,6 +224,13 @@ export class DerivConnectionManager {
         return;
     }
 
+    // Regra Extra: Limite máximo de ordens abertas simultâneas
+    const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
+    if (openTradesCount >= 4) {
+        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Máximo de 4 ordens simultâneas atingido. Novo sinal de ${direction} bloqueado!`);
+        return;
+    }
+
     const ws = this.userSockets.get(userId);
     if (!ws || ws.readyState !== NodeWebSocket.OPEN) {
       this.addUserLog(userId, `⚠️ Erro: Sinal recebido, mas WebSocket offline. Conecte o robô primeiro.`);
@@ -203,7 +271,7 @@ export class DerivConnectionManager {
         contract_type: contractType,
         currency: "USD",
         multiplier: 100,
-        symbol: "frxXAUUSD",
+        symbol: "1HZ100V",
         limit_order: {
           take_profit: tpAmount,
           stop_loss: slAmount
@@ -212,11 +280,9 @@ export class DerivConnectionManager {
     }));
     
     // Simula a adição da ordem no estado
-    // tpPrice e slPrice já estão vindo como parâmetros engineTp e engineSl!
-    // Não precisamos recalcular aqui.
     const realTrade = {
         id: "PENDING_" + Date.now(),
-        symbol: "frxXAUUSD",
+        symbol: "1HZ100V",
         lot: dynamicStake,
         type: direction,
         openPrice: price,

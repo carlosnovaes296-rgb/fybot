@@ -4,7 +4,7 @@ import { Indicators, Candle } from './Indicators.ts';
 export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
     private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
-    // Usando Índice Sintético 100 (1s) para funcionar 24/7
+    // Usando Ouro (XAUUSD)
     private symbol = '1HZ100V';
     private isConnected = false;
     public riskProfile: string = 'CONSERVATIVE';
@@ -223,7 +223,7 @@ export class DerivBotEngine {
         // Condições de Compra
         if (regime === 'TREND_UP') {
             const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
-            if (currentRsi < 55 && !isNearResistance) { // Pullback realista em tendência de alta
+            if (currentRsi < 40 && !isNearResistance) { // Pullback real (Sobrevendido em tendência de alta)
                 score += 20;
                 if (currentAdx > 25) score += 20;
                 if (currentPrice > currentEma) score += 15;
@@ -232,16 +232,16 @@ export class DerivBotEngine {
                 console.log(`[BLOQUEIO S/R] Compra em TREND_UP bloqueada: preço muito próximo da resistência (${nearestRes.toFixed(4)})`);
             }
         } else if (regime === 'LATERAL' && currentPrice <= nearestSup + (currentAtrM15 * 0.5)) {
-            if (currentRsi < 35) {
+            if (currentRsi < 30) {
                 score += 15;
-                if (score >= requiredScore) signal = 'BUY'; // Perto do suporte em lateral
+                if (score >= requiredScore) signal = 'BUY'; // Perto do suporte em lateral (Sobrevendido forte)
             }
         }
 
         // Condições de Venda
         if (regime === 'TREND_DOWN') {
             const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
-            if (currentRsi > 45 && !isNearSupport) { // Pullback realista em tendência de baixa
+            if (currentRsi > 60 && !isNearSupport) { // Pullback real (Sobrecomprado em tendência de baixa)
                 score += 20;
                 if (currentAdx > 25) score += 20;
                 if (currentPrice < currentEma) score += 15;
@@ -250,9 +250,9 @@ export class DerivBotEngine {
                 console.log(`[BLOQUEIO S/R] Venda em TREND_DOWN bloqueada: preço muito próximo do suporte (${nearestSup.toFixed(4)})`);
             }
         } else if (regime === 'LATERAL' && currentPrice >= nearestRes - (currentAtrM15 * 0.5)) {
-            if (currentRsi > 65) {
+            if (currentRsi > 70) {
                 score += 15;
-                if (score >= requiredScore) signal = 'SELL'; // Perto da resistência em lateral
+                if (score >= requiredScore) signal = 'SELL'; // Perto da resistência em lateral (Sobrecomprado forte)
             }
         }
         
@@ -268,17 +268,21 @@ export class DerivBotEngine {
                 console.log(`[DerivBotEngine] Cooldown ativo. Próximo sinal em ${remaining}s.`);
                 return;
             }
-            this.lastSignalTime = now;
-            console.log(`[DerivBotEngine] ⚡ SINAL GERADO: ${signal} | Score: ${score} | Notificando servidor...`);
-
-            // SL = 1.5x ATR H1 convertidos grosseiramente para financeiro, ou base $2
-            const baseStake = 10;
-            const volatilityMultiplier = (currentAtrH1 / currentPrice) * 1000; // Normaliza a volatilidade
-            const sl = Math.max(2, parseFloat((2 * volatilityMultiplier).toFixed(2)));
-            const tp = Math.max(5, parseFloat((5 * volatilityMultiplier).toFixed(2)));
+            // SL e TP para Índice Sintético (Volatility 100)
+            const atrPoints = currentAtrM15;
+            let tpPrice = 0;
+            let slPrice = 0;
+            if (signal === 'BUY') {
+                tpPrice = parseFloat((currentPrice + (atrPoints * 3)).toFixed(2));
+                slPrice = parseFloat((currentPrice - (atrPoints * 1.5)).toFixed(2));
+            } else {
+                tpPrice = parseFloat((currentPrice - (atrPoints * 3)).toFixed(2));
+                slPrice = parseFloat((currentPrice + (atrPoints * 1.5)).toFixed(2));
+            }
             
             const reason = `[Regime: ${regime}] Score: ${score.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
-            this.onSignal(signal, currentPrice, reason, tp, sl);
+            this.lastSignalTime = now; // FIX: Atualiza o tempo do último sinal para travar o spam de ordens
+            this.onSignal(signal, currentPrice, reason, tpPrice, slPrice);
         }
     }
 

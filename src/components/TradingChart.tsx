@@ -193,12 +193,19 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
              let tpPrice = undefined;
              let slPrice = undefined;
              
-             if (c.limit_order) {
+             const multiplier = c.multiplier || 100;
+             const stake = Number(c.buy_price) || 0;
+             
+             if (c.limit_order && stake > 0 && entryPrice > 0) {
                if (c.limit_order.take_profit && c.limit_order.take_profit.value) {
-                 tpPrice = Number(c.limit_order.take_profit.value);
+                 const tpAmount = Number(c.limit_order.take_profit.value);
+                 const tpDiff = (tpAmount / (stake * multiplier)) * entryPrice;
+                 tpPrice = type === 'BUY' ? entryPrice + tpDiff : entryPrice - tpDiff;
                }
                if (c.limit_order.stop_loss && c.limit_order.stop_loss.value) {
-                 slPrice = Number(c.limit_order.stop_loss.value);
+                 const slAmount = Number(c.limit_order.stop_loss.value);
+                 const slDiff = (slAmount / (stake * multiplier)) * entryPrice;
+                 slPrice = type === 'BUY' ? entryPrice - slDiff : entryPrice + slDiff;
                }
              }
 
