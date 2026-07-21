@@ -5,6 +5,7 @@ const path = require('path');
 const conn = new Client();
 const BACKEND_DIR = path.join(__dirname, 'backend');
 const SRC_DIR = path.join(__dirname, 'src');
+const DIST_DIR = path.join(__dirname, 'dist');
 
 function getAllFiles(dirPath, arrayOfFiles) {
   const files = fs.readdirSync(dirPath);
@@ -35,6 +36,14 @@ if (fs.existsSync(BACKEND_DIR)) {
 if (fs.existsSync(SRC_DIR)) {
   const srcFiles = getAllFiles(SRC_DIR);
   srcFiles.forEach(file => {
+    const relativePath = file.replace(__dirname, '').replace(/\\/g, '/');
+    filesToUpload.push({ local: file, remote: `/root/fybot${relativePath}` });
+  });
+}
+
+if (fs.existsSync(DIST_DIR)) {
+  const distFiles = getAllFiles(DIST_DIR);
+  distFiles.forEach(file => {
     const relativePath = file.replace(__dirname, '').replace(/\\/g, '/');
     filesToUpload.push({ local: file, remote: `/root/fybot${relativePath}` });
   });
@@ -84,9 +93,6 @@ conn.on('ready', async () => {
       });
     }
 
-    console.log('📦 Instalando dependências e Reconstruindo o site...');
-    await runCmd(`cd /root/fybot && npm install && NODE_OPTIONS=--max-old-space-size=1024 npm run build`);
-    
     console.log('🚀 Reiniciando o motor...');
     await runCmd(`/usr/lib/node_modules/pm2/bin/pm2 restart fybot || pm2 restart all`);
     

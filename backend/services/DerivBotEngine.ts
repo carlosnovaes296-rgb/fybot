@@ -4,9 +4,10 @@ import { Indicators, Candle } from './Indicators.ts';
 export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
     private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
-    // Usando Ouro (XAUUSD) oficialmente agora
-    private symbol = 'frxXAUUSD';
+    // Usando Índice Sintético 100 (1s) para funcionar 24/7
+    private symbol = '1HZ100V';
     private isConnected = false;
+    public riskProfile: string = 'CONSERVATIVE';
     
     // Armazenamento de Histórico OHLC
     private candlesM15: Candle[] = [];
@@ -37,7 +38,6 @@ export class DerivBotEngine {
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
-                start: 1, // latest N bars
                 count: 100, // Precisamos de pelo menos 55 para EMA e S/R
                 style: 'candles',
                 granularity: 900,
@@ -49,7 +49,6 @@ export class DerivBotEngine {
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
-                start: 1,
                 count: 100,
                 style: 'candles',
                 granularity: 3600,
@@ -140,24 +139,26 @@ export class DerivBotEngine {
             return;
         }
 
-        // --- FILTRO DE HORÁRIO (SEXTA 15:00 A DOMINGO 21:00) ---
-        const nowUtc = new Date();
-        const day = nowUtc.getUTCDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
-        const hour = nowUtc.getUTCHours();
+        // --- BLOQUEIO DE FIM DE SEMANA REMOVIDO PARA SINTÉTICOS (Rodam 24/7) ---
+        // const nowUtc = new Date();
+        // const day = nowUtc.getUTCDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
+        // const hour = nowUtc.getUTCHours();
         
-        let isBlockedTime = false;
-        if (day === 5 && hour >= 15) isBlockedTime = true; // Sexta depois das 15h
-        if (day === 6) isBlockedTime = true;               // Sábado inteiro
-        if (day === 0 && hour < 21) isBlockedTime = true;  // Domingo antes das 21h
+        // let isBlockedTime = false;
+        // if (day === 5 && hour >= 15) isBlockedTime = true; // Sexta depois das 15h
+        // if (day === 6) isBlockedTime = true;               // Sábado inteiro
+        // if (day === 0 && hour < 21) isBlockedTime = true;  // Domingo antes das 21h
 
-        if (isBlockedTime) {
-            if (nowUtc.getSeconds() % 60 === 0) {
-                console.log(`[DerivBotEngine] 🛡️ Operações bloqueadas pelo horário do fim de semana (Sexta 15h - Domingo 21h).`);
-            }
-            return;
-        }
+        // if (isBlockedTime) {
+        //     if (nowUtc.getSeconds() % 60 === 0) {
+        //         console.log(`[DerivBotEngine] 🛡️ Operações bloqueadas pelo horário do fim de semana (Sexta 15h - Domingo 21h).`);
+        //     }
+        //     return;
+        // }
 
         // --- PREPARAÇÃO DE DADOS ---
+        if (this.candlesM15.length < 50 || this.candlesH1.length < 50) return; // Aguarda carregar histórico
+        
         const currentPrice = this.candlesM15[this.candlesM15.length - 1].close;
         const pricesH1 = this.candlesH1.map(c => c.close);
         const pricesM15 = this.candlesM15.map(c => c.close);
@@ -214,39 +215,44 @@ export class DerivBotEngine {
             console.log(`[SCANNING] Regime: ${regime} | ADX: ${currentAdx.toFixed(1)} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(4)} | EMA: ${currentEma.toFixed(4)} | S/R: [${nearestSup.toFixed(4)} - ${nearestRes.toFixed(4)}]`);
         }
 
-        // Condições de Compra (MODO CONSERVADOR)
+        // Ajusta o score mínimo baseado no Perfil de Risco (CONSERVATIVE=50, MEDIUM=45, AGGRESSIVE=40)
+        let requiredScore = 50;
+        if (this.riskProfile === 'MEDIUM') requiredScore = 45;
+        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 40;
+
+        // Condições de Compra
         if (regime === 'TREND_UP') {
             const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
-            if (currentRsi < 40 && !isNearResistance) { // Pullback PROFUNDO ou força compradora + Bloqueio S/R
+            if (currentRsi < 55 && !isNearResistance) { // Pullback realista em tendência de alta
                 score += 20;
                 if (currentAdx > 25) score += 20;
                 if (currentPrice > currentEma) score += 15;
-                if (score >= 50) signal = 'BUY'; // Score exigente (Focinheira)
+                if (score >= requiredScore) signal = 'BUY'; 
             } else if (isNearResistance) {
                 console.log(`[BLOQUEIO S/R] Compra em TREND_UP bloqueada: preço muito próximo da resistência (${nearestRes.toFixed(4)})`);
             }
         } else if (regime === 'LATERAL' && currentPrice <= nearestSup + (currentAtrM15 * 0.5)) {
             if (currentRsi < 35) {
                 score += 15;
-                if (score >= 50) signal = 'BUY'; // Perto do suporte em lateral
+                if (score >= requiredScore) signal = 'BUY'; // Perto do suporte em lateral
             }
         }
 
-        // Condições de Venda (MODO CONSERVADOR)
+        // Condições de Venda
         if (regime === 'TREND_DOWN') {
             const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
-            if (currentRsi > 60 && !isNearSupport) { // Pullback PROFUNDO ou força vendedora + Bloqueio S/R
+            if (currentRsi > 45 && !isNearSupport) { // Pullback realista em tendência de baixa
                 score += 20;
                 if (currentAdx > 25) score += 20;
                 if (currentPrice < currentEma) score += 15;
-                if (score >= 50) signal = 'SELL'; // Score exigente (Focinheira)
+                if (score >= requiredScore) signal = 'SELL'; 
             } else if (isNearSupport) {
                 console.log(`[BLOQUEIO S/R] Venda em TREND_DOWN bloqueada: preço muito próximo do suporte (${nearestSup.toFixed(4)})`);
             }
         } else if (regime === 'LATERAL' && currentPrice >= nearestRes - (currentAtrM15 * 0.5)) {
             if (currentRsi > 65) {
                 score += 15;
-                if (score >= 50) signal = 'SELL'; // Perto da resistência em lateral
+                if (score >= requiredScore) signal = 'SELL'; // Perto da resistência em lateral
             }
         }
         

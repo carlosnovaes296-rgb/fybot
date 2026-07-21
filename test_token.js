@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 
-const token = 'pat_10134a80d677f7fe4e43545f4cea28b2a8ad7f59608c030f180bab143b7d92e8';
+const token = '2Ht8jhtRXTfFmLw';
 const appId = 1089;
 
 console.log('\n=======================================');

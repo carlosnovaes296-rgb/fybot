@@ -16,7 +16,7 @@ export class DerivConnectionManager {
     
     const state = this.getUserState(userId);
     const activeToken = user.activeAccountType === 'REAL' ? user.derivTokenReal : user.derivTokenDemo;
-    const tokenToUse = activeToken || user.derivToken;
+    let tokenToUse = activeToken || user.derivToken;
 
     if (!tokenToUse) {
       this.addUserLog(userId, `⚠️ [SEM TOKEN] Nenhum token ${user.activeAccountType} configurado. Vá em Configurações e salve seu Token Deriv!`);
@@ -29,42 +29,8 @@ export class DerivConnectionManager {
 
     this.addUserLog(userId, `🔄 Conectando WebSocket Contínuo para conta ${user.activeAccountType}...`);
 
-    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT`;
+    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`;
     let needsAuthCommand = true;
-
-    if (tokenToUse.toLowerCase().startsWith('pat_')) {
-      try {
-        const headers = { 
-            'Authorization': `Bearer ${tokenToUse}`, 
-            'Deriv-App-ID': '33RKuEXT4n16PCA2phPeO', // OBRIGATÓRIO usar o App ID OAuth (alfanumérico) para a REST API
-            'Content-Type': 'application/json',
-            'Origin': 'https://app.deriv.com' 
-        };
-        const accRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
-        if (!accRes.ok) {
-            const errBody = await accRes.text();
-            throw new Error(`Falha API contas (${accRes.status}): ${errBody}`);
-        }
-        const accData = await accRes.json();
-        const targetAccType = user.activeAccountType === 'REAL' ? 'real' : 'demo';
-        const acc = (accData.data || []).find((a: any) => a.account_type === targetAccType);
-        if (!acc) throw new Error(`Conta ${targetAccType} não encontrada. Contas: ${JSON.stringify(accData.data)}`);
-        
-        const otpRes = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${acc.account_id}/otp`, { method: 'POST', headers, body: '{}' });
-        if (!otpRes.ok) {
-            const errBody = await otpRes.text();
-            throw new Error(`Falha API OTP (${otpRes.status}): ${errBody}`);
-        }
-        const otpData = await otpRes.json();
-        if (!otpData.data?.url) throw new Error('URL da sessão OTP não retornada');
-        wsUrl = otpData.data.url;
-        needsAuthCommand = false;
-      } catch (err: any) {
-        this.addUserLog(userId, `🚨 [ERRO AUTH] Falha PAT OTP: ${err.message}`);
-        // Fallback tentar direta se falhar (pode ser que o WS aceite)
-        needsAuthCommand = true;
-      }
-    }
 
     const ws = new NodeWebSocket(wsUrl, {
       headers: { 
@@ -209,9 +175,22 @@ export class DerivConnectionManager {
     const balance = state.balance > 0 ? state.balance : 1000;
     const dynamicStake = Math.max(0.5, parseFloat((balance * 0.01).toFixed(2))); // Mínimo $0.50
 
-    // Take Profit / Stop Loss (Fixo ou dinâmico) - vamos usar o calculo do backend mas limitando ao stake
-    const tp = parseFloat(Math.max(engineTp, dynamicStake * 0.5).toFixed(2));
-    const sl = parseFloat(Math.max(engineSl, dynamicStake * 0.2).toFixed(2));
+    // O Motor envia PREÇOS (ex: 785.40), mas a Deriv exige VALORES EM DÓLAR para o Multiplicador!
+    const multiplier = 100;
+    const tpDiff = Math.abs(engineTp - price);
+    const slDiff = Math.abs(engineSl - price);
+    
+    // Converte a diferença de preço para lucro em dólar: (Diferença / Preço) * Stake * Multiplicador
+    let tpAmount = parseFloat(((tpDiff / price) * dynamicStake * multiplier).toFixed(2));
+    let slAmount = parseFloat(((slDiff / price) * dynamicStake * multiplier).toFixed(2));
+    
+    // Segurança da Deriv: Stop Loss não pode ser maior que a banca apostada (Stake)
+    if (slAmount > dynamicStake) {
+        slAmount = dynamicStake;
+    }
+    // Garante um TP/SL mínimo de 10% do stake para evitar rejeição por ser muito perto
+    tpAmount = Math.max(tpAmount, parseFloat((dynamicStake * 0.1).toFixed(2)));
+    slAmount = Math.max(slAmount, parseFloat((dynamicStake * 0.1).toFixed(2)));
 
     const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
@@ -226,34 +205,26 @@ export class DerivConnectionManager {
         multiplier: 100,
         symbol: "frxXAUUSD",
         limit_order: {
-          take_profit: tp,
-          stop_loss: sl
+          take_profit: tpAmount,
+          stop_loss: slAmount
         }
       }
     }));
     
     // Simula a adição da ordem no estado
-    const multiplier = 100;
-    let tpPrice = 0;
-    let slPrice = 0;
-    if (direction === 'BUY') {
-      tpPrice = price + (price * tp) / (dynamicStake * multiplier);
-      slPrice = price - (price * sl) / (dynamicStake * multiplier);
-    } else {
-      tpPrice = price - (price * tp) / (dynamicStake * multiplier);
-      slPrice = price + (price * sl) / (dynamicStake * multiplier);
-    }
+    // tpPrice e slPrice já estão vindo como parâmetros engineTp e engineSl!
+    // Não precisamos recalcular aqui.
     const realTrade = {
         id: "PENDING_" + Date.now(),
         symbol: "frxXAUUSD",
-        lot: 0.0001,
+        lot: dynamicStake,
         type: direction,
         openPrice: price,
         time: new Date().toISOString(),
         status: 'OPEN',
         profit: 0,
-        tp: tpPrice,
-        sl: slPrice
+        tp: engineTp, // UI espera o Preço
+        sl: engineSl  // UI espera o Preço
     };
     state.trades.unshift(realTrade);
   }

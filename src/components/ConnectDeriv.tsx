@@ -31,12 +31,15 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
       console.error(error);
       alert('Erro ao conectar. Tente novamente.');
       setLoading(false);
-    }
-  };
+  const handleOAuthConnect = async () => {
+    try {
+      const clientId = '33SRHHormRjw8l1LxKtKl';
+      const redirectUri = 'https://fybot.life/';
 
-  const handleOAuthConnect = () => {
-    const appId = '33SRHHormRjw8l1LxKtKl';
-    window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${appId}&l=PT`;
+      window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${clientId}&redirect_uri=${redirectUri}&l=PT&brand=deriv`;
+    } catch (e: any) {
+      alert("Error generating PKCE: " + e.message);
+    }
   };
 
   return (
@@ -86,17 +89,26 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
           </div>
 
           <div className="space-y-4 pt-2">
-            <button
-              onClick={handleOAuthConnect}
-              className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-bold py-4 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
-            >
-              <Globe size={20} />
-              CONECTAR AUTOMATICAMENTE (RECOMENDADO)
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                className="flex-1 bg-gradient-to-r from-[#ff4d4d] to-[#cc0000] hover:from-[#ff6666] hover:to-[#e60000] text-white font-bold py-3 px-2 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg text-[13px]"
+              >
+                <Globe size={16} />
+                GERAR TOKEN REAL
+              </button>
+              <button
+                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                className="flex-1 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-bold py-3 px-2 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg text-[13px]"
+              >
+                <Globe size={16} />
+                GERAR TOKEN DEMO
+              </button>
+            </div>
 
             <div className="relative flex items-center py-2">
               <div className="flex-grow border-t border-white/10"></div>
-              <span className="flex-shrink-0 mx-4 text-gray-500 text-sm">OU CONECTAR MANUALMENTE</span>
+              <span className="flex-shrink-0 mx-4 text-gray-500 text-sm">2. DEPOIS, COLE O TOKEN ABAIXO</span>
               <div className="flex-grow border-t border-white/10"></div>
             </div>
 

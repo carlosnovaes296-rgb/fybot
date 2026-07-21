@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
 import { Trade } from '../types';
 import { APP_ID } from '../config';
-import { getOtpWebSocketUrl } from '../api/derivOtp';
+// OTP removed
 
 interface TradingChartProps {
   trades: Trade[];
@@ -67,8 +67,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     seriesRef.current = candleSeries;
 
     // Para dados de gráfico (candles/ticks) usa sempre o endpoint público
-    // Usamos o App ID numérico antigo (36544) livre de bloqueio Cloudflare para evitar o erro 1006 (WS FECHADO)
-    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`);
+    // Usamos o App ID configurado para a conta
+    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
     // Função auxiliar para processar trades e avisar o App
     const emitTrades = (newTrades: Trade[]) => {
        const merged = [...localTradesRef.current];
@@ -82,10 +82,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
           }
           else merged.push(nt);
        });
-       // Sort by date DESC
-       merged.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-       localTradesRef.current = merged;
-       if (onTradesUpdate) onTradesUpdate(merged.slice(0, 50));
+       // Sort by date DESC and filter only today's trades
+       const todayStr = new Date().toISOString().split('T')[0];
+       const finalTrades = merged.filter(tr => tr.time && tr.time.startsWith(todayStr)).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+       localTradesRef.current = finalTrades;
+       if (onTradesUpdate) onTradesUpdate(finalTrades.slice(0, 50));
     };
 
     // Granularidade em segundos (1M = 60, 5M = 300)
@@ -96,30 +97,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     let bypassAuth = false;
 
     const connectWS = async () => {
-      let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`;
+      let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
       const cleanedToken = (derivToken || '').trim();
-      const isPatToken = cleanedToken.startsWith('pat_');
-      let isAlreadyAuthorized = false;
-
-      if (isPatToken && !bypassAuth) {
-         try {
-             const otpResult = await getOtpWebSocketUrl(cleanedToken, APP_ID, '', accountType);
-             if (otpResult.url) {
-                wsUrl = otpResult.url;
-                isAlreadyAuthorized = true;
-             }
-         } catch(e) {
-             console.error("[FYBOT] Erro ao obter OTP URL para grafico", e);
-         }
-      }
+      // OTP removed
 
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       const requestCandles = () => {
-        console.log("[FYBOT] Requisitando histórico de velas para o símbolo (SINTÉTICO 24/7):", symbol);
+        console.log("[FYBOT] Requisitando histórico de velas para o símbolo:", symbol);
         socket.send(JSON.stringify({
-          ticks_history: '1HZ100V', // Synthetic index (open 24/7) - Forex is closed on weekends
+          ticks_history: symbol === 'XAUUSD' ? 'frxXAUUSD' : symbol, // Usa frxXAUUSD para Ouro
           adjust_start_time: 1,
           count: 500,
           end: 'latest',
@@ -131,18 +119,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
 
       socket.onopen = () => {
         console.log("[FYBOT] WebSocket Conectado diretamente à Deriv. Token recebido:", derivToken);
-        const isValidWsToken = cleanedToken !== '' && cleanedToken !== 'undefined' && cleanedToken !== 'null' && !isPatToken;
+        const isValidWsToken = cleanedToken !== '' && cleanedToken !== 'undefined' && cleanedToken !== 'null';
         
-        if (isAlreadyAuthorized) {
-          console.log("[FYBOT] Sessão OTP já autorizada. Requisitando velas diretamente...");
-          requestCandles();
-        } else if (isValidWsToken && !bypassAuth) {
+        if (isValidWsToken && !bypassAuth) {
           console.log("[FYBOT] Enviando autorização API...");
           socket.send(JSON.stringify({ authorize: cleanedToken }));
         } else {
-          if (isPatToken) {
-            console.warn("[FYBOT] Falha no OTP ou fallback público ativo.");
-          }
           console.log("[FYBOT] Sem token ativo ou fallback público. Requisitando velas diretamente...");
           requestCandles();
         }
@@ -172,27 +154,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
 
           if (data.msg_type === 'profit_table' && data.profit_table) {
              const closedTrades: Trade[] = data.profit_table.transactions.map((tx: any) => ({
-                id: tx.contract_id.toString(),
+                id: (tx.contract_id || tx.transaction_id || tx.purchase_time || 'closed').toString(),
                 symbol: symbol,
-                lot: 0,
-                type: tx.shortcode.includes('UP') ? 'BUY' : 'SELL',
-                openPrice: 0,
-                time: new Date(tx.purchase_time * 1000).toISOString(),
+                lot: Number(tx.buy_price) || 0,
+                type: (tx.shortcode || '').includes('UP') || (tx.shortcode || '').includes('CALL') ? 'BUY' : 'SELL',
+                openPrice: Number(tx.entry_spot || tx.buy_price || 0), // Use entry_spot if available, else use buy_price as fallback
+                time: tx.purchase_time ? new Date(tx.purchase_time * 1000).toISOString() : new Date().toISOString(),
                 status: 'CLOSED',
                 profit: Number(tx.sell_price) - Number(tx.buy_price),
-                closeTime: new Date(tx.sell_time * 1000).toISOString()
+                closeTime: tx.sell_time ? new Date(tx.sell_time * 1000).toISOString() : new Date().toISOString()
              }));
              emitTrades(closedTrades);
           }
 
           if (data.msg_type === 'portfolio' && data.portfolio) {
              const openTrades: Trade[] = data.portfolio.contracts.map((tx: any) => ({
-                id: tx.contract_id.toString(),
-                symbol: symbol,
-                lot: 0,
-                type: tx.shortcode.includes('UP') ? 'BUY' : 'SELL',
-                openPrice: 0,
-                time: new Date(tx.date_start * 1000).toISOString(),
+                id: (tx.contract_id || tx.transaction_id || tx.date_start || 'open').toString(),
+                symbol: tx.symbol || tx.underlying || symbol,
+                lot: Number(tx.buy_price) || 0,
+                type: (tx.shortcode || '').includes('UP') || (tx.shortcode || '').includes('CALL') ? 'BUY' : 'SELL',
+                openPrice: Number(tx.entry_spot || tx.buy_price || 0),
+                time: tx.date_start ? new Date(tx.date_start * 1000).toISOString() : new Date().toISOString(),
                 status: 'OPEN',
                 profit: 0
              }));
@@ -202,22 +184,31 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
           // Recebendo atualização ao vivo dos contratos abertos (inclui preço de entrada exato e TP/SL)
           if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
              const c = data.proposal_open_contract;
-             const entryPrice = Number(c.entry_tick || c.current_spot);
-             const type = c.contract_type.includes('UP') ? 'BUY' : 'SELL';
-             const profit = Number(c.profit);
+             if (!c.contract_id && !c.transaction_id && !c.purchase_time) return; // Prevent empty object handling
+
+             const entryPrice = Number(c.entry_spot || c.entry_tick || c.current_spot || c.buy_price);
+             const type = (c.contract_type || '').includes('UP') || (c.contract_type === 'CALL') ? 'BUY' : 'SELL';
+             const profit = Number(c.profit || 0);
              
              let tpPrice = undefined;
              let slPrice = undefined;
              
-             if (c.limit_order) {}
+             if (c.limit_order) {
+               if (c.limit_order.take_profit && c.limit_order.take_profit.value) {
+                 tpPrice = Number(c.limit_order.take_profit.value);
+               }
+               if (c.limit_order.stop_loss && c.limit_order.stop_loss.value) {
+                 slPrice = Number(c.limit_order.stop_loss.value);
+               }
+             }
 
              const openTrade: Trade = {
-                id: c.contract_id.toString(),
-                symbol: symbol,
-                lot: 0,
+                id: (c.contract_id || c.transaction_id || `${c.purchase_time}_${c.underlying}`).toString(),
+                symbol: c.underlying || c.symbol || symbol,
+                lot: Number(c.buy_price) || 0,
                 type: type as 'BUY' | 'SELL',
                 openPrice: entryPrice, 
-                time: new Date(c.purchase_time * 1000).toISOString(),
+                time: c.purchase_time ? new Date(c.purchase_time * 1000).toISOString() : new Date().toISOString(),
                 status: c.is_sold ? 'CLOSED' : 'OPEN',
                 profit: profit,
                 tp: tpPrice,
@@ -225,7 +216,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
              };
              
              if (c.is_sold) {
-                openTrade.closeTime = new Date(c.sell_time * 1000).toISOString();
+                openTrade.closeTime = c.sell_time ? new Date(c.sell_time * 1000).toISOString() : new Date().toISOString();
              }
              
              emitTrades([openTrade]);

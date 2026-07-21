@@ -69,6 +69,7 @@ async function startServer() {
 
   // INICIALIZA O NOVO MOTOR DE SINAIS (SMC / RSI / EMA)
   const botEngine = new DerivBotEngine();
+  botEngine.riskProfile = 'CONSERVATIVE';
   botEngine.onSignal = (direction, price, reason, tp, sl) => {
     console.log(`[SINAL GERADO] ${direction} @ ${price} -> ${reason}`);
     if (globalConnectionManager) {
@@ -113,11 +114,12 @@ async function startServer() {
   const getUserState = (userId: string | undefined): any => {
     const id = userId || "1"; // Fallback to '1' (Carlos Novaes) as default
     if (!userStates[id]) {
-      const isPreseeded = id === '1' || id === '3';
       userStates[id] = {
         botRunning: false,
         balance: 0,
         equity: 0,
+        currency: 'USD',
+        activeTrades: 0,
         accountType: 'DISCONNECTED', // 'REAL' | 'DEMO' | 'DISCONNECTED'
         pendingOrders: new Set<string>(),
         symbolTrend: {},
@@ -629,6 +631,7 @@ async function startServer() {
 
   app.post('/api/config', (req, res) => {
     config = { ...config, ...req.body };
+    if (config.riskLevel) botEngine.riskProfile = config.riskLevel;
     addLog("⚙️ CONFIG UPDATED via Dashboard");
     saveDB();
     res.json({ success: true, config });
@@ -1456,7 +1459,7 @@ async function startServer() {
     const lang = url.searchParams.get('l') || 'PT';
     
     // O backend do Node conecta na corretora COM cabeçalhos.
-    // Cria a conexão COM A DERIV com a Origin correta para o app_id 36544
+    // Cria a conexão COM A DERIV com a Origin correta para o app_id
     const derivWs = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=${lang}`, {
       headers: {
         'Origin': 'https://fybot.life',

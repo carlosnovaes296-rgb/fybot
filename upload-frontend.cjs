@@ -28,15 +28,19 @@ conn.on('ready', () => {
     const uploadFiles = (files, index = 0) => {
       if (index >= files.length) {
         console.log('\n🎉 Todos os arquivos do frontend foram enviados!');
-        console.log('Restarting server...');
-        conn.exec('/usr/lib/node_modules/pm2/bin/pm2 restart fybot', (err, stream) => {
-          if (err) { console.error(err); conn.end(); return; }
-          let out = '';
-          stream.on('data', d => { out += d; process.stdout.write(d); })
-                .stderr.on('data', d => process.stderr.write(d));
-          stream.on('close', () => {
-            console.log('\n🎉 Frontend atualizado com sucesso no servidor!');
-            conn.end();
+        console.log('Enviando server.ts...');
+        sftp.fastPut(path.join(__dirname, 'server.ts'), '/root/fybot/server.ts', (err) => {
+          if (err) console.error('Erro ao enviar server.ts:', err);
+          console.log('Restarting server...');
+          conn.exec('/usr/lib/node_modules/pm2/bin/pm2 restart fybot', (err, stream) => {
+            if (err) { console.error(err); conn.end(); return; }
+            let out = '';
+            stream.on('data', d => { out += d; process.stdout.write(d); })
+                  .stderr.on('data', d => process.stderr.write(d));
+            stream.on('close', () => {
+              console.log('\n🎉 Frontend e Backend atualizados com sucesso no servidor!');
+              conn.end();
+            });
           });
         });
         return;
