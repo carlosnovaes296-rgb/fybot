@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, CrosshairMode, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
 import { Trade } from '../types';
+import { getOtpWebSocketUrl } from '../api/derivOtp';
 import { APP_ID } from '../config';
-// OTP removed
 
 interface TradingChartProps {
   trades: Trade[];
@@ -14,7 +14,7 @@ interface TradingChartProps {
   onTradesUpdate?: (trades: Trade[]) => void;
 }
 
-export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'frxXAUUSD', theme = 'dark', timeframe = '1M', derivToken, accountType = 'DEMO', onTradesUpdate }) => {
+export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_100', theme = 'dark', timeframe = '1M', derivToken, accountType = 'DEMO', onTradesUpdate }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -66,9 +66,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     chartRef.current = chart;
     seriesRef.current = candleSeries;
 
-    // Para dados de gráfico (candles/ticks) usa sempre o endpoint público
-    // Usamos o App ID configurado para a conta
-    const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
     // Função auxiliar para processar trades e avisar o App
     const emitTrades = (newTrades: Trade[]) => {
        const merged = [...localTradesRef.current];
@@ -95,11 +92,23 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
     if (timeframe === '15M') granularity = 900;
     if (timeframe === '1H') granularity = 3600;
     let bypassAuth = false;
+    let isMagic = false;
 
     const connectWS = async () => {
       let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
       const cleanedToken = (derivToken || '').trim();
-      // OTP removed
+
+      if (cleanedToken && cleanedToken.startsWith('pat_')) {
+          try {
+             // 33TVM... é o App ID restrito de backend usado para os Tokens Nativos PAT
+             const res = await getOtpWebSocketUrl(cleanedToken, '33TVM6cBQ9GfSjbwQHHdE', '', accountType);
+             wsUrl = res.url;
+             isMagic = true;
+             console.log("[FYBOT] Usando Magic URL OTP para o gráfico!");
+          } catch(e) {
+             console.error("[FYBOT] Erro ao pegar Magic URL para gráfico, usando fallback público", e);
+          }
+      }
 
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
@@ -118,11 +127,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'fr
       };
 
       socket.onopen = () => {
-        console.log("[FYBOT] WebSocket Conectado diretamente à Deriv. Token recebido:", derivToken);
+        console.log("[FYBOT] WebSocket Conectado diretamente à Deriv.");
         const isValidWsToken = cleanedToken !== '' && cleanedToken !== 'undefined' && cleanedToken !== 'null';
         
-        if (isValidWsToken && !bypassAuth) {
-          console.log("[FYBOT] Enviando autorização API...");
+        if (isMagic) {
+           console.log("[FYBOT] Conexão OTP estabelecida. Requisitando dados autenticados...");
+           requestCandles();
+           socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
+           socket.send(JSON.stringify({ portfolio: 1 }));
+           socket.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
+        }
+        else if (isValidWsToken && !bypassAuth && !cleanedToken.startsWith('pat_')) {
+          console.log("[FYBOT] Enviando autorização API clássica...");
           socket.send(JSON.stringify({ authorize: cleanedToken }));
         } else {
           console.log("[FYBOT] Sem token ativo ou fallback público. Requisitando velas diretamente...");

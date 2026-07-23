@@ -5,9 +5,10 @@ export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
     private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
     // Usando Ouro (XAUUSD)
-    private symbol = '1HZ100V';
+    private symbol = 'R_100';
     private isConnected = false;
     public riskProfile: string = 'CONSERVATIVE';
+    private currentToken: string = '';
     
     // Armazenamento de Histórico OHLC
     private candlesM15: Candle[] = [];
@@ -19,39 +20,96 @@ export class DerivBotEngine {
     // Callbacks to notify server.ts
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
     public onRegimeChange?: (regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL') => void;
+    public onLog?: (msg: string) => void;
     private lastRegime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
 
     constructor() {
-        this.connect();
+        // Agora aguardamos o server.ts chamar connectWithToken(token) passando um PAT token válido.
     }
 
-    private connect() {
+    public async connectWithToken(token: string) {
         if (this.isConnected) return;
+        this.currentToken = token;
         
-        this.ws = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${this.appId}&l=PT`);
+        console.log(`[DerivBotEngine] Autenticando Motor via API v1 OTP usando token: ${token.substring(0,8)}...`);
+        if (this.onLog) this.onLog(`📡 Autenticando Motor de Análise na Deriv...`);
+        let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${this.appId}&l=PT`;
+        try {
+             // Buscar accounts para descobrir account_id e gerar OTP direto na Deriv
+             const headers = {
+                 'Authorization': `Bearer ${token}`,
+                 'Deriv-App-ID': '33TVM6cBQ9GfSjbwQHHdE',
+                 'Content-Type': 'application/json'
+             };
+             const accRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
+             const accData: any = await accRes.json();
+             
+             let accountId = '';
+             const contasArray = accData.accounts || accData.data || accData;
+             if (Array.isArray(contasArray)) {
+                 // Pega a conta DEMO para operar os testes (Prioriza VRT)
+                 let demoAcc = contasArray.find((a: any) => {
+                     const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
+                     return id.includes('VRT') || id.startsWith('VR');
+                 });
+                 if (!demoAcc) {
+                     demoAcc = contasArray.find((a: any) => {
+                         const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
+                         return id.includes('VOT') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
+                     });
+                 }
+                 if (demoAcc) accountId = demoAcc.account_id || demoAcc.loginid || demoAcc.id;
+             }
+
+             if (accountId) {
+                 const otpRes = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`, {
+                     method: 'POST', headers, body: '{}'
+                 });
+                 const otpData: any = await otpRes.json();
+                 if (otpData?.data?.url) {
+                     wsUrl = otpData.data.url;
+                     console.log("[DerivBotEngine] Magic URL OTP obtida DIRETAMENTE da Deriv com sucesso!");
+                     if (this.onLog) this.onLog(`✅ Conexão Blindada (OTP) estabelecida para leitura de Velas!`);
+                 }
+             } else {
+                 console.log("[DerivBotEngine] Conta DEMO não encontrada, falha ao gerar OTP.");
+                 if (this.onLog) this.onLog(`⚠️ Falha ao criar conexão blindada: Conta virtual não encontrada.`);
+             }
+        } catch(e) {
+             console.error("[DerivBotEngine] Falha ao obter OTP para o motor", e);
+             if (this.onLog) this.onLog(`⚠️ Erro de rede ao conectar o motor.`);
+        }
+
+        this.ws = new NodeWebSocket(wsUrl, {
+            headers: { 
+              'Origin': 'https://fybot.life',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
 
         this.ws.on('open', () => {
-            console.log(`[DerivBotEngine] Feed conectado. Solicitando histórico M15 e H1 para ${this.symbol}...`);
+            console.log(`[DerivBotEngine] Feed conectado e autenticado. Solicitando histórico M15 e H1 para ${this.symbol}...`);
+            if (this.onLog) this.onLog(`📊 Conectado ao feed da Deriv. Baixando histórico M15 e H1 do ${this.symbol}...`);
             this.isConnected = true;
             
-            // Subscreve M15 (900s)
+            // Subscreve M1 (60s) para sinais ultra-rápidos
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
                 count: 100, // Precisamos de pelo menos 55 para EMA e S/R
                 style: 'candles',
-                granularity: 900,
+                granularity: 60,
                 subscribe: 1,
-                req_id: 900 // ID customizado para identificar o retorno
+                req_id: 900 // ID mantido igual por simplicidade interna
             }));
 
-            // Subscreve H1 (3600s)
+            // Subscreve M5 (300s) para tendência
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
                 count: 100,
                 style: 'candles',
-                granularity: 3600,
+                granularity: 300,
                 subscribe: 1,
                 req_id: 3600
             }));
@@ -62,6 +120,7 @@ export class DerivBotEngine {
                 const response = JSON.parse(data);
                 if (response.error) {
                     console.error('[DerivBotEngine] Erro da Deriv:', response.error);
+                    if (this.onLog) this.onLog(`⛔ Erro da Deriv na leitura de velas: ${response.error.message}`);
                     return;
                 }
 
@@ -73,9 +132,11 @@ export class DerivBotEngine {
                     if (response.req_id === 900) {
                         this.candlesM15 = candles;
                         console.log(`[DerivBotEngine] Carregado histórico M15: ${this.candlesM15.length} velas`);
+                        if (this.onLog) this.onLog(`📈 Histórico rápido carregado (${this.candlesM15.length} velas)`);
                     } else if (response.req_id === 3600) {
                         this.candlesH1 = candles;
                         console.log(`[DerivBotEngine] Carregado histórico H1: ${this.candlesH1.length} velas`);
+                        if (this.onLog) this.onLog(`📈 Histórico de tendência carregado (${this.candlesH1.length} velas)`);
                     }
                 }
 
@@ -106,8 +167,11 @@ export class DerivBotEngine {
 
         this.ws.on('close', () => {
             console.log('[DerivBotEngine] Conexão com feed fechada. Tentando reconectar em 5s...');
+            if (this.onLog) this.onLog(`⚠️ Conexão com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
-            setTimeout(() => this.connect(), 5000);
+            setTimeout(() => {
+                 if (this.currentToken) this.connectWithToken(this.currentToken);
+            }, 5000);
         });
 
         this.ws.on('error', (err) => {
@@ -135,29 +199,11 @@ export class DerivBotEngine {
 
     private analyzeMarket() {
         if (this.candlesM15.length < 50 || this.candlesH1.length < 50) {
-            console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/50 | H1: ${this.candlesH1.length}/50`);
+            // console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/50 | H1: ${this.candlesH1.length}/50`);
             return;
         }
 
-        // --- BLOQUEIO DE FIM DE SEMANA REMOVIDO PARA SINTÉTICOS (Rodam 24/7) ---
-        // const nowUtc = new Date();
-        // const day = nowUtc.getUTCDay(); // 0 = Domingo, 5 = Sexta, 6 = Sábado
-        // const hour = nowUtc.getUTCHours();
-        
-        // let isBlockedTime = false;
-        // if (day === 5 && hour >= 15) isBlockedTime = true; // Sexta depois das 15h
-        // if (day === 6) isBlockedTime = true;               // Sábado inteiro
-        // if (day === 0 && hour < 21) isBlockedTime = true;  // Domingo antes das 21h
-
-        // if (isBlockedTime) {
-        //     if (nowUtc.getSeconds() % 60 === 0) {
-        //         console.log(`[DerivBotEngine] 🛡️ Operações bloqueadas pelo horário do fim de semana (Sexta 15h - Domingo 21h).`);
-        //     }
-        //     return;
-        // }
-
         // --- PREPARAÇÃO DE DADOS ---
-        if (this.candlesM15.length < 50 || this.candlesH1.length < 50) return; // Aguarda carregar histórico
         
         const currentPrice = this.candlesM15[this.candlesM15.length - 1].close;
         const pricesH1 = this.candlesH1.map(c => c.close);
@@ -209,65 +255,53 @@ export class DerivBotEngine {
         let signal: 'BUY' | 'SELL' | null = null;
         let score = 40; // Base score
 
-        // Log de Monitoramento a cada 30 segundos para debugging
+        // Log de Monitoramento a cada 30 segundos para debugging na UI
         const agora = new Date();
-        if (agora.getSeconds() % 30 === 0) {
-            console.log(`[SCANNING] Regime: ${regime} | ADX: ${currentAdx.toFixed(1)} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(4)} | EMA: ${currentEma.toFixed(4)} | S/R: [${nearestSup.toFixed(4)} - ${nearestRes.toFixed(4)}]`);
+        if (agora.getSeconds() % 15 === 0) { // A cada 15 segundos ele manda log pra UI
+            if (this.onLog) {
+                this.onLog(`🧠 Lendo Mercado... Regime: ${regime} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(2)} | Score: ${score}`);
+            }
         }
+        
+        let requiredScore = 30;
+        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 20;
 
-        // Ajusta o score mínimo baseado no Perfil de Risco (CONSERVATIVE=50, MEDIUM=45, AGGRESSIVE=40)
-        let requiredScore = 50;
-        if (this.riskProfile === 'MEDIUM') requiredScore = 45;
-        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 40;
-
+        // --- Condições de Mercado (RSI + EMA + PIVOTS) ---
         // Condições de Compra
-        if (regime === 'TREND_UP') {
+        if (regime === 'TREND_UP' || regime === 'LATERAL') {
             const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
-            if (currentRsi < 40 && !isNearResistance) { // Pullback real (Sobrevendido em tendência de alta)
+            if (currentRsi < 55 && !isNearResistance) { // Frouxo para M1, compra se RSI não estiver muito alto
                 score += 20;
-                if (currentAdx > 25) score += 20;
+                if (currentAdx > 20) score += 20;
                 if (currentPrice > currentEma) score += 15;
                 if (score >= requiredScore) signal = 'BUY'; 
-            } else if (isNearResistance) {
-                console.log(`[BLOQUEIO S/R] Compra em TREND_UP bloqueada: preço muito próximo da resistência (${nearestRes.toFixed(4)})`);
             }
-        } else if (regime === 'LATERAL' && currentPrice <= nearestSup + (currentAtrM15 * 0.5)) {
-            if (currentRsi < 30) {
-                score += 15;
-                if (score >= requiredScore) signal = 'BUY'; // Perto do suporte em lateral (Sobrevendido forte)
-            }
-        }
+        } 
 
         // Condições de Venda
-        if (regime === 'TREND_DOWN') {
+        if (regime === 'TREND_DOWN' || regime === 'LATERAL') {
             const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
-            if (currentRsi > 60 && !isNearSupport) { // Pullback real (Sobrecomprado em tendência de baixa)
+            if (currentRsi > 45 && !isNearSupport) { // Frouxo para M1, vende se RSI não estiver muito baixo
                 score += 20;
-                if (currentAdx > 25) score += 20;
+                if (currentAdx > 20) score += 20;
                 if (currentPrice < currentEma) score += 15;
                 if (score >= requiredScore) signal = 'SELL'; 
-            } else if (isNearSupport) {
-                console.log(`[BLOQUEIO S/R] Venda em TREND_DOWN bloqueada: preço muito próximo do suporte (${nearestSup.toFixed(4)})`);
-            }
-        } else if (regime === 'LATERAL' && currentPrice >= nearestRes - (currentAtrM15 * 0.5)) {
-            if (currentRsi > 70) {
-                score += 15;
-                if (score >= requiredScore) signal = 'SELL'; // Perto da resistência em lateral (Sobrecomprado forte)
-            }
+            } 
         }
         
         console.log(`[ANÁLISE] Regime: ${regime} | Score: ${score} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
 
 
         if (signal && this.onSignal) {
-            // Cooldown de 60 segundos para teste (produção: 300000 = 5min)
+            // Cooldown RESTAURADO para podermos ler o erro da Deriv
             const now = Date.now();
-            const cooldownMs = 60000; // 60 segundos para testes
-            if (now - this.lastSignalTime < cooldownMs) {
-                const remaining = Math.ceil((cooldownMs - (now - this.lastSignalTime)) / 1000);
-                console.log(`[DerivBotEngine] Cooldown ativo. Próximo sinal em ${remaining}s.`);
-                return;
+            if (now - this.lastSignalTime < 30000) {
+                 return;
             }
+            this.lastSignalTime = now;
+            
+            this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
+            
             // SL e TP para Índice Sintético (Volatility 100)
             const atrPoints = currentAtrM15;
             let tpPrice = 0;
@@ -281,7 +315,6 @@ export class DerivBotEngine {
             }
             
             const reason = `[Regime: ${regime}] Score: ${score.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
-            this.lastSignalTime = now; // FIX: Atualiza o tempo do último sinal para travar o spam de ordens
             this.onSignal(signal, currentPrice, reason, tpPrice, slPrice);
         }
     }

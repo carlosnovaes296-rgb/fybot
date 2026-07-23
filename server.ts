@@ -69,7 +69,7 @@ async function startServer() {
 
   // INICIALIZA O NOVO MOTOR DE SINAIS (SMC / RSI / EMA)
   const botEngine = new DerivBotEngine();
-  botEngine.riskProfile = 'CONSERVATIVE';
+  botEngine.riskProfile = 'AGGRESSIVE'; // Deixando agressivo para testes
   botEngine.onSignal = (direction, price, reason, tp, sl) => {
     console.log(`[SINAL GERADO] ${direction} @ ${price} -> ${reason}`);
     if (globalConnectionManager) {
@@ -94,7 +94,15 @@ async function startServer() {
     }
   };
 
-
+  // Passando o logger para o botEngine poder avisar o que está lendo
+  botEngine.onLog = (msg) => {
+      users.forEach(user => {
+         const state = getUserState(user.id);
+         if (state.botRunning && globalConnectionManager) {
+             globalConnectionManager.addUserLog(user.id, msg);
+         }
+      });
+  };
 
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
@@ -241,6 +249,8 @@ async function startServer() {
           if (localData.userStates) {
             for (const [k, v] of Object.entries(localData.userStates)) {
               const stateData = v as any;
+              // Limpar ordens fantasmas presas que nunca foram confirmadas pela Deriv
+              stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
               userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
             }
           }
@@ -282,6 +292,7 @@ async function startServer() {
         if (dbData.userStates) {
           for (const [k, v] of Object.entries(dbData.userStates)) {
             const stateData = v as any;
+            stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
             userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
           }
         }
@@ -643,7 +654,10 @@ async function startServer() {
 
     if (action === 'start') {
       const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
-      if (!hasActiveLicense) {
+      const user = users.find(u => u.id === userId);
+      const isAdmin = user && user.role === 'ADMIN';
+
+      if (!isAdmin && !hasActiveLicense) {
         return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
       }
       state.botRunning = true;
@@ -651,11 +665,24 @@ async function startServer() {
       state.analysisStartedAt = Date.now();
       state.analysisSignals = { BUY: 0, SELL: 0 };
       state.dominantTrend = null;
+      // FIX ABSOLUTO: Limpar qualquer fantasma da memória forçadamente toda vez que ligar o robô!
+      state.trades = []; 
+      state.dailyProfit = 0; // Opcional, zera o lucro diário ao reiniciar para testes limpos
+      
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
       if (globalConnectionManager) globalConnectionManager.start(userId);
+      
+      // Inicia o motor de análise nativo
+      if (user) {
+          const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
+          if (activeToken && activeToken.startsWith('pat_')) {
+              botEngine.connectWithToken(activeToken);
+          }
+      }
+
     } else {
       state.botRunning = false;
-      addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
+      addUserLog(userId, "FYBOT PRO PARADO - Modo de Segurança ativo.");
       if (globalConnectionManager) globalConnectionManager.stop(userId);
     }
     res.json({ success: true, botRunning: state.botRunning });
@@ -1024,7 +1051,17 @@ async function startServer() {
         if (derivToken !== undefined) user.derivToken = derivToken;
         if (derivTokenDemo !== undefined) user.derivTokenDemo = derivTokenDemo;
         if (derivTokenReal !== undefined) user.derivTokenReal = derivTokenReal;
-        if (activeAccountType !== undefined) user.activeAccountType = activeAccountType;
+        if (activeAccountType !== undefined) {
+          if (user.activeAccountType !== activeAccountType) {
+             const state = getUserState(id);
+             state.botRunning = false;
+             state.balance = 0;
+             state.equity = 0;
+             if (globalConnectionManager) globalConnectionManager.stop(id);
+             addUserLog(id, `Sistema pausado automaticamente devido a troca para CONTA ${activeAccountType}.`);
+          }
+          user.activeAccountType = activeAccountType;
+        }
         
         saveDB();
         res.json({ success: true, user });
@@ -1053,6 +1090,10 @@ async function startServer() {
       }
       state.botRunning = true;
       addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
+      const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
+      if (activeToken && activeToken.startsWith('pat_')) {
+          botEngine.connectWithToken(activeToken);
+      }
     } else {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");

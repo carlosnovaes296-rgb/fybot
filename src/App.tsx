@@ -687,147 +687,7 @@ export default function App() {
 
     let ws: WebSocket | null = null;
     let pingInterval: any = null;
-    let reconnectTimeout: any = null;
-    let isMounted = true;
-
-    const accountType = currentUser.activeAccountType || 'DEMO';
-    // Adicionado fallback para currentUser.derivToken na conta DEMO para retrocompatibilidade
-    const activeToken = accountType === 'REAL' ? currentUser.derivTokenReal : (currentUser.derivTokenDemo || currentUser.derivToken);
-    const tokenToSend = (activeToken || '').trim();
-
-    // O PAT token a usar no OTP é sempre o do usuário (derivToken), não o do config
-    const patForOtp = (currentUser.derivToken || PAT_TOKEN || '').trim();
-
-    const setupWsHandlers = (socket: WebSocket, isOtpAuth: boolean) => {
-      derivWsRef.current = socket;
-
-      socket.onopen = () => {
-        if (!isMounted || !socket) return;
-        if (tokenToSend) {
-          // Se for Token PAT (V2), o frontend não deve tentar autenticar direto na V3 para não dar erro
-          if (tokenToSend.startsWith('pat_')) {
-            console.log('[BALANCE WS] Token PAT detectado. Deixando a autenticação por conta do Backend (V2)...');
-          } else {
-            socket.send(JSON.stringify({ authorize: tokenToSend }));
-          }
-        }
-      };
-
-      socket.onmessage = (msg) => {
-        if (!isMounted) return;
-        try {
-          const data = JSON.parse(msg.data);
-
-          if (data.msg_type === 'authorize') {
-            if (data.error) {
-              console.error('Erro de autorização:', data.error.message);
-              setStats(prev => ({ ...prev, balance: 10015.16, equity: 10015.16, currency: 'USD' }));
-              fetch('/api/logs/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUser.id, message: `🚨 Erro! Conta ${accountType} | Token inválido ou sem saldo.` })
-              }).catch(() => {});
-              return;
-            }
-            const auth = data.authorize;
-            let finalBalance = Number(auth.balance) || 0;
-            if (finalBalance === 0) {
-              finalBalance = 10015.16; // Injeção visual direta na tela
-            }
-            // Identifica qual conta o token pertence (ex: VRTC12345)
-            const accountId = auth.loginid || 'Desconhecida';
-            
-            setStats(prev => ({ ...prev, balance: finalBalance, equity: finalBalance, currency: auth.currency || 'USD' }));
-            fetch('/api/logs/add', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id, message: `✅ Conectado! Conta ${accountType} (${accountId}) | Saldo: $${finalBalance} ${auth.currency}` })
-            }).catch(() => {});
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ balance: 1, account: 'all', subscribe: 1 }));
-            }
-            clearInterval(pingInterval);
-            pingInterval = setInterval(() => {
-              if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ ping: 1 }));
-            }, 30000);
-          }
-
-          if (data.msg_type === 'balance' && data.balance) {
-            let bal = data.balance.balance ?? 0;
-            if (data.balance.accounts) {
-              for (const accId in data.balance.accounts) {
-                if (data.balance.accounts[accId].balance > 0) {
-                  bal = data.balance.accounts[accId].balance;
-                  break;
-                }
-              }
-            }
-            if (bal > 0) {
-              setStats(prev => ({ ...prev, balance: bal, equity: bal }));
-            } else if (bal === 0) {
-              // Fallback caso a API ainda retorne 0, mantém o saldo visual para não travar a tela
-              setStats(prev => ({ ...prev, balance: 10015.16, equity: 10015.16 }));
-            }
-            
-            // Inicia ping para manter conexão viva (para conexões OTP que não passam por authorize)
-            if (!pingInterval) {
-              clearInterval(pingInterval);
-              pingInterval = setInterval(() => {
-                if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ ping: 1 }));
-              }, 30000);
-            }
-          }
-
-          if (data.msg_type === 'ping') return;
-
-          if (data.msg_type === 'buy') {
-            if (data.error) console.error('Erro ao abrir ordem:', data.error.message);
-            else console.log('Ordem aberta com sucesso!', data.buy);
-          }
-
-        } catch (e) { /* ignora erros de parse */ }
-      };
-
-      socket.onerror = () => {};
-
-      socket.onclose = (e) => {
-        clearInterval(pingInterval);
-        pingInterval = null;
-        if (!isMounted) return;
-        if (e.code === 4001) return;
-        reconnectTimeout = setTimeout(connect, 10000);
-      };
-    };
-
-    const connectDirect = (token: string) => {
-      console.log('[BALANCE WS] Conectando diretamente com API token...');
-      try {
-        ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
-        setupWsHandlers(ws, false);
-      } catch (e) {
-        console.error('[BALANCE WS] Falha ao criar WebSocket:', e);
-      }
-    };
-
-    const connect = () => {
-      if (!isMounted) return;
-      if (tokenToSend) {
-        connectDirect(tokenToSend);
-      }
-    };
-
-    connect();
-
-    return () => {
-      isMounted = false;
-      clearInterval(pingInterval);
-      clearTimeout(reconnectTimeout);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
-      derivWsRef.current = null;
-    };
+    // Local WS removido. O fetchStatus já puxa o balance via API REST a cada 3s
   }, [currentUser?.derivTokenDemo, currentUser?.derivTokenReal, currentUser?.activeAccountType, currentUser?.derivToken]);
 
   // Lógica Principal de Operação do Bot (Motor de Trade Contínuo)
@@ -1154,6 +1014,55 @@ export default function App() {
       if (profileForm.derivTokenDemo) profileForm.derivTokenDemo = profileForm.derivTokenDemo.replace(/\s+/g, '');
       if (profileForm.derivTokenReal) profileForm.derivTokenReal = profileForm.derivTokenReal.replace(/\s+/g, '');
 
+      // VERIFICAÇÃO E AUTORIZAÇÃO DE TOKENS DEMO/REAL
+      const verifyToken = async (token: string, type: 'DEMO' | 'REAL'): Promise<{ isValid: boolean, message: string }> => {
+        if (!token) return { isValid: true, message: '' }; // Permite limpar o token
+        try {
+          const res = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
+            headers: { 'Authorization': 'Bearer ' + token, 'Deriv-App-ID': '33TVM6cBQ9GfSjbwQHHdE' }
+          });
+          const data = await res.json();
+          const accounts = data.accounts || data.data || data;
+
+          if (!Array.isArray(accounts) || accounts.length === 0) {
+            return { isValid: false, message: `O Token ${type} informado é inválido ou expirou.` };
+          }
+
+          const isActuallyDemo = accounts.some(acc => {
+            const id = (acc.loginid || acc.account_id || "").toString().toUpperCase();
+            return id.includes('VRT') || id.includes('VOT') || id.startsWith('VR') || id.startsWith('DOT') || acc.is_virtual === 1 || acc.is_virtual === true || acc.account_type === 'demo';
+          });
+
+          if (type === 'DEMO' && !isActuallyDemo) {
+            return { isValid: false, message: 'ATENÇÃO: O token fornecido no campo DEMO pertence a uma Conta Real!\n\nGere um novo token enquanto estiver logado na sua conta VIRTUAL na Deriv.' };
+          }
+          if (type === 'REAL' && isActuallyDemo) {
+            return { isValid: false, message: 'ATENÇÃO: O token fornecido no campo REAL pertence a uma Conta Demo!\n\nGere um novo token enquanto estiver logado na sua conta REAL na Deriv.' };
+          }
+          return { isValid: true, message: 'OK' };
+        } catch (e: any) {
+          return { isValid: false, message: 'Erro ao verificar token ' + type + ': ' + e.message };
+        }
+      };
+
+      if (profileForm.derivTokenDemo !== currentUser.derivTokenDemo) {
+        const demoCheck = await verifyToken(profileForm.derivTokenDemo, 'DEMO');
+        if (!demoCheck.isValid) {
+          alert(demoCheck.message);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (profileForm.derivTokenReal !== currentUser.derivTokenReal) {
+        const realCheck = await verifyToken(profileForm.derivTokenReal, 'REAL');
+        if (!realCheck.isValid) {
+          alert(realCheck.message);
+          setLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1212,9 +1121,9 @@ export default function App() {
       setStats(prev => ({
         ...prev,
         ...data,
-        // Sempre dá prioridade para o saldo atualizado vindo do backend/WebSocket
-        balance: data.balance > 0 ? data.balance : prev.balance,
-        equity: data.equity > 0 ? data.equity : (data.balance > 0 ? data.balance : prev.equity),
+        // Não sobreescreve o saldo com 0 caso o frontend já tenha puxado via REST
+        balance: (data.balance != null && data.balance > 0) ? data.balance : prev.balance,
+        equity: (data.equity != null && data.equity > 0) ? data.equity : prev.equity,
         accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
       if (data.logs) setLogs(data.logs);
@@ -1621,7 +1530,7 @@ export default function App() {
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
-                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=43413&o=1&c=3&link_id=1', '_blank')}
+                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=52148&o=1&c=3&link_id=1', '_blank')}
                   className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[16px] font-bold flex items-center justify-center gap-2"
                 >
                   <Users size={20} />
@@ -2251,7 +2160,7 @@ export default function App() {
 
                       {/* Main chart area */}
                       <div className="flex-1 min-h-[900px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-                        <TradingChart trades={trades} symbol={(currentUser?.assets && currentUser.assets.split(',')[0].trim()) || "XAUUSD"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} />
+                        <TradingChart trades={trades} symbol={"R_100"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} />
                       </div>
 
                       {/* Strategy Gauges — circular */}
@@ -3902,48 +3811,48 @@ export default function App() {
                               </button>
                             </div>
 
-                              <div className="space-y-4 border-t border-white/5 pt-4">
-                                <div className="space-y-2">
-                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                    🔴 Token da Conta Real
-                                  </label>
-                                  <div className="relative">
-                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                    <input
-                                      type="text"
-                                      value={profileForm.derivTokenReal || ''}
-                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
-                                      placeholder="Cole o token da conta REAL aqui (pat_...)"
-                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
-                                    />
-                                  </div>
+                            <div className="space-y-4 border-t border-white/5 pt-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                  🔴 Token da Conta Real
+                                </label>
+                                <div className="relative">
+                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                  <input
+                                    type="text"
+                                    value={profileForm.derivTokenReal || ''}
+                                    onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                                    placeholder="Cole o token da conta REAL aqui (pat_...)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
+                                  />
                                 </div>
+                              </div>
 
-                                <div className="space-y-2">
-                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                    🟢 Token da Conta Demo
-                                  </label>
-                                  <div className="relative">
-                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                    <input
-                                      type="text"
-                                      value={profileForm.derivTokenDemo || ''}
-                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                                      placeholder="Cole o token da conta DEMO aqui (pat_...)"
-                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
-                                    />
-                                  </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                  🟢 Token da Conta Demo
+                                </label>
+                                <div className="relative">
+                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                  <input
+                                    type="text"
+                                    value={profileForm.derivTokenDemo || ''}
+                                    onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                                    placeholder="Cole o token da conta DEMO aqui (pat_...)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
+                                  />
                                 </div>
+                              </div>
 
-                                <button
-                                  type="button"
-                                  onClick={updateProfile}
-                                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold transition-all text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-                                >
-                                  <Save size={18} />
-                                  {language === 'en' ? 'Save Tokens' : 'Salvar Tokens'}
-                                </button>
-                                </div>
+                              <button
+                                type="button"
+                                onClick={updateProfile}
+                                className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold transition-all text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                              >
+                                <Save size={18} />
+                                {language === 'en' ? 'Save Tokens' : 'Salvar Tokens'}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -3970,7 +3879,7 @@ export default function App() {
                         </h2>
                         <p className="text-white/40 text-sm mt-1">Force o saldo da sua banca para testes</p>
                       </div>
-                      
+
                       <div className="flex gap-3">
                         <div className="relative flex-1">
                           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">$</span>

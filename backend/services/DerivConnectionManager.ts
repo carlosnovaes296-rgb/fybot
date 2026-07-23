@@ -19,7 +19,7 @@ export class DerivConnectionManager {
     let tokenToUse = activeToken || user.derivToken;
 
     if (!tokenToUse) {
-      this.addUserLog(userId, `⚠️ [SEM TOKEN] Nenhum token ${user.activeAccountType} configurado. Vá em Configurações e salve seu Token Deriv!`);
+      this.addUserLog(userId, `⚠️ [SEM TOKEN] Nenhum token configurado para a conta ${user.activeAccountType}.`);
       return;
     }
 
@@ -27,14 +27,14 @@ export class DerivConnectionManager {
       this.stop(userId);
     }
 
-    this.addUserLog(userId, `🔄 Conectando WebSocket Contínuo para conta ${user.activeAccountType}...`);
+    const tokenStart = tokenToUse.substring(0, 8);
+    this.addUserLog(userId, `🔄 Iniciando conexão [Modo ${user.activeAccountType}] usando Token: ${tokenStart}...`);
 
-    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=36544&l=PT`;
+    const appId = "33TVM6cBQ9GfSjbwQHHdE";
+    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=PT`;
     let needsAuthCommand = true;
-
-    // --- NOVA ARQUITETURA V2 (OTP) ---
     try {
-        const appId = "33TxY3I7FXDKJMpuS6uIC";
+        const appId = "33TVM6cBQ9GfSjbwQHHdE";
         const origin = "https://fybot.life";
         const BASE = "https://api.derivws.com/trading/v1";
         
@@ -52,7 +52,35 @@ export class DerivConnectionManager {
         const contasArray = contasData.accounts || contasData.data || contasData;
         if (Array.isArray(contasArray) && contasArray.length > 0) {
             const isDemo = user.activeAccountType === 'DEMO';
-            const contaAlvo = contasArray.find((a: any) => isDemo ? a.is_virtual : !a.is_virtual) || contasArray[0];
+            let contaAlvo = null;
+            if (isDemo) {
+                // Tenta achar VRT primeiro (Conta Virtual Principal)
+                contaAlvo = contasArray.find((a: any) => {
+                    const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
+                    return id.includes('VRT') || id.startsWith('VR');
+                });
+                // Se não achar VRT, pega qualquer outra virtual
+                if (!contaAlvo) {
+                    contaAlvo = contasArray.find((a: any) => {
+                        const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
+                        return id.includes('VOT') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
+                    });
+                }
+            } else {
+                // Conta Real
+                contaAlvo = contasArray.find((a: any) => {
+                    const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
+                    return !(id.includes('VRT') || id.includes('VOT') || id.startsWith('VR') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo');
+                });
+            }
+            
+            if (!contaAlvo) {
+                this.addUserLog(userId, isDemo 
+                    ? "❌ [ERRO] Token da Conta DEMO Inválido! Crie o token no site da Deriv ENQUANTO estiver logado na sua conta VIRTUAL (VRT)."
+                    : "❌ [ERRO] Conta Real não encontrada neste token.");
+                this.stop(userId);
+                return;
+            }
             
             // Log detalhado para sabermos o formato real que a Deriv devolveu
             this.addUserLog(userId, `🔍 Conta encontrada: ${JSON.stringify(contaAlvo)}`);
@@ -60,6 +88,14 @@ export class DerivConnectionManager {
             // A API V2 da Deriv geralmente retorna o loginid como identificador principal
             const accountId = contaAlvo.loginid || contaAlvo.account_id || contaAlvo.id || contaAlvo.client_id || contaAlvo.oauth_client_id;
             
+            if (contaAlvo.balance != null) {
+                const bal = parseFloat(contaAlvo.balance);
+                const state = this.getUserState(userId);
+                state.balance = bal;
+                state.equity = bal;
+                this.addUserLog(userId, `💵 Saldo inicial capturado via API: $${bal}`);
+            }
+
             if (!accountId) {
                  this.addUserLog(userId, `⚠️ Erro: Não foi possível extrair o ID da conta do objeto acima.`);
                  throw new Error("Account ID missing");
@@ -150,11 +186,19 @@ export class DerivConnectionManager {
           trade.profit = profit;
           
           if (isSold) {
-            trade.status = 'CLOSED';
-            state.dailyProfit += profit;
-            this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
+            if (trade.status !== 'CLOSED') {
+                trade.status = 'CLOSED';
+                state.dailyProfit += profit;
+                this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
+            }
           } else {
             // TRAILING STOP (VIOLINADA) - Regra 6
+            // Fechar antecipadamente se bater a meta de $10 de lucro!
+            if (profit >= 10) {
+                this.addUserLog(userId, `🎯 [META ATINGIDA] Lucro chegou a $${profit.toFixed(2)} antes dos 5 minutos! Fechando com lucro garantido!`);
+                ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+            }
+            
             const peaks = this.userPeakProfits.get(userId)!;
             if (!peaks[contractId]) peaks[contractId] = 0;
             
@@ -175,13 +219,32 @@ export class DerivConnectionManager {
       // Resposta da Compra
       if (data.msg_type === 'buy') {
         if (data.error) {
-          this.addUserLog(userId, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message}`);
-          console.error(`[DerivConnectionManager] Erro na compra para ${userId}:`, data.error.message);
-          this.addUserLog(userId, `🚨 Erro da Corretora ao abrir ordem: ${data.error.message}`);
+          this.addUserLog(userId, `🚨 [ERRO DERIV] Falha ao abrir ordem: ${data.error.message} - DETALHES: ${JSON.stringify(data.error)}`);
+          console.error(`[DerivConnectionManager] Erro na compra para ${userId}:`, data.error);
+          // Fix: Remover trades fantasmas pendentes para não acumular se a corretora recusar
+          const state = this.getUserState(userId);
+          state.trades = (state.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
         } else {
+          const contractId = data.buy.transaction_id || data.buy.contract_id;
           console.log(`[DerivConnectionManager] Ordem aberta com sucesso para ${userId}!`);
-          this.addUserLog(userId, `🚀 Ordem aberta na corretora com sucesso! ID: ${data.buy.transaction_id || data.buy.contract_id}`);
+          this.addUserLog(userId, `🚀 Ordem aberta na corretora com sucesso! ID: ${contractId}`);
         }
+      }
+      
+      // Erro genérico
+      if (data.error && data.msg_type !== 'buy' && data.msg_type !== 'contract_update') {
+         this.addUserLog(userId, `⚠️ [ERRO CORRETORA] (${data.msg_type}): ${data.error.message}`);
+         console.error(`[DerivConnectionManager] Erro Genérico:`, data.error);
+      }
+      
+      // Resposta do Contract Update
+      if (data.msg_type === 'contract_update') {
+          if (data.error) {
+              this.addUserLog(userId, `⚠️ [AVISO] Falha ao aplicar Limites (TP/SL) na ordem: ${data.error.message}. A ordem está aberta e rodando, mas sem limite automático.`);
+              console.error(`[DerivConnectionManager] Erro no contract_update:`, data.error.message);
+          } else {
+              this.addUserLog(userId, `✅ [SUCESSO] Take Profit e Stop Loss configurados na corretora!`);
+          }
       }
       
       // Resposta da Venda
@@ -224,10 +287,20 @@ export class DerivConnectionManager {
         return;
     }
 
-    // Regra Extra: Limite máximo de ordens abertas simultâneas
+    // Regra Extra: Limite máximo de ordens abertas simultâneas (Ajustado para 10)
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
-    if (openTradesCount >= 4) {
-        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Máximo de 4 ordens simultâneas atingido. Novo sinal de ${direction} bloqueado!`);
+    if (openTradesCount >= 10) {
+        require('fs').writeFileSync('trades_debug.json', JSON.stringify(state.trades.filter((t: any) => t.status === 'OPEN'), null, 2));
+        console.log(`[DEBUG] TRADES ABERTOS:`, JSON.stringify(state.trades.filter((t: any) => t.status === 'OPEN'), null, 2));
+        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Já existem 10 ordens abertas simultâneas. Novo sinal de ${direction} bloqueado!`);
+        return;
+    }
+
+    // Regra Extra: Limite total de ordens por dia (aumentado para testes contínuos)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayTradesCount = state.trades.filter((t: any) => t.time && t.time.startsWith(todayStr)).length;
+    if (todayTradesCount >= 100) {
+        this.addUserLog(userId, `✋ [LIMITE DIÁRIO] Máximo de 100 ordens diárias atingido para testes. Novo sinal de ${direction} bloqueado!`);
         return;
     }
 
@@ -243,56 +316,39 @@ export class DerivConnectionManager {
     const balance = state.balance > 0 ? state.balance : 1000;
     const dynamicStake = Math.max(0.5, parseFloat((balance * 0.01).toFixed(2))); // Mínimo $0.50
 
-    // O Motor envia PREÇOS (ex: 785.40), mas a Deriv exige VALORES EM DÓLAR para o Multiplicador!
-    const multiplier = 100;
-    const tpDiff = Math.abs(engineTp - price);
-    const slDiff = Math.abs(engineSl - price);
+    // Converte para Opções Clássicas Sobe/Desce (CALL / PUT)
+    const contractType = direction === 'BUY' ? 'CALL' : 'PUT';
     
-    // Converte a diferença de preço para lucro em dólar: (Diferença / Preço) * Stake * Multiplicador
-    let tpAmount = parseFloat(((tpDiff / price) * dynamicStake * multiplier).toFixed(2));
-    let slAmount = parseFloat(((slDiff / price) * dynamicStake * multiplier).toFixed(2));
-    
-    // Segurança da Deriv: Stop Loss não pode ser maior que a banca apostada (Stake)
-    if (slAmount > dynamicStake) {
-        slAmount = dynamicStake;
-    }
-    // Garante um TP/SL mínimo de 10% do stake para evitar rejeição por ser muito perto
-    tpAmount = Math.max(tpAmount, parseFloat((dynamicStake * 0.1).toFixed(2)));
-    slAmount = Math.max(slAmount, parseFloat((dynamicStake * 0.1).toFixed(2)));
-
-    const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
-
+    // 1. Envia a Ordem de Compra Direta
     ws.send(JSON.stringify({
       buy: 1,
-      price: dynamicStake, 
+      price: dynamicStake,
       parameters: {
         amount: dynamicStake,
         basis: "stake",
         contract_type: contractType,
         currency: "USD",
-        multiplier: 100,
-        symbol: "1HZ100V",
-        limit_order: {
-          take_profit: tpAmount,
-          stop_loss: slAmount
-        }
+        duration: 5,
+        duration_unit: "m",
+        underlying_symbol: "R_100" // Corretora bloqueou "symbol", tentando a versão atualizada
       }
     }));
     
     // Simula a adição da ordem no estado
     const realTrade = {
         id: "PENDING_" + Date.now(),
-        symbol: "1HZ100V",
+        symbol: "R_100",
         lot: dynamicStake,
         type: direction,
         openPrice: price,
         time: new Date().toISOString(),
         status: 'OPEN',
         profit: 0,
-        tp: engineTp, // UI espera o Preço
-        sl: engineSl  // UI espera o Preço
+        tp: engineTp, // Passa o TP calculado pelo Motor para o Gráfico
+        sl: engineSl  // Passa o SL calculado pelo Motor para o Gráfico
     };
     state.trades.unshift(realTrade);
+    this.lastExecutions.set(userId, Date.now());
   }
 
   public handleRegimeChange(userId: string, regime: string) {
