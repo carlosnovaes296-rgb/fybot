@@ -5,7 +5,7 @@ export class DerivBotEngine {
     private ws: NodeWebSocket | null = null;
     private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
     // Usando Ouro (XAUUSD)
-    private symbol = 'R_100';
+    private symbol = 'frxXAUUSD';
     private isConnected = false;
     public riskProfile: string = 'CONSERVATIVE';
     private currentToken: string = '';
@@ -270,22 +270,29 @@ export class DerivBotEngine {
         // Condições de Compra
         if (regime === 'TREND_UP' || regime === 'LATERAL') {
             const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
-            if (currentRsi < 55 && !isNearResistance) { // Frouxo para M1, compra se RSI não estiver muito alto
-                score += 20;
-                if (currentAdx > 20) score += 20;
-                if (currentPrice > currentEma) score += 15;
-                if (score >= requiredScore) signal = 'BUY'; 
+            // Verifica RSI com uma tolerância maior, ou entra se a tendência for muito forte (ADX > 30)
+            if (currentRsi < 65 || (currentRsi < 75 && currentAdx > 30)) { 
+                // Se a tendência for muito forte, ignora a resistência
+                if (!isNearResistance || currentAdx > 30) {
+                    score += 20;
+                    if (currentAdx > 20) score += 20;
+                    if (currentPrice > currentEma) score += 15;
+                    if (score >= requiredScore) signal = 'BUY'; 
+                }
             }
         } 
 
         // Condições de Venda
         if (regime === 'TREND_DOWN' || regime === 'LATERAL') {
             const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
-            if (currentRsi > 45 && !isNearSupport) { // Frouxo para M1, vende se RSI não estiver muito baixo
-                score += 20;
-                if (currentAdx > 20) score += 20;
-                if (currentPrice < currentEma) score += 15;
-                if (score >= requiredScore) signal = 'SELL'; 
+            if (currentRsi > 35 || (currentRsi > 25 && currentAdx > 30)) {
+                // Se a tendência for muito forte, ignora o suporte
+                if (!isNearSupport || currentAdx > 30) {
+                    score += 20;
+                    if (currentAdx > 20) score += 20;
+                    if (currentPrice < currentEma) score += 15;
+                    if (score >= requiredScore) signal = 'SELL'; 
+                }
             } 
         }
         
@@ -302,16 +309,17 @@ export class DerivBotEngine {
             
             this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
             
-            // SL e TP para Índice Sintético (Volatility 100)
-            const atrPoints = currentAtrM15;
+            // SL e TP para Ouro (XAUUSD) baseado em porcentagem
+            const tpPercent = 0.0002; // 0.02%
+            const slPercent = 0.0050; // 0.50%
             let tpPrice = 0;
             let slPrice = 0;
             if (signal === 'BUY') {
-                tpPrice = parseFloat((currentPrice + (atrPoints * 3)).toFixed(2));
-                slPrice = parseFloat((currentPrice - (atrPoints * 1.5)).toFixed(2));
+                tpPrice = parseFloat((currentPrice * (1 + tpPercent)).toFixed(2));
+                slPrice = parseFloat((currentPrice * (1 - slPercent)).toFixed(2));
             } else {
-                tpPrice = parseFloat((currentPrice - (atrPoints * 3)).toFixed(2));
-                slPrice = parseFloat((currentPrice + (atrPoints * 1.5)).toFixed(2));
+                tpPrice = parseFloat((currentPrice * (1 - tpPercent)).toFixed(2));
+                slPrice = parseFloat((currentPrice * (1 + slPercent)).toFixed(2));
             }
             
             const reason = `[Regime: ${regime}] Score: ${score.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;

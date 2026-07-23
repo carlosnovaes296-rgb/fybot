@@ -190,6 +190,16 @@ export class DerivConnectionManager {
                 trade.status = 'CLOSED';
                 state.dailyProfit += profit;
                 this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
+                
+                // Regra de Trava (Bloqueio) - Se a meta de 2% for batida e não houver mais ordens abertas
+                const target = state.dailyProfitTarget || (state.balance * 0.02);
+                if (target > 0 && state.dailyProfit >= target) {
+                    const openCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
+                    if (openCount === 0) {
+                        state.systemBlocked = true;
+                        this.addUserLog(userId, `🎉 [META BATIDA] Lucro diário atingiu a meta de $${target.toFixed(2)} e todas as ordens foram fechadas. Sistema bloqueado!`);
+                    }
+                }
             }
           } else {
             // TRAILING STOP (VIOLINADA) - Regra 6
@@ -211,6 +221,34 @@ export class DerivConnectionManager {
                 this.addUserLog(userId, `🛡️ [VIOLINADA PROTEGIDA] Lucro caiu de $${peaks[contractId].toFixed(2)} para $${profit.toFixed(2)}. Fechando ordem para garantir 80%!`);
                 ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                 peaks[contractId] = 0; // Reseta para evitar spam
+            }
+            
+            // --- LÓGICA DE GRID (PREÇO MÉDIO DE RECUPERAÇÃO) ---
+            const entryPrice = Number(contract.entry_spot || contract.buy_price);
+            const currentSpot = Number(contract.current_spot);
+            if (entryPrice > 0 && currentSpot > 0) {
+                const isBuy = (contract.contract_type === 'MULTUP' || trade.type === 'BUY');
+                // Variação percentual do preço CONTRA a nossa posição
+                const dropPercent = isBuy ? ((entryPrice - currentSpot) / entryPrice) * 100 : ((currentSpot - entryPrice) / entryPrice) * 100;
+                
+                const openCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
+                
+                if (dropPercent >= 0.02 && openCount === 1) {
+                    this.addUserLog(userId, `📉 [GRID NÍVEL 1] Recuo negativo atingiu 0.02% (${dropPercent.toFixed(3)}%). Disparando Ordem 2!`);
+                    const tpPercent = 0.0002;
+                    const slPercent = 0.0050; // 0.50%
+                    const engineTp = isBuy ? currentSpot * (1 + tpPercent) : currentSpot * (1 - tpPercent);
+                    const engineSl = isBuy ? currentSpot * (1 - slPercent) : currentSpot * (1 + slPercent);
+                    this.executeSignal(userId, isBuy ? 'BUY' : 'SELL', currentSpot, "Correção de Grid Nível 1", engineTp, engineSl);
+                }
+                else if (dropPercent >= 0.04 && openCount === 2) {
+                    this.addUserLog(userId, `📉 [GRID NÍVEL 2] Recuo negativo atingiu 0.04% (${dropPercent.toFixed(3)}%). Disparando Ordem 3!`);
+                    const tpPercent = 0.0002;
+                    const slPercent = 0.0050; // 0.50%
+                    const engineTp = isBuy ? currentSpot * (1 + tpPercent) : currentSpot * (1 - tpPercent);
+                    const engineSl = isBuy ? currentSpot * (1 - slPercent) : currentSpot * (1 + slPercent);
+                    this.executeSignal(userId, isBuy ? 'BUY' : 'SELL', currentSpot, "Correção de Grid Nível 2", engineTp, engineSl);
+                }
             }
           }
         }
@@ -280,19 +318,17 @@ export class DerivConnectionManager {
         return;
     }
 
-    // Regra 8: Trava se lucro >= 80% da meta (ex: Meta = 2%, Trava = 1.6%)
+    // Regra 8: Trava de envio de novas ordens se lucro atingir a meta (2%)
     const target = state.dailyProfitTarget || (state.balance * 0.02);
-    if (target > 0 && state.dailyProfit >= target * 0.8) {
-        this.addUserLog(userId, `🛡️ [META PROTEGIDA] Lucro atual ($${state.dailyProfit.toFixed(2)}) atingiu >= 80% da meta ($${target.toFixed(2)}). Sinal bloqueado para esperar fechamento das abertas!`);
+    if (target > 0 && state.dailyProfit >= target) {
+        this.addUserLog(userId, `🛡️ [META PROTEGIDA] Lucro atual ($${state.dailyProfit.toFixed(2)}) atingiu a meta de 2% ($${target.toFixed(2)}). Aguardando fechamento das ordens abertas para bloquear a tela!`);
         return;
     }
 
-    // Regra Extra: Limite máximo de ordens abertas simultâneas (Ajustado para 10)
+    // Regra Extra: Limite máximo absoluto de ordens simultâneas travado em 3 (Sistema Grid)
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
-    if (openTradesCount >= 10) {
-        require('fs').writeFileSync('trades_debug.json', JSON.stringify(state.trades.filter((t: any) => t.status === 'OPEN'), null, 2));
-        console.log(`[DEBUG] TRADES ABERTOS:`, JSON.stringify(state.trades.filter((t: any) => t.status === 'OPEN'), null, 2));
-        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Já existem 10 ordens abertas simultâneas. Novo sinal de ${direction} bloqueado!`);
+    if (openTradesCount >= 3) {
+        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Já existem 3 ordens abertas simultâneas (Grid Máximo). Novo sinal bloqueado!`);
         return;
     }
 
@@ -316,10 +352,14 @@ export class DerivConnectionManager {
     const balance = state.balance > 0 ? state.balance : 1000;
     const dynamicStake = Math.max(0.5, parseFloat((balance * 0.01).toFixed(2))); // Mínimo $0.50
 
-    // Converte para Opções Clássicas Sobe/Desce (CALL / PUT)
-    const contractType = direction === 'BUY' ? 'CALL' : 'PUT';
+    const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
+    const multiplierValue = 100;
     
-    // 1. Envia a Ordem de Compra Direta
+    // Converte os preços absolutos de TP/SL para o valor monetário esperado pela API da Deriv
+    const tpAmount = parseFloat((Math.abs((engineTp - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    const slAmount = parseFloat((Math.abs((engineSl - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    
+    // 1. Envia a Ordem de Compra Direta (Multipliers para Ouro)
     ws.send(JSON.stringify({
       buy: 1,
       price: dynamicStake,
@@ -328,16 +368,19 @@ export class DerivConnectionManager {
         basis: "stake",
         contract_type: contractType,
         currency: "USD",
-        duration: 5,
-        duration_unit: "m",
-        underlying_symbol: "R_100" // Corretora bloqueou "symbol", tentando a versão atualizada
+        multiplier: multiplierValue,
+        symbol: "frxXAUUSD",
+        limit_order: {
+            take_profit: tpAmount,
+            stop_loss: slAmount
+        }
       }
     }));
     
     // Simula a adição da ordem no estado
     const realTrade = {
         id: "PENDING_" + Date.now(),
-        symbol: "R_100",
+        symbol: "frxXAUUSD",
         lot: dynamicStake,
         type: direction,
         openPrice: price,
@@ -358,15 +401,13 @@ export class DerivConnectionManager {
 
     const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
     for (const trade of openTrades) {
-      if (trade.profit > 0) {
         if (regime === 'TREND_DOWN' && trade.type === 'BUY') {
-          this.addUserLog(userId, `🔄 [REVERSÃO] Tendência mudou para BAIXA. Fechando ordem de COMPRA no lucro de $${trade.profit.toFixed(2)} para proteger ganho!`);
+          this.addUserLog(userId, `🔄 [DEFESA ABSOLUTA] Reversão Forte detectada para BAIXA. Cortando compras abertas imediatamente para estancar perdas!`);
           ws.send(JSON.stringify({ sell: trade.id, price: 0 }));
         } else if (regime === 'TREND_UP' && trade.type === 'SELL') {
-          this.addUserLog(userId, `🔄 [REVERSÃO] Tendência mudou para ALTA. Fechando ordem de VENDA no lucro de $${trade.profit.toFixed(2)} para proteger ganho!`);
+          this.addUserLog(userId, `🔄 [DEFESA ABSOLUTA] Reversão Forte detectada para ALTA. Cortando vendas abertas imediatamente para estancar perdas!`);
           ws.send(JSON.stringify({ sell: trade.id, price: 0 }));
         }
-      }
     }
   }
 }

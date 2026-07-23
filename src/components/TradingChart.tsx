@@ -12,9 +12,10 @@ interface TradingChartProps {
   derivToken?: string;
   accountType?: string;
   onTradesUpdate?: (trades: Trade[]) => void;
+  onPriceUpdate?: (price: number) => void;
 }
 
-export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_100', theme = 'dark', timeframe = '1M', derivToken, accountType = 'DEMO', onTradesUpdate }) => {
+export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XAUUSD', theme = 'dark', timeframe = '1M', derivToken, accountType = 'DEMO', onTradesUpdate, onPriceUpdate }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -111,11 +112,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_
       }
 
       const socket = new WebSocket(wsUrl);
+      const publicSocket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
       wsRef.current = socket;
 
       const requestCandles = () => {
         console.log("[FYBOT] Requisitando histórico de velas para o símbolo:", symbol);
-        socket.send(JSON.stringify({
+        publicSocket.send(JSON.stringify({
           ticks_history: symbol === 'XAUUSD' ? 'frxXAUUSD' : symbol, // Usa frxXAUUSD para Ouro
           adjust_start_time: 1,
           count: 500,
@@ -126,23 +128,59 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_
         }));
       };
 
+      publicSocket.onopen = () => {
+          requestCandles();
+      };
+      
+      publicSocket.onmessage = (msg) => {
+          try {
+             const data = JSON.parse(msg.data.toString());
+             if (data.msg_type === 'candles' && data.candles && isMounted) {
+                const cData = data.candles.map((c: any) => ({
+                  time: Number(c.epoch) as any,
+                  open: Number(c.open),
+                  high: Number(c.high),
+                  low: Number(c.low),
+                  close: Number(c.close)
+                }))
+                .filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i)
+                .sort((a: any, b: any) => a.time - b.time);
+                if (cData.length > 0) {
+                  candleSeries.setData(cData);
+                  chart.timeScale().fitContent();
+                  if (onPriceUpdate) onPriceUpdate(cData[cData.length - 1].close);
+                }
+             } else if (data.msg_type === 'ohlc' && data.ohlc && isMounted) {
+                const c = data.ohlc;
+                candleSeries.update({
+                  time: Number(c.open_time) as any,
+                  open: Number(c.open),
+                  high: Number(c.high),
+                  low: Number(c.low),
+                  close: Number(c.close)
+                });
+                if (onPriceUpdate) onPriceUpdate(Number(c.close));
+             } else if (data.error) {
+                 console.error("[FYBOT] Erro no public socket:", data.error);
+             }
+          } catch(e) {}
+      };
+
       socket.onopen = () => {
         console.log("[FYBOT] WebSocket Conectado diretamente à Deriv.");
         const isValidWsToken = cleanedToken !== '' && cleanedToken !== 'undefined' && cleanedToken !== 'null';
         
         if (isMagic) {
            console.log("[FYBOT] Conexão OTP estabelecida. Requisitando dados autenticados...");
-           requestCandles();
            socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
            socket.send(JSON.stringify({ portfolio: 1 }));
            socket.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
         }
-        else if (isValidWsToken && !bypassAuth && !cleanedToken.startsWith('pat_')) {
+        else if (isValidWsToken && !cleanedToken.startsWith('pat_')) {
           console.log("[FYBOT] Enviando autorização API clássica...");
           socket.send(JSON.stringify({ authorize: cleanedToken }));
         } else {
-          console.log("[FYBOT] Sem token ativo ou fallback público. Requisitando velas diretamente...");
-          requestCandles();
+          console.log("[FYBOT] Sem token ativo ou fallback público.");
         }
       };
 
@@ -153,12 +191,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_
           if (data.msg_type === 'authorize') {
              if (data.error) {
                console.warn("[FYBOT] Falha ao autorizar token Deriv:", data.error.message);
-               console.warn("[FYBOT] Desconectando e reconectando em Modo Público sem Token para carregar o gráfico...");
-               bypassAuth = true;
-               socket.close(); // Isso vai disparar o socket.onclose que criaremos abaixo!
              } else {
                console.log("[FYBOT] Token Deriv autorizado com sucesso!");
-               requestCandles();
                // Pede o histórico de lucros
                socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
                // Pede as posições abertas
@@ -244,49 +278,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_
              
              emitTrades([openTrade]);
           }
-
-          // Histórico Inicial de Velas
-          if (data.msg_type === 'candles' && data.candles && isMounted) {
-            console.log("[FYBOT] Velas recebidas da Deriv:", data.candles.length);
-            try {
-              const cData = data.candles.map((c: any) => ({
-                time: Number(c.epoch) as any,
-                open: Number(c.open),
-                high: Number(c.high),
-                low: Number(c.low),
-                close: Number(c.close)
-              }))
-              .filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i)
-              .sort((a: any, b: any) => a.time - b.time);
-              
-              console.log("[FYBOT] Velas processadas:", cData.length, "Primeira:", cData[0], "Ultima:", cData[cData.length - 1]);
-              
-              if (cData.length > 0) {
-                candleSeries.setData(cData);
-                chart.timeScale().fitContent(); // Força o gráfico a enquadrar as velas
-              }
-            } catch(e) {
-              console.error("Erro ao setar candles no gráfico:", e);
-            }
-          } else if (data.error) {
-             console.error("[FYBOT] Erro retornado pela Deriv API:", data.error);
-          }
-          
-          // Vela ao vivo
-          if (data.msg_type === 'ohlc' && data.ohlc && isMounted) {
-            try {
-              const c = data.ohlc;
-              candleSeries.update({
-                time: Number(c.open_time) as any,
-                open: Number(c.open),
-                high: Number(c.high),
-                low: Number(c.low),
-                close: Number(c.close)
-              });
-            } catch(e) {
-              console.error("Erro ao atualizar vela ao vivo:", e);
-            }
-          }
         } catch (err) {
           console.error("Erro no WebSocket onmessage:", err);
         }
@@ -309,6 +300,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'R_
       if (wsRef.current) {
         wsRef.current.close();
       }
+      try {
+        publicSocket.close();
+      } catch(e) {}
       try {
         chart.remove();
       } catch (e) {
