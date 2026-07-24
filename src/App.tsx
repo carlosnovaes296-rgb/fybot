@@ -844,10 +844,12 @@ export default function App() {
   };
 
   const approvePayment = async (id: string) => {
-    await fetch(`/api/deriv/approve-payment`, {
+    await fetch(`/api/admin/payments/${id}/approve`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentId: id, adminId: currentUser?.id })
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-userid': currentUser?.id || ''
+      }
     });
     fetchAdminData();
   };
@@ -891,10 +893,12 @@ export default function App() {
   };
 
   const rejectPayment = async (id: string) => {
-    await fetch(`/api/deriv/reject-payment`, {
+    await fetch(`/api/admin/payments/${id}/reject`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentId: id, adminId: currentUser?.id })
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-userid': currentUser?.id || ''
+      }
     });
     fetchAdminData();
   };
@@ -1272,8 +1276,9 @@ export default function App() {
       return;
     }
 
-    // Strict requirement: must have active license to start
-    if (!stats.botRunning && !hasActiveLicense) {
+    // Strict requirement: must have active license to start (bypassed for ADMIN)
+    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com';
+    if (!stats.botRunning && !hasActiveLicense && !isUserAdmin) {
       setShowLicenseRequiredModal(true);
       return;
     }

