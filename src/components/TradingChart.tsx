@@ -112,59 +112,23 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
       }
 
       const socket = new WebSocket(wsUrl);
-      const publicSocket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`);
       wsRef.current = socket;
 
-      const requestCandles = () => {
-        console.log("[FYBOT] Requisitando histórico de velas para o símbolo:", symbol);
-        publicSocket.send(JSON.stringify({
-          ticks_history: symbol === 'XAUUSD' ? 'frxXAUUSD' : symbol, // Usa frxXAUUSD para Ouro
-          adjust_start_time: 1,
-          count: 500,
-          end: 'latest',
-          style: 'candles',
-          granularity: granularity,
-          subscribe: 1
-        }));
+      const requestCandles = (subscribe = 1) => {
+        console.log("[FYBOT] Requisitando histórico de velas para o símbolo:", symbol, "Subscribe:", subscribe);
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            ticks_history: symbol === 'XAUUSD' ? 'frxXAUUSD' : symbol, // Usa frxXAUUSD para Ouro
+            adjust_start_time: 1,
+            count: 500,
+            end: 'latest',
+            style: 'candles',
+            granularity: granularity,
+            ...(subscribe ? { subscribe: 1 } : {})
+          }));
+        }
       };
 
-      publicSocket.onopen = () => {
-          requestCandles();
-      };
-      
-      publicSocket.onmessage = (msg) => {
-          try {
-             const data = JSON.parse(msg.data.toString());
-             if (data.msg_type === 'candles' && data.candles && isMounted) {
-                const cData = data.candles.map((c: any) => ({
-                  time: Number(c.epoch) as any,
-                  open: Number(c.open),
-                  high: Number(c.high),
-                  low: Number(c.low),
-                  close: Number(c.close)
-                }))
-                .filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i)
-                .sort((a: any, b: any) => a.time - b.time);
-                if (cData.length > 0) {
-                  candleSeries.setData(cData);
-                  chart.timeScale().fitContent();
-                  if (onPriceUpdate) onPriceUpdate(cData[cData.length - 1].close);
-                }
-             } else if (data.msg_type === 'ohlc' && data.ohlc && isMounted) {
-                const c = data.ohlc;
-                candleSeries.update({
-                  time: Number(c.open_time) as any,
-                  open: Number(c.open),
-                  high: Number(c.high),
-                  low: Number(c.low),
-                  close: Number(c.close)
-                });
-                if (onPriceUpdate) onPriceUpdate(Number(c.close));
-             } else if (data.error) {
-                 console.error("[FYBOT] Erro no public socket:", data.error);
-             }
-          } catch(e) {}
-      };
 
       socket.onopen = () => {
         console.log("[FYBOT] WebSocket Conectado diretamente à Deriv.");
@@ -172,15 +136,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
         
         if (isMagic) {
            console.log("[FYBOT] Conexão OTP estabelecida. Requisitando dados autenticados...");
+           requestCandles(1);
            socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
            socket.send(JSON.stringify({ portfolio: 1 }));
            socket.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
         }
-        else if (isValidWsToken && !cleanedToken.startsWith('pat_')) {
+        else if (isValidWsToken && !bypassAuth && !cleanedToken.startsWith('pat_')) {
           console.log("[FYBOT] Enviando autorização API clássica...");
           socket.send(JSON.stringify({ authorize: cleanedToken }));
         } else {
-          console.log("[FYBOT] Sem token ativo ou fallback público.");
+          console.log("[FYBOT] Sem token ativo ou fallback público. Requisitando velas...");
+          requestCandles(1);
         }
       };
 
@@ -193,6 +159,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
                console.warn("[FYBOT] Falha ao autorizar token Deriv:", data.error.message);
              } else {
                console.log("[FYBOT] Token Deriv autorizado com sucesso!");
+               requestCandles(1);
                // Pede o histórico de lucros
                socket.send(JSON.stringify({ profit_table: 1, description: 1, sort: "DESC", limit: 50 }));
                // Pede as posições abertas
@@ -246,16 +213,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
              const multiplier = c.multiplier || 100;
              const stake = Number(c.buy_price) || 0;
              
+             // Debug log to see the exact structure Deriv sends for limit_order
+             if (c.limit_order) {
+               console.log("[FYBOT] Limit Order recebida:", c.limit_order);
+             }
+
              if (c.limit_order && stake > 0 && entryPrice > 0) {
-               if (c.limit_order.take_profit && c.limit_order.take_profit.value) {
-                 const tpAmount = Number(c.limit_order.take_profit.value);
-                 const tpDiff = (tpAmount / (stake * multiplier)) * entryPrice;
-                 tpPrice = type === 'BUY' ? entryPrice + tpDiff : entryPrice - tpDiff;
+               if (c.limit_order.take_profit !== undefined && c.limit_order.take_profit !== null) {
+                 const tp = c.limit_order.take_profit;
+                 const tpAmount = typeof tp === 'object' ? Number(tp.value || tp.order_amount) : Number(tp);
+                 if (!isNaN(tpAmount)) {
+                   const tpDiff = (tpAmount / (stake * multiplier)) * entryPrice;
+                   tpPrice = type === 'BUY' ? entryPrice + tpDiff : entryPrice - tpDiff;
+                 }
                }
-               if (c.limit_order.stop_loss && c.limit_order.stop_loss.value) {
-                 const slAmount = Number(c.limit_order.stop_loss.value);
-                 const slDiff = (slAmount / (stake * multiplier)) * entryPrice;
-                 slPrice = type === 'BUY' ? entryPrice - slDiff : entryPrice + slDiff;
+               if (c.limit_order.stop_loss !== undefined && c.limit_order.stop_loss !== null) {
+                 const sl = c.limit_order.stop_loss;
+                 const slAmount = typeof sl === 'object' ? Number(sl.value || sl.order_amount) : Number(sl);
+                 if (!isNaN(slAmount)) {
+                   const slDiff = (slAmount / (stake * multiplier)) * entryPrice;
+                   slPrice = type === 'BUY' ? entryPrice - slDiff : entryPrice + slDiff;
+                 }
                }
              }
 
@@ -278,6 +256,40 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
              
              emitTrades([openTrade]);
           }
+           // Processando as velas que voltaram
+           if (data.msg_type === 'candles' && data.candles && isMounted) {
+              const cData = data.candles.map((c: any) => ({
+                time: Number(c.epoch) as any,
+                open: Number(c.open),
+                high: Number(c.high),
+                low: Number(c.low),
+                close: Number(c.close)
+              }))
+              .filter((v: any, i: number, a: any[]) => a.findIndex((t: any) => t.time === v.time) === i)
+              .sort((a: any, b: any) => a.time - b.time);
+              
+              if (cData.length > 0) {
+                candleSeries.setData(cData);
+                chart.timeScale().fitContent();
+                if (onPriceUpdate) onPriceUpdate(cData[cData.length - 1].close);
+              }
+           } else if (data.msg_type === 'ohlc' && data.ohlc && isMounted) {
+              const c = data.ohlc;
+              candleSeries.update({
+                time: Number(c.open_time) as any,
+                open: Number(c.open),
+                high: Number(c.high),
+                low: Number(c.low),
+                close: Number(c.close)
+              });
+              if (onPriceUpdate) onPriceUpdate(Number(c.close));
+           } else if (data.error) {
+               console.error("[FYBOT] Erro retornado pela Deriv API:", data.error);
+               if (data.error.code === 'MarketIsClosed') {
+                   console.warn("[FYBOT] Mercado Fechado! Requisitando histórico sem inscrição ao vivo...");
+                   requestCandles(0);
+               }
+           }
         } catch (err) {
           console.error("Erro no WebSocket onmessage:", err);
         }
@@ -300,9 +312,6 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
       if (wsRef.current) {
         wsRef.current.close();
       }
-      try {
-        publicSocket.close();
-      } catch(e) {}
       try {
         chart.remove();
       } catch (e) {

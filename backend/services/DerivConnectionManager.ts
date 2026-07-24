@@ -252,8 +252,9 @@ export class DerivConnectionManager {
             }
           }
         }
+
       }
-      
+
       // Resposta da Compra
       if (data.msg_type === 'buy') {
         if (data.error) {
@@ -369,7 +370,7 @@ export class DerivConnectionManager {
         contract_type: contractType,
         currency: "USD",
         multiplier: multiplierValue,
-        symbol: "frxXAUUSD",
+        underlying_symbol: "frxXAUUSD",
         limit_order: {
             take_profit: tpAmount,
             stop_loss: slAmount

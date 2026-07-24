@@ -24,10 +24,34 @@ conn.on('ready', () => {
   conn.sftp((err, sftp) => {
     if (err) { console.error('SFTP error:', err); conn.end(); return; }
     
-    // Função para fazer upload de cada arquivo
-    const uploadFiles = (files, index = 0) => {
-      if (index >= files.length) {
-        console.log('\n🎉 Todos os arquivos do frontend foram enviados!');
+    // Old uploadFiles function removed, replaced by uploadMapped below
+    // Ler todos os arquivos da pasta dist local
+    if (!fs.existsSync(distDir)) {
+      console.error('❌ A pasta dist não existe! Rode npm run build primeiro.');
+      conn.end();
+      return;
+    }
+    
+    // Obter arquivos do dist e do backend
+    const allDistFiles = getAllFiles(distDir);
+    const backendDir = path.join(__dirname, 'backend');
+    let allBackendFiles = [];
+    if (fs.existsSync(backendDir)) {
+       allBackendFiles = getAllFiles(backendDir);
+    }
+    
+    // Mapear os caminhos para o formato esperado pelo upload
+    const uploadList = [
+       ...allDistFiles.map(f => ({ local: f, remote: `${remoteDistDir}/${path.relative(distDir, f).replace(/\\/g, '/')}` })),
+       ...allBackendFiles.map(f => ({ local: f, remote: `/root/fybot/backend/${path.relative(backendDir, f).replace(/\\/g, '/')}` }))
+    ];
+
+    console.log(`Encontrados ${allDistFiles.length} arquivos no frontend e ${allBackendFiles.length} no backend para enviar...`);
+    
+    // Função atualizada para usar a lista mapeada
+    const uploadMapped = (list, index = 0) => {
+      if (index >= list.length) {
+        console.log('\n🎉 Todos os arquivos do frontend e backend foram enviados!');
         console.log('Enviando server.ts...');
         sftp.fastPut(path.join(__dirname, 'server.ts'), '/root/fybot/server.ts', (err) => {
           if (err) console.error('Erro ao enviar server.ts:', err);
@@ -46,32 +70,18 @@ conn.on('ready', () => {
         return;
       }
       
-      const localFile = files[index];
-      const relativePath = path.relative(distDir, localFile).replace(/\\/g, '/');
-      const remoteFile = `${remoteDistDir}/${relativePath}`;
-      
-      // Criar a pasta se não existir e fazer upload
-      const remoteDir = path.dirname(remoteFile);
+      const { local, remote } = list[index];
+      const remoteDir = path.dirname(remote);
       sftp.mkdir(remoteDir, true, (err) => {
-        // ignora erro se a pasta já existe
-        process.stdout.write(`\rEnviando: ${relativePath} ... `);
-        sftp.fastPut(localFile, remoteFile, (err) => {
-          if (err) console.error(`\nErro ao enviar ${relativePath}:`, err);
-          uploadFiles(files, index + 1);
+        process.stdout.write(`\rEnviando: ${remote} ... `);
+        sftp.fastPut(local, remote, (err) => {
+          if (err) console.error(`\nErro ao enviar ${remote}:`, err);
+          uploadMapped(list, index + 1);
         });
       });
     };
-    
-    // Ler todos os arquivos da pasta dist local
-    if (!fs.existsSync(distDir)) {
-      console.error('❌ A pasta dist não existe! Rode npm run build primeiro.');
-      conn.end();
-      return;
-    }
-    
-    const allFiles = getAllFiles(distDir);
-    console.log(`Encontrados ${allFiles.length} arquivos para enviar...`);
-    uploadFiles(allFiles);
+
+    uploadMapped(uploadList);
   });
 }).on('error', (err) => {
   console.error('SSH Error:', err.message);
