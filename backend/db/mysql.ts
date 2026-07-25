@@ -81,7 +81,8 @@ export async function getLicenseByKey(key: string) {
 }
 export async function insertLicense(license: any) {
     await pool.query(
-        `INSERT INTO licenses (id, userId, license_key, type, status, expiryDate) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO licenses (id, userId, license_key, type, status, expiryDate) VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE status=VALUES(status), expiryDate=VALUES(expiryDate), type=VALUES(type)`,
         [license.id, license.userId, license.key || license.license_key, license.type, license.status, new Date(license.expiryDate)]
     );
 }
@@ -100,7 +101,8 @@ export async function getWithdrawals() {
 }
 export async function insertWithdrawal(w: any) {
     await pool.query(
-        `INSERT INTO withdrawals (id, userId, userName, userEmail, amount, wallet, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO withdrawals (id, userId, userName, userEmail, amount, wallet, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE status=VALUES(status)`,
         [w.id, w.userId, w.userName || '', w.userEmail || '', w.amount, w.wallet, w.status, new Date(w.timestamp || Date.now())]
     );
 }
@@ -115,7 +117,8 @@ export async function getPayments() {
 }
 export async function insertPayment(p: any) {
     await pool.query(
-        `INSERT INTO payments (id, userId, amount, method, hash, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO payments (id, userId, amount, method, hash, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE status=VALUES(status)`,
         [p.id, p.userId, p.amount, p.method, p.hash, p.status, new Date(p.createdAt || Date.now())]
     );
 }

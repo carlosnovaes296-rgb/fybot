@@ -268,6 +268,12 @@ async function startServer() {
       }
       await dbHelper.saveUserStates(serializedStates);
 
+      // Sync licenses, payments, and withdrawals to MySQL
+      for (const l of licenses) await dbHelper.insertLicense(l).catch(()=>{});
+      for (const p of payments) await dbHelper.insertPayment(p).catch(()=>{});
+      for (const w of withdrawals) await dbHelper.insertWithdrawal(w).catch(()=>{});
+
+
     } catch (e: any) {
       console.error('FYBOT: Exception saving DB:', e.message);
     }
