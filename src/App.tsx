@@ -2122,8 +2122,23 @@ export default function App() {
                             </div>
 
                             {stats.systemBlocked && (
-                              <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1">
-                                [MERCADO FECHADO] O bot opera apenas das 21:00 às 17:00 de Dom a Sex.
+                              <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1 flex items-center justify-center">
+                                [MERCADO FECHADO] O bot opera das 21:00 às 17:00 (Dom a Sex).
+                                {stats.blockedUntil && (() => {
+                                  const now = new Date().getTime();
+                                  const target = new Date(stats.blockedUntil).getTime();
+                                  const diff = target - now;
+                                  if (diff <= 0) return null;
+                                  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                  const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                                  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                  const s = Math.floor((diff % (1000 * 60)) / 1000);
+                                  return (
+                                    <span className="text-white bg-yellow-500/20 px-2 py-0.5 rounded ml-2 border border-yellow-500/30">
+                                      RETORNA EM: {d > 0 ? d + 'd ' : ''}{h.toString().padStart(2, '0')}:{m.toString().padStart(2, '0')}:{s.toString().padStart(2, '0')}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             )}
                           </div>
