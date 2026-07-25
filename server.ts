@@ -14,6 +14,7 @@ import session from 'express-session';
 import { DerivBotEngine } from './backend/services/DerivBotEngine.ts';
 import { DerivConnectionManager } from './backend/services/DerivConnectionManager.ts';
 dotenv.config();
+import * as dbHelper from './backend/db/mysql.ts';
 
 let mysqlPool: mysql.Pool | null = null;
 
@@ -219,92 +220,27 @@ async function startServer() {
   // Load from MySQL
   const loadDB = async () => {
     try {
-      if (!mysqlPool) {
-        console.log('FYBOT: No MYSQL_URL. Using local db.json');
-        const DB_PATH = path.join(__dirname, 'data', 'db.json');
-        if (fs.existsSync(DB_PATH)) {
-          const localData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-          const loadedUsers = (localData.users && localData.users.length > 0) ? localData.users : users;
-          const uniqueUsers = new Map();
-          loadedUsers.forEach((u: any) => {
-            if (!u.email) return;
-            const key = u.email.toLowerCase();
-            const existing = uniqueUsers.get(key);
-            if (!existing || (existing.role !== 'ADMIN' && u.role === 'ADMIN')) {
-              uniqueUsers.set(key, u);
-            }
-          });
-          users = Array.from(uniqueUsers.values());
-          const masterAdmin = users.find(u => u.email === 'jfcn2020@gmail.com');
-          if (masterAdmin) {
-              masterAdmin.password = 'password123';
-              masterAdmin.role = 'ADMIN';
-          }
-          if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
-          licenses = localData.licenses || licenses;
-          payments = localData.payments || payments;
-          withdrawals = localData.withdrawals || withdrawals;
-          referralEarnings = localData.referralEarnings || referralEarnings;
-          config = { ...config, ...(localData.config || {}) };
-          if (localData.userStates) {
-            for (const [k, v] of Object.entries(localData.userStates)) {
-              const stateData = v as any;
-              // Limpar ordens fantasmas presas que nunca foram confirmadas pela Deriv
-              stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
-              userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
-            }
-          }
-        }
-        return;
-      }
-
-      const [rows]: any = await mysqlPool.execute('SELECT data FROM fybot_data WHERE id = 1');
+      users = await dbHelper.getUsers();
+      licenses = await dbHelper.getLicenses();
+      payments = await dbHelper.getPayments();
+      withdrawals = await dbHelper.getWithdrawals();
       
-      if (rows.length > 0 && rows[0].data) {
-        let dbData;
+      const states = await dbHelper.getUserStates();
+      for (const row of states) {
+        if (!row.state_data) continue;
+        let stateData;
         try {
-          dbData = typeof rows[0].data === 'string' ? JSON.parse(rows[0].data) : rows[0].data;
-        } catch(e) {
-          throw new Error("Falha ao fazer parse dos dados. Tipo recebido: " + typeof rows[0].data);
-        }
-        const loadedUsers = (dbData.users && dbData.users.length > 0) ? dbData.users : users;
-        const uniqueUsers = new Map();
-        loadedUsers.forEach((u: any) => {
-          if (!u.email) return;
-          const key = u.email.toLowerCase();
-          const existing = uniqueUsers.get(key);
-          if (!existing || (existing.role !== 'ADMIN' && u.role === 'ADMIN')) {
-            uniqueUsers.set(key, u);
-          }
-        });
-        users = Array.from(uniqueUsers.values());
-        const masterAdmin = users.find(u => u.email === 'jfcn2020@gmail.com');
-        if (masterAdmin) {
-            masterAdmin.password = 'password123';
-            masterAdmin.role = 'ADMIN';
-        }
-        if (users.length !== loadedUsers.length) setTimeout(saveDB, 2000);
-        licenses = dbData.licenses || licenses;
-        payments = dbData.payments || payments;
-        withdrawals = dbData.withdrawals || withdrawals;
-        referralEarnings = dbData.referralEarnings || referralEarnings;
-        config = { ...config, ...(dbData.config || {}) };
-        if (dbData.userStates) {
-          for (const [k, v] of Object.entries(dbData.userStates)) {
-            const stateData = v as any;
-            stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
-            userStates[k] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
-          }
-        }
-        console.log('FYBOT: Loaded data from MySQL DigitalOcean ✅');
-      } else {
-        console.log('FYBOT: MySQL empty. Saving default data...');
-        saveDB();
+          stateData = typeof row.state_data === 'string' ? JSON.parse(row.state_data) : row.state_data;
+        } catch(e) { continue; }
+        
+        stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
+        userStates[row.userId] = { ...stateData, pendingOrders: new Set(stateData.pendingOrders || []) };
       }
+      console.log(`FYBOT: Loaded ${users.length} users and states from MySQL ✅`);
     } catch (e) {
       console.error('FYBOT: CRITICAL ERROR - Failed to load DB', e);
       console.error('FYBOT: Shutting down to prevent data overwrite.');
-      process.exit(1); // MATA O SERVIDOR PARA NÃO SOBRESCREVER OS DADOS
+      process.exit(1); 
     }
   };
   await loadDB();
@@ -320,27 +256,18 @@ async function startServer() {
   });
 
   const saveDB = async () => {
-    // PROTEÇÃO EXTRA: Nunca salve se os usuários estiverem vazios ou com erro
     if (!users || users.length === 0) return;
     try {
+      // Sync memory users back to MySQL safely (Background UPSERT)
+      for (const u of users) await dbHelper.updateUser(u.id, u).catch(()=>{});
+      
+      // Save all user states
       const serializedStates: any = {};
       for (const [k, v] of Object.entries(userStates)) {
         serializedStates[k] = { ...v, pendingOrders: Array.from(v.pendingOrders) };
       }
+      await dbHelper.saveUserStates(serializedStates);
 
-      const dbData = { users, licenses, payments, withdrawals, referralEarnings, config, userStates: serializedStates };
-      const jsonStr = JSON.stringify(dbData);
-
-      if (!mysqlPool) {
-        const DB_PATH = path.join(__dirname, 'data', 'db.json');
-        fs.writeFileSync(DB_PATH, JSON.stringify(dbData, null, 2), 'utf-8');
-        return;
-      }
-
-      await mysqlPool.execute(
-        'INSERT INTO fybot_data (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = ?',
-        [jsonStr, jsonStr]
-      );
     } catch (e: any) {
       console.error('FYBOT: Exception saving DB:', e.message);
     }
@@ -357,12 +284,76 @@ async function startServer() {
     res.json({ success: true, message: "Simulation cleaned" });
   });
 
+  const getBrazilTime = () => {
+    const now = new Date();
+    const brtString = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+    return new Date(brtString);
+  };
+
+  const isTradingWindowOpen = () => {
+    const brtNow = getBrazilTime();
+    const day = brtNow.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+    const hours = brtNow.getHours();
+    
+    // Sábado: sempre fechado
+    if (day === 6) return false;
+    
+    // Domingo: aberto apenas >= 21h
+    if (day === 0) return hours >= 21;
+    
+    // Sexta: aberto apenas < 17h
+    if (day === 5) return hours < 17;
+    
+    // Segunda a Quinta: aberto < 17h OU >= 21h
+    if (day >= 1 && day <= 4) {
+      return hours < 17 || hours >= 21;
+    }
+    return false;
+  };
+
+  const getNextSessionStart = () => {
+    const brtNow = getBrazilTime();
+    let nextStart = new Date(brtNow);
+    nextStart.setHours(21, 0, 0, 0);
+
+    const day = brtNow.getDay();
+    const hours = brtNow.getHours();
+
+    if (day === 5 && hours >= 17) { // Sexta após as 17 -> Pula pra Domingo
+        nextStart.setDate(nextStart.getDate() + 2);
+    } else if (day === 6) { // Sábado -> Pula pra Domingo
+        nextStart.setDate(nextStart.getDate() + 1);
+    } else if (hours >= 21) {
+        // Já passou das 21h de hoje, a "próxima" abertura será amanhã às 21h
+        nextStart.setDate(nextStart.getDate() + 1);
+    } 
+    
+    const diffMs = nextStart.getTime() - brtNow.getTime();
+    return new Date(Date.now() + diffMs).toISOString();
+  };
+
+
   app.get('/api/status', (req, res) => {
     try {
       const { userId } = req.query;
       const state = getUserState(userId as string);
       const userLicenses = userId ? licenses.filter(l => l.userId === userId && l.status === 'ACTIVE') : [];
-      const activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
+      let activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
+
+      const requestingUser = users.find(u => u.id === userId);
+      const isAdmin = requestingUser?.role === 'ADMIN' || requestingUser?.email === 'jfcn2020@gmail.com' || requestingUser?.email === 'carlosnovaes296@gmail.com';
+      if (isAdmin && !activeLicense) {
+        activeLicense = {
+          id: 'admin-license',
+          userId: userId as string,
+          planType: 'LIFETIME',
+          status: 'ACTIVE',
+          expiryDate: '2099-12-31T23:59:59.000Z',
+          key: 'ADMIN-MASTER-KEY',
+          createdAt: new Date().toISOString()
+        } as any;
+      }
+
       const pendingPayment = userId ? payments.find(p => p.userId === userId && p.status === 'PENDING') : null;
 
       const todayStr = new Date().toISOString().split('T')[0];
@@ -372,6 +363,28 @@ async function startServer() {
       const targetPercent = 0.02;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
+
+      // LÓGICA DA JANELA DE OPERAÇÕES
+      if (!isTradingWindowOpen()) {
+         if (!state.systemBlocked) {
+             state.systemBlocked = true;
+             state.blockedUntil = getNextSessionStart();
+             addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 21:00 às 15:00 de Dom a Sex. Sistema bloqueado até a próxima abertura.");
+             if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+             state.botRunning = false;
+         }
+      } else {
+         // Se estamos dentro do horário de operação
+         // e o sistema estava bloqueado por motivo de HORÁRIO (e não porque já bateu a meta de hoje)
+         // Temos que destravar.
+         // Uma maneira de saber é: se blockedUntil passou e a meta não foi batida.
+         if (state.systemBlocked && state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) {
+            state.systemBlocked = false;
+            state.blockedUntil = undefined;
+            state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
+            addUserLog(userId as string, "🔓 [NOVA SESSÃO] A janela de operações abriu. Lucro diário resetado. Sistema liberado!");
+         }
+      }
 
       res.json({
         botRunning: state.botRunning,
@@ -1144,6 +1157,9 @@ async function startServer() {
     const { userId, userName, userEmail, amount, wallet } = req.body;
     if (!amount || !wallet || !userId) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (parseFloat(amount) < 50) {
+      return res.status(400).json({ error: 'O saque mínimo permitido é de $50.00' });
     }
     const newWithdrawal: any = {
       id: Math.random().toString(36).substr(2, 9),

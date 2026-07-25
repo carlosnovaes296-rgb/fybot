@@ -197,6 +197,20 @@ export class DerivConnectionManager {
                     const openCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
                     if (openCount === 0) {
                         state.systemBlocked = true;
+                        
+                        // Calcula o próximo horário 21h BRT
+                        const now = new Date();
+                        const brtString = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+                        const brtNow = new Date(brtString);
+                        let nextStart = new Date(brtNow);
+                        nextStart.setHours(21, 0, 0, 0);
+                        const day = brtNow.getDay();
+                        const hours = brtNow.getHours();
+                        if (day === 5 && hours >= 15) nextStart.setDate(nextStart.getDate() + 2);
+                        else if (day === 6) nextStart.setDate(nextStart.getDate() + 1);
+                        else if (hours >= 21) nextStart.setDate(nextStart.getDate() + 1);
+                        state.blockedUntil = new Date(Date.now() + (nextStart.getTime() - brtNow.getTime())).toISOString();
+
                         this.addUserLog(userId, `🎉 [META BATIDA] Lucro diário atingiu a meta de $${target.toFixed(2)} e todas as ordens foram fechadas. Sistema bloqueado!`);
                     }
                 }
@@ -333,14 +347,9 @@ export class DerivConnectionManager {
         return;
     }
 
-    // Regra Extra: Limite total de ordens por dia (aumentado para testes contínuos)
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayTradesCount = state.trades.filter((t: any) => t.time && t.time.startsWith(todayStr)).length;
-    if (todayTradesCount >= 100) {
-        this.addUserLog(userId, `✋ [LIMITE DIÁRIO] Máximo de 100 ordens diárias atingido para testes. Novo sinal de ${direction} bloqueado!`);
-        return;
-    }
-
+    // O limite de ordens por dia foi removido a pedido do usuário.
+    // O robô vai operar quantas vezes forem necessárias até bater os 2% da banca.
+    
     const ws = this.userSockets.get(userId);
     if (!ws || ws.readyState !== NodeWebSocket.OPEN) {
       this.addUserLog(userId, `⚠️ Erro: Sinal recebido, mas WebSocket offline. Conecte o robô primeiro.`);

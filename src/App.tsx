@@ -925,9 +925,9 @@ export default function App() {
     setWithdrawalLoading(true);
     setWithdrawalMessage(null);
 
-    if (parseFloat(withdrawAmount) < 30) {
+    if (parseFloat(withdrawAmount) < 50) {
       setWithdrawalMessage({
-        text: language === 'en' ? 'Minimum withdrawal is $30.00 USD.' : language === 'es' ? 'El retiro mínimo es de $30.00 USD.' : 'O saque mínimo permitido é de $30.00 USD.',
+        text: language === 'en' ? 'Minimum withdrawal is $50.00 USD.' : language === 'es' ? 'El retiro mínimo es de $50.00 USD.' : 'O saque mínimo permitido é de $50.00 USD.',
         isError: true
       });
       setWithdrawalLoading(false);
@@ -1312,16 +1312,39 @@ export default function App() {
     }
   };
 
+  const autoSaveTokens = async () => {
+    if (!currentUser) return;
+    try {
+      let tDemo = profileForm.derivTokenDemo ? profileForm.derivTokenDemo.replace(/\s+/g, '') : '';
+      let tReal = profileForm.derivTokenReal ? profileForm.derivTokenReal.replace(/\s+/g, '') : '';
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentUser.id, derivTokenDemo: tDemo, derivTokenReal: tReal })
+      });
+      const data = await res.json();
+      if (data.success) {
+        let updatedUser = { ...currentUser, ...data.user, derivTokenDemo: tDemo, derivTokenReal: tReal };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const toggleAccountType = async () => {
     if (!currentUser) return;
     const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
-    const newToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+    const currentToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+    const formToken = newType === 'REAL' ? profileForm.derivTokenReal : profileForm.derivTokenDemo;
+    const newToken = formToken || currentToken;
 
     if (!newToken || newToken.trim() === '') {
       alert(
         newType === 'REAL'
-          ? "Você não configurou o Token da CONTA REAL! Vá em Configurações (engrenagem), cole seu token e CLIQUE EM 'SALVAR ALTERAÇÕES' no final da janela antes de tentar mudar."
-          : "Você não configurou o Token da CONTA DEMO! Vá em Configurações (engrenagem), cole seu token e CLIQUE EM 'SALVAR ALTERAÇÕES' no final da janela antes de tentar mudar."
+          ? "Você não configurou o Token da CONTA REAL! Vá em Configurações (engrenagem), cole seu token e aguarde o salvamento automático antes de tentar mudar."
+          : "Você não configurou o Token da CONTA DEMO! Vá em Configurações (engrenagem), cole seu token e aguarde o salvamento automático antes de tentar mudar."
       );
       return;
     }
@@ -1334,7 +1357,9 @@ export default function App() {
         body: JSON.stringify({
           id: currentUser.id,
           activeAccountType: newType,
-          derivToken: newToken
+          derivToken: newToken,
+          derivTokenDemo: profileForm.derivTokenDemo || currentUser.derivTokenDemo,
+          derivTokenReal: profileForm.derivTokenReal || currentUser.derivTokenReal
         })
       });
       const data = await res.json();
@@ -2004,9 +2029,9 @@ export default function App() {
                         );
                       })()}
                       <StatCard
-                        label={language === "en" ? "LOSS LIMIT (10%)" : language === "es" ? "LÍMITE DE PÉRDIDA (10%)" : "LIMITE DE PERDA (10% DA BANCA)"}
+                        label={language === "en" ? "LOSS LIMIT (20% PER ORDER)" : language === "es" ? "LÍMITE DE PÉRDIDA (20% POR ORDEN)" : "LIMITE DE PERDA (20% SOBRE O VALOR DA ORDEM)"}
                         value={isConnected ? `$0.00` : 'Conectando...'}
-                        delta="10%"
+                        delta="20%"
                         icon={<AlertTriangle className="text-red-400" />}
                         trendPositive={false}
                         labelClassName="text-red-400"
@@ -2095,6 +2120,12 @@ export default function App() {
                                 <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
                               </div>
                             </div>
+
+                            {stats.systemBlocked && (
+                              <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1">
+                                [MERCADO FECHADO] O bot opera apenas das 21:00 às 17:00 de Dom a Sex.
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -2719,44 +2750,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-12"
               >
-                {/* Hero Affiliate */}
-                <div className="relative bg-[#0f0f12] border border-white/5 rounded-[40px] p-8 md:p-16 overflow-hidden">
-                  <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-                  <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] -mr-48 -mt-48 transition-all" />
-                  <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-600/10 blur-[100px] -ml-24 -mb-24 transition-all" />
-
-                  {/* Subtle Chart SVG */}
-                  <div className="absolute bottom-0 right-0 w-full h-1/2 opacity-5 pointer-events-none">
-                    <svg viewBox="0 0 1000 200" className="w-full h-full preserve-3d">
-                      <path d="M0 150 Q100 100 200 130 T400 80 T600 120 T800 60 T1000 100" stroke="white" strokeWidth="2" fill="none" />
-                      <path d="M0 120 Q50 150 150 100 T350 130 T550 70 T750 110 T1000 50" stroke="rgba(59,130,246,0.5)" strokeWidth="1" fill="none" />
-                    </svg>
-                  </div>
-
-                  <div className="relative z-10 max-w-2xl">
-                    <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-6 text-white">
-                      {language === 'en' ? 'Referral Program' : language === 'es' ? 'Programa de Referidos' : 'Programa de Indicação'}
-                    </h1>
-                    <p className="text-lg text-white/50 leading-relaxed max-w-lg mb-10">
-                      {language === 'en' ? 'Earn recurring commissions up to 5 levels of your network. Turn your influence into a steady capital stream.' : language === 'es' ? 'Gane comisiones recurrentes en hasta 5 niveles de su red. Transforme su influencia en un flujo constante de capital.' : 'Ganhe comissões recorrentes em até 5 níveis da sua rede. Transforme sua influência em um fluxo constante de capital.'}
-                    </p>
-
-                  </div>
-
-                  {/* Decorative Tree Element */}
-                  <div className="hidden lg:block absolute right-16 top-1/2 -translate-y-1/2 w-80 h-80 opacity-20">
-                    <svg viewBox="0 0 100 100" className="w-full h-full stroke-blue-500 fill-none">
-                      <circle cx="50" cy="20" r="5" />
-                      <path d="M50 25 L30 50 M50 25 L70 50 M30 55 L20 80 M30 55 L40 80 M70 55 L60 80 M70 55 L80 80" strokeWidth="2" strokeLinecap="round" />
-                      <circle cx="30" cy="50" r="4" />
-                      <circle cx="70" cy="50" r="4" />
-                      <circle cx="20" cy="80" r="3" />
-                      <circle cx="40" cy="80" r="3" />
-                      <circle cx="60" cy="80" r="3" />
-                      <circle cx="80" cy="80" r="3" />
-                    </svg>
-                  </div>
-                </div>
+                {/* Hero Affiliate ocultado a pedido do usuário */}
 
                 {/* Referral History / Ganhos com Indicação */}
                 <div id="referral-earnings-history" className="bg-[#0f0f12] border border-white/5 rounded-[40px] p-8 md:p-10 space-y-8 shadow-xl shadow-black/20">
@@ -2919,14 +2913,14 @@ export default function App() {
 
                               <div className="space-y-2">
                                 <label className="text-[15px] uppercase font-bold text-emerald-500 tracking-widest pl-1">
-                                  {language === 'en' ? 'Withdrawal Amount (Min $30)' : language === 'es' ? 'Monto a Retirar (Mín $30)' : 'Valor para Saque (Mín $30)'}
+                                  {language === 'en' ? 'Withdrawal Amount (Min $50)' : language === 'es' ? 'Monto a Retirar (Mín $50)' : 'Valor para Saque (Mín $50)'}
                                 </label>
                                 <div className="relative">
                                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-white/30">$</span>
                                   <input
                                     type="number"
                                     step="0.01"
-                                    min="30"
+                                    min="50"
                                     required
                                     value={withdrawAmount}
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -3805,6 +3799,7 @@ export default function App() {
                                     type="text"
                                     value={profileForm.derivTokenReal || ''}
                                     onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                                    onBlur={autoSaveTokens}
                                     placeholder="Cole o token da conta REAL aqui (pat_...)"
                                     className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
                                   />
@@ -3821,6 +3816,7 @@ export default function App() {
                                     type="text"
                                     value={profileForm.derivTokenDemo || ''}
                                     onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                                    onBlur={autoSaveTokens}
                                     placeholder="Cole o token da conta DEMO aqui (pat_...)"
                                     className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
                                   />
@@ -3854,34 +3850,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-6 mt-8">
-                      <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2">
-                          <Wallet size={20} className="text-yellow-500" />
-                          Ajuste Manual de Saldo
-                        </h2>
-                        <p className="text-white/40 text-sm mt-1">Force o saldo da sua banca para testes</p>
-                      </div>
 
-                      <div className="flex gap-3">
-                        <div className="relative flex-1">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40">$</span>
-                          <input
-                            type="number"
-                            value={manualBalanceInput}
-                            onChange={(e) => setManualBalanceInput(e.target.value)}
-                            placeholder="Ex: 10000"
-                            className="w-full bg-black/30 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-sm focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 outline-none text-white"
-                          />
-                        </div>
-                        <button
-                          onClick={handleManualAdjust}
-                          className="px-6 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 rounded-xl font-bold transition-all text-sm whitespace-nowrap"
-                        >
-                          Ajustar
-                        </button>
-                      </div>
-                    </div>
 
                   </div>
 
