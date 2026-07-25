@@ -616,8 +616,12 @@ async function startServer() {
       
       const existingLicense = licenses.find(l => l.userId === payment.userId);
       if (existingLicense) {
+        let baseDate = new Date();
+        if (existingLicense.status === 'ACTIVE' && new Date(existingLicense.expiryDate) > baseDate) {
+          baseDate = new Date(existingLicense.expiryDate);
+        }
         existingLicense.status = 'ACTIVE';
-        existingLicense.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        existingLicense.expiryDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
       } else {
         licenses.push({
           id: 'L_' + generateUUID().substring(0, 8),
@@ -905,8 +909,14 @@ async function startServer() {
     if (user) {
       user.status = 'ACTIVE';
 
-      // Create license if none exists or renewal
-      const expiryDate = new Date();
+      // Verifica se já existe licença ativa no futuro para somar os dias
+      let baseDate = new Date();
+      const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
+      if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
+         baseDate = new Date(currentActive.expiryDate);
+      }
+      
+      const expiryDate = new Date(baseDate);
       expiryDate.setMonth(expiryDate.getMonth() + 1);
 
       // Deactivate older active licenses for this user
@@ -1217,7 +1227,14 @@ async function startServer() {
       const user = users.find(u => u.id === payment.userId);
       if (user) {
         user.status = 'ACTIVE';
-        const expiryDate = new Date();
+        // Verifica licença existente para somar os dias
+        let baseDate = new Date();
+        const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
+        if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
+           baseDate = new Date(currentActive.expiryDate);
+        }
+        
+        const expiryDate = new Date(baseDate);
         let days = 30;
         let type = 'PRO';
         if (payment.amount >= 50) { days = 90; type = 'PRO_90D'; }
