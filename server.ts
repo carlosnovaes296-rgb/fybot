@@ -865,7 +865,15 @@ async function startServer() {
       const sponsor = users.find(u => u.id === currentUserId || u.referralCode === currentUserId);
       if (!sponsor) break;
       
-      const hasEntry = referralEarnings.some(re => re.referrerId === sponsor.id && re.referredEmail === buyer.email && re.level === level);
+      // Previne comissões duplicadas acidentais na mesma hora, mas permite renovações/novas licenças
+      const hasEntry = referralEarnings.some(re => {
+        if (re.referrerId === sponsor.id && re.referredEmail === buyer.email && re.level === level) {
+          const timeDiff = new Date().getTime() - new Date(re.timestamp).getTime();
+          return timeDiff < 5 * 60 * 1000; // 5 minutos
+        }
+        return false;
+      });
+      
       if (!hasEntry) {
         let percentage = 0;
         if (level === 1) percentage = 0.20;
