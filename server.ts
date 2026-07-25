@@ -484,7 +484,8 @@ async function startServer() {
 
       const traverseNetwork = (uId: string, currentLevel: number) => {
         if (currentLevel > 5) return;
-        const descendants = users.filter(u => u.referredBy === uId);
+        const sponsorUser = users.find(u => u.id === uId);
+        const descendants = users.filter(u => u.referredBy === uId || (sponsorUser && u.referredBy === sponsorUser.referralCode));
         descendants.forEach(desc => {
           if (!visited.has(desc.id)) {
             visited.add(desc.id);
@@ -538,7 +539,8 @@ async function startServer() {
 
       const traverseNetwork = (uId: string, currentLevel: number) => {
         if (currentLevel > 5) return;
-        const descendants = users.filter(u => u.referredBy === uId);
+        const sponsorUser = users.find(u => u.id === uId);
+        const descendants = users.filter(u => u.referredBy === uId || (sponsorUser && u.referredBy === sponsorUser.referralCode));
         descendants.forEach(desc => {
           if (!visited.has(desc.id)) {
             visited.add(desc.id);
@@ -860,7 +862,7 @@ async function startServer() {
     let currentUserId = buyer.referredBy;
     let level = 1;
     while (currentUserId && level <= 5) {
-      const sponsor = users.find(u => u.id === currentUserId);
+      const sponsor = users.find(u => u.id === currentUserId || u.referralCode === currentUserId);
       if (!sponsor) break;
       
       const hasEntry = referralEarnings.some(re => re.referrerId === sponsor.id && re.referredEmail === buyer.email && re.level === level);
@@ -974,18 +976,19 @@ async function startServer() {
       const networkMembers: any[] = [];
       const visited = new Set<string>();
 
-      const traverseNetwork = (uId: string, currentLevel: number) => {
-        if (currentLevel > 5) return;
-        const descendants = users.filter((u: any) => u.referredBy === uId);
+      const traverse = (uId: string, level: number) => {
+        if (level > 5) return;
+        const sponsorUser = users.find((u: any) => u.id === uId);
+        const descendants = users.filter((u: any) => u.referredBy === uId || (sponsorUser && u.referredBy === sponsorUser.referralCode));
         descendants.forEach((desc: any) => {
           if (!visited.has(desc.id)) {
             visited.add(desc.id);
-            networkMembers.push({ user: desc, level: currentLevel });
-            traverseNetwork(desc.id, currentLevel + 1);
+            networkMembers.push({ user: desc, level: level });
+            traverse(desc.id, level + 1);
           }
         });
       };
-      traverseNetwork(userId as string, 1);
+      traverse(userId as string, 1);
 
       const dynamicEntries: any[] = [];
       networkMembers.forEach(({ user: member, level }) => {
@@ -1025,9 +1028,10 @@ async function startServer() {
       const networkMembers: any[] = [];
       const visited = new Set<string>();
 
-      const traverseNetwork = (uId: string, currentLevel: number) => {
-        if (currentLevel > 5) return;
-        const descendants = users.filter(u => u.referredBy === uId);
+      const traverse = (uId: string, level: number) => {
+        if (level > 5) return;
+        const sponsorUser = users.find(u => u.id === uId);
+        const descendants = users.filter(u => u.referredBy === uId || (sponsorUser && u.referredBy === sponsorUser.referralCode));
         descendants.forEach(desc => {
           if (!visited.has(desc.id)) {
             visited.add(desc.id);
