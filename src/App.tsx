@@ -374,7 +374,13 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
-  const [referredByCode, setReferredByCode] = useState('');
+  const [referredByCode, setReferredByCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('ref') || '';
+    }
+    return '';
+  });
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
@@ -934,6 +940,26 @@ export default function App() {
       return;
     }
 
+    const availableBalance = referralHistory.reduce((sum, item) => sum + item.amount, 0) - withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + item.amount, 0);
+
+    if (availableBalance < 50) {
+      setWithdrawalMessage({
+        text: language === 'en' ? 'Insufficient balance. Minimum withdrawal is $50.' : language === 'es' ? 'Saldo insuficiente. El retiro mínimo es $50.' : 'Saldo insuficiente. O saque mínimo é de $50.',
+        isError: true
+      });
+      setWithdrawalLoading(false);
+      return;
+    }
+
+    if (parseFloat(withdrawAmount) > availableBalance) {
+      setWithdrawalMessage({
+        text: language === 'en' ? 'Insufficient balance for this amount.' : language === 'es' ? 'Saldo insuficiente para este monto.' : 'Saldo insuficiente para o valor solicitado.',
+        isError: true
+      });
+      setWithdrawalLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/withdrawals', {
         method: 'POST',
@@ -1409,7 +1435,7 @@ export default function App() {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <img
-            src="/fybot_neon_dubai.png.png"
+            src="/fybot_neon_small.png"
             alt="Fybot Dubai Background"
             className="w-full h-full object-cover object-center pointer-events-none"
           />
@@ -1439,7 +1465,7 @@ export default function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-[420px] bg-[#181f2f] border border-white/5 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10"
+          className="w-full max-w-[550px] bg-[#181f2f] border border-white/5 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10"
         >
           <div className="space-y-1 pb-6">
             {isSignUp && (
@@ -1577,7 +1603,25 @@ export default function App() {
             </p>
           </div>
         </motion.div>
-      </div >
+
+        {/* Risk Warning Box */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="w-full max-w-[550px] mt-6 bg-black/70 backdrop-blur-md border border-white/10 rounded-xl p-5 shadow-2xl relative z-10 hidden lg:block"
+        >
+          <h3 className="text-red-500 font-bold text-[18px] uppercase tracking-widest mb-2 flex items-center gap-2">
+            <AlertTriangle size={18} /> Aviso de Risco
+          </h3>
+          <p className="text-[15px] text-white/60 leading-relaxed text-justify mb-3">
+            A Deriv oferece derivativos complexos, como opções e contratos por diferença (“CFDs”). Esses produtos podem não ser adequados para todos os clientes, e negociá-los implica riscos. Antes de negociar, entenda que: (a) você pode perder parte ou todo o dinheiro investido; (b) se houver conversão de moeda, as taxas de câmbio afetarão seu resultado. Nunca negocie com dinheiro emprestado ou que não pode perder.
+          </p>
+          <p className="text-[15px] text-white/60 leading-relaxed text-justify">
+            Ao operar pela plataforma, você declara estar ciente e de acordo com estes termos. A plataforma não se responsabiliza por perdas decorrentes das operações realizadas.
+          </p>
+        </motion.div>
+      </div>
     );
   }
 

@@ -162,3 +162,16 @@ export async function saveUserStates(userStates: Record<string, any>) {
         );
     }
 }
+
+// Referral Earnings
+export async function getReferralEarnings() {
+    const [rows] = await pool.query('SELECT * FROM referral_earnings');
+    return rows as any[];
+}
+export async function insertReferralEarning(e: any) {
+    await pool.query(
+        `INSERT INTO referral_earnings (id, referrerId, referredName, referredEmail, level, amount, type, timestamp) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE referrerId=referrerId`,
+        [e.id, e.referrerId, e.referredName, e.referredEmail, e.level, e.amount, e.type, e.timestamp]
+    );
+}

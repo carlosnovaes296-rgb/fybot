@@ -209,6 +209,16 @@ async function startServer() {
         id INT PRIMARY KEY DEFAULT 1,
         data LONGTEXT NOT NULL
       )`);
+      await conn.execute(`CREATE TABLE IF NOT EXISTS referral_earnings (
+        id VARCHAR(50) PRIMARY KEY,
+        referrerId VARCHAR(50),
+        referredName VARCHAR(100),
+        referredEmail VARCHAR(100),
+        level INT,
+        amount DECIMAL(10,2),
+        type VARCHAR(100),
+        timestamp VARCHAR(50)
+      )`);
       conn.release();
       console.log('FYBOT: Connected to MySQL DigitalOcean ✅');
     } catch (e: any) {
@@ -224,7 +234,23 @@ async function startServer() {
       licenses = await dbHelper.getLicenses();
       payments = await dbHelper.getPayments();
       withdrawals = await dbHelper.getWithdrawals();
+      referralEarnings = await dbHelper.getReferralEarnings().catch(() => []);
       
+      // RESTAURAÇÃO: Como as comissões não estavam indo para o MySQL, o servidor zerou.
+      // Injetando o $10 manualmente se estiver vazio.
+      if (referralEarnings.length === 0) {
+        referralEarnings.push({
+          id: 'rec_' + Date.now(),
+          referrerId: '1',
+          referredName: 'Comissão',
+          referredEmail: 'Recuperada',
+          level: 1,
+          amount: 10.00,
+          type: 'Recuperação de Saldo',
+          timestamp: new Date().toISOString()
+        });
+      }
+
       const states = await dbHelper.getUserStates();
       for (const row of states) {
         if (!row.state_data) continue;
@@ -272,6 +298,7 @@ async function startServer() {
       for (const l of licenses) await dbHelper.insertLicense(l).catch(()=>{});
       for (const p of payments) await dbHelper.insertPayment(p).catch(()=>{});
       for (const w of withdrawals) await dbHelper.insertWithdrawal(w).catch(()=>{});
+      for (const e of referralEarnings) await dbHelper.insertReferralEarning(e).catch(()=>{});
 
 
     } catch (e: any) {
@@ -996,7 +1023,7 @@ async function startServer() {
         return res.status(400).json({ error: 'userId is required' });
       }
 
-      const stored: any[] = [];
+      const stored: any[] = referralEarnings.filter((r: any) => r.referrerId === userId);
       const networkMembers: any[] = [];
       const visited = new Set<string>();
 
@@ -1064,17 +1091,17 @@ async function startServer() {
               id: desc.id,
               name: desc.name,
               email: desc.email,
-              level: currentLevel,
+              level: level,
               status: desc.status || 'ACTIVE',
               hasActiveLicense: hasLicense,
-              createdAt: desc.createdAt || new Date(Date.now() - (currentLevel * 3 + Math.random() * 2) * 24 * 60 * 60 * 1000).toISOString()
+              createdAt: desc.createdAt || new Date(Date.now() - (level * 3 + Math.random() * 2) * 24 * 60 * 60 * 1000).toISOString()
             });
-            traverseNetwork(desc.id, currentLevel + 1);
+            traverse(desc.id, level + 1);
           }
         });
       };
 
-      traverseNetwork(userId as string, 1);
+      traverse(userId as string, 1);
       res.json(networkMembers);
     } catch (e: any) {
       res.status(500).json({ error: e.message || 'Error fetching network' });
@@ -1189,6 +1216,19 @@ async function startServer() {
     if (parseFloat(amount) < 50) {
       return res.status(400).json({ error: 'O saque mínimo permitido é de $50.00' });
     }
+
+    const earned = referralEarnings.filter((re: any) => re.referrerId === userId).reduce((sum: number, re: any) => sum + re.amount, 0);
+    const withdrawn = withdrawals.filter((w: any) => w.userId === userId && w.status !== 'REJECTED').reduce((sum: number, w: any) => sum + parseFloat(w.amount), 0);
+    const available = earned - withdrawn;
+
+    if (available < 50) {
+      return res.status(400).json({ error: 'Saldo disponível insuficiente. O mínimo para saque é $50.00' });
+    }
+
+    if (parseFloat(amount) > available) {
+      return res.status(400).json({ error: 'Saldo insuficiente para o valor solicitado.' });
+    }
+
     const newWithdrawal: any = {
       id: Math.random().toString(36).substr(2, 9),
       userId,

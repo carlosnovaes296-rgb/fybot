@@ -56,7 +56,7 @@ conn.on('ready', async () => {
     await uploadFile('./src/components/TradingChart.tsx', '/root/fybot/src/components/TradingChart.tsx');
     
     console.log('🛠 Criando pastas do backend no VPS...');
-    await runCmd('mkdir -p /root/fybot/backend/deriv /root/fybot/backend/services');
+    await runCmd('mkdir -p /root/fybot/backend/deriv /root/fybot/backend/services /root/fybot/backend/db');
     
     console.log('📤 4. Enviando backend/deriv e backend/services...');
     await uploadFile('./backend/deriv/config.ts', '/root/fybot/backend/deriv/config.ts');
@@ -65,6 +65,7 @@ conn.on('ready', async () => {
     await uploadFile('./backend/deriv/websocket.ts', '/root/fybot/backend/deriv/websocket.ts');
     await uploadFile('./backend/services/DerivBotEngine.ts', '/root/fybot/backend/services/DerivBotEngine.ts');
     await uploadFile('./backend/services/derivService.ts', '/root/fybot/backend/services/derivService.ts');
+    await uploadFile('./backend/db/mysql.ts', '/root/fybot/backend/db/mysql.ts');
     
     console.log('🔍 Checando se o arquivo TradingChart chegou no VPS...');
     const lsOut = await runCmd('ls -la /root/fybot/src/components/ || true');

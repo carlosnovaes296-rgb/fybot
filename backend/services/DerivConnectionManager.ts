@@ -6,7 +6,7 @@ export class DerivConnectionManager {
 
   constructor(
     private getUserState: (userId: string) => any,
-    private addUserLog: (userId: string, msg: string) => void,
+    public addUserLog: (userId: string, msg: string) => void,
     private getUsers: () => any[]
   ) {}
 
