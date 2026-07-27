@@ -23,17 +23,13 @@ const isTradingTime = (): boolean => {
   const day = now.getDay(); // 0 = Domingo, 1 = Segunda ... 5 = Sexta, 6 = Sábado
   const hour = now.getHours();
 
-  // Bloqueio de Fim de Semana (Sexta 17h até Domingo 20:59)
-  if (day === 6) return false;               // Sábado o dia todo
-  if (day === 0 && hour < 21) return false;  // Domingo antes das 21h
-  if (day === 5 && hour >= 17) return false; // Sexta a partir das 17h
+  if (day === 0 || day === 6) return false;
 
-  // Pausa Diária: Segunda a Quinta das 17h às 20:59
-  if (day >= 1 && day <= 4) {
-    if (hour >= 17 && hour < 21) return false;
+  if (day >= 1 && day <= 5) {
+    return hour >= 6 && hour < 17;
   }
 
-  return true;
+  return false;
 };
 
 // Remove PG pool logic
@@ -328,36 +324,33 @@ async function startServer() {
     const day = brtNow.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
     const hours = brtNow.getHours();
     
-    // Sábado: sempre fechado
-    if (day === 6) return false;
+    // Sábado e Domingo fechado
+    if (day === 0 || day === 6) return false;
     
-    // Domingo: aberto apenas >= 21h
-    if (day === 0) return hours >= 21;
-    
-    // Sexta: aberto apenas < 17h
-    if (day === 5) return hours < 17;
-    
-    // Segunda a Quinta: aberto < 17h OU >= 21h
-    if (day >= 1 && day <= 4) {
-      return hours < 17 || hours >= 21;
+    // Segunda a Sexta: aberto apenas >= 6h e < 17h
+    if (day >= 1 && day <= 5) {
+      return hours >= 6 && hours < 17;
     }
+    
     return false;
   };
 
   const getNextSessionStart = () => {
     const brtNow = getBrazilTime();
     let nextStart = new Date(brtNow);
-    nextStart.setHours(21, 0, 0, 0);
+    nextStart.setHours(6, 0, 0, 0);
 
     const day = brtNow.getDay();
     const hours = brtNow.getHours();
 
-    if (day === 5 && hours >= 17) { // Sexta após as 17 -> Pula pra Domingo
+    if (day === 5 && hours >= 17) { // Sexta após as 17 -> Pula pra Segunda
+        nextStart.setDate(nextStart.getDate() + 3);
+    } else if (day === 6) { // Sábado -> Pula pra Segunda
         nextStart.setDate(nextStart.getDate() + 2);
-    } else if (day === 6) { // Sábado -> Pula pra Domingo
+    } else if (day === 0) { // Domingo -> Pula pra Segunda
         nextStart.setDate(nextStart.getDate() + 1);
-    } else if (hours >= 21) {
-        // Já passou das 21h de hoje, a "próxima" abertura será amanhã às 21h
+    } else if (hours >= 17) {
+        // Segunda-Quinta após as 17 -> Amanhã às 6h
         nextStart.setDate(nextStart.getDate() + 1);
     } 
     
@@ -402,7 +395,7 @@ async function startServer() {
          if (!state.systemBlocked) {
              state.systemBlocked = true;
              state.blockedUntil = getNextSessionStart();
-             addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 21:00 às 15:00 de Dom a Sex. Sistema bloqueado até a próxima abertura.");
+             addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
              if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
              state.botRunning = false;
          }
@@ -445,8 +438,9 @@ async function startServer() {
         currentSessionTag: state.currentSessionTag || '',
         blockedUntil: state.blockedUntil
       });
-    } catch (error) {
-      res.status(500).json({ error: "Internal Server Error" });
+    } catch (error: any) {
+      console.error("[STATUS ERROR]", error);
+      res.status(500).json({ error: error.message || "Unknown error", stack: error.stack });
     }
   });
 

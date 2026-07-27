@@ -409,7 +409,7 @@ export default function App() {
     localStorage.setItem('fybotTradeSettings', JSON.stringify(updated));
   };
 
-  const hasActiveLicense = licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
+  const hasActiveLicense = currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
 
   const chartDataMap = {
     '7D': [
@@ -1418,7 +1418,7 @@ export default function App() {
       if (currentUser?.role === 'ADMIN') {
         fetchAdminData();
       }
-    }, 10000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isLoggedIn, currentUser?.role]);
@@ -2053,7 +2053,7 @@ export default function App() {
                         labelClassName="text-emerald-400"
                         valueClassName="text-emerald-400"
                         trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                        subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias iniciando a las 10:00 horas" : "Operações diárias iniciando às 10:00 horas"}
+                        subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                       />
                       {(() => {
                         // Só mostra lucro se estiver conectado com saldo real/demo validado
@@ -2068,7 +2068,7 @@ export default function App() {
                             valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                             labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
                             trendPositive={realTimeProfit >= 0}
-                            subLabel={language === "en" ? "Daily operations starting at 10:00 AM" : language === "es" ? "Operaciones diarias comenzando a las 10:00 AM" : "Operações diárias iniciando às 10:00 horas"}
+                            subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                           />
                         );
                       })()}

@@ -253,50 +253,61 @@ export class DerivBotEngine {
 
         // --- PULLBACK OU CONTINUAÇÃO ---
         let signal: 'BUY' | 'SELL' | null = null;
-        let score = 40; // Base score
+        let scoreBuy = 0;
+        let scoreSell = 0;
 
         // Log de Monitoramento a cada 30 segundos para debugging na UI
         const agora = new Date();
-        if (agora.getSeconds() % 15 === 0) { // A cada 15 segundos ele manda log pra UI
+        if (agora.getSeconds() % 15 === 0) {
             if (this.onLog) {
-                this.onLog(`🧠 Lendo Mercado... Regime: ${regime} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(2)} | Score: ${score}`);
+                this.onLog(`🧠 Analisando... Regime: ${regime} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(2)}`);
             }
         }
         
-        let requiredScore = 30;
-        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 20;
+        // Aumentamos o rigor da pontuação para ele NÃO entrar à toa
+        let requiredScore = 50;
+        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 40;
 
-        // --- Condições de Mercado (RSI + EMA + PIVOTS) ---
-        // Condições de Compra
-        if (regime === 'TREND_UP' || regime === 'LATERAL') {
-            const isNearResistance = (nearestRes - currentPrice) <= (currentAtrM15 * 0.5);
-            // Verifica RSI com uma tolerância maior, ou entra se a tendência for muito forte (ADX > 30)
-            if (currentRsi < 65 || (currentRsi < 75 && currentAdx > 30)) { 
-                // Se a tendência for muito forte, ignora a resistência
-                if (!isNearResistance || currentAdx > 30) {
-                    score += 20;
-                    if (currentAdx > 20) score += 20;
-                    if (currentPrice > currentEma) score += 15;
-                    if (score >= requiredScore) signal = 'BUY'; 
-                }
-            }
-        } 
+        // --- Sistema de Pontuação (Confluência) ---
+        // 1. Tendência Principal (ADX + DMI)
+        if (regime === 'TREND_UP') scoreBuy += 20;
+        if (regime === 'TREND_DOWN') scoreSell += 20;
 
-        // Condições de Venda
-        if (regime === 'TREND_DOWN' || regime === 'LATERAL') {
-            const isNearSupport = (currentPrice - nearestSup) <= (currentAtrM15 * 0.5);
-            if (currentRsi > 35 || (currentRsi > 25 && currentAdx > 30)) {
-                // Se a tendência for muito forte, ignora o suporte
-                if (!isNearSupport || currentAdx > 30) {
-                    score += 20;
-                    if (currentAdx > 20) score += 20;
-                    if (currentPrice < currentEma) score += 15;
-                    if (score >= requiredScore) signal = 'SELL'; 
-                }
-            } 
+        // 2. Tendência Curta (Preço vs EMA)
+        if (currentPrice > currentEma) scoreBuy += 15;
+        if (currentPrice < currentEma) scoreSell += 15;
+
+        // 3. Força da Tendência (ADX)
+        if (currentAdx > 25) {
+            scoreBuy += 10;
+            scoreSell += 10;
+        }
+
+        // 4. RSI (Filtro de Exaustão / Pullback)
+        // Para COMPRAR, é melhor que o RSI não esteja sobrecomprado (ideal < 60)
+        if (currentRsi < 55) scoreBuy += 10;
+        if (currentRsi < 40) scoreBuy += 10; // Pullback perfeito
+
+        // Para VENDER, é melhor que o RSI não esteja sobrevendido (ideal > 40)
+        if (currentRsi > 45) scoreSell += 10;
+        if (currentRsi > 60) scoreSell += 10; // Pullback perfeito
+
+        // 5. Espaço até Suporte/Resistência (Evitar comprar na cara da parede)
+        const roomToRes = nearestRes - currentPrice;
+        const roomToSup = currentPrice - nearestSup;
+        if (roomToRes > (currentAtrM15 * 1.5)) scoreBuy += 10;
+        if (roomToSup > (currentAtrM15 * 1.5)) scoreSell += 10;
+
+        // --- Decisão Final ---
+        if (scoreBuy >= requiredScore && scoreBuy > scoreSell) {
+            signal = 'BUY';
+        } else if (scoreSell >= requiredScore && scoreSell > scoreBuy) {
+            signal = 'SELL';
         }
         
-        console.log(`[ANÁLISE] Regime: ${regime} | Score: ${score} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
+        const maxScore = Math.max(scoreBuy, scoreSell);
+        
+        console.log(`[ANÁLISE] Regime: ${regime} | Score: ${maxScore} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
 
 
         if (signal && this.onSignal) {
@@ -310,8 +321,9 @@ export class DerivBotEngine {
             this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
             
             // SL e TP para Ouro (XAUUSD) baseado em porcentagem
-            const tpPercent = 0.0002; // 0.02%
-            const slPercent = 0.0050; // 0.50%
+            // TP Gigante (5%) para permitir SURFAR a tendência infinita. O Trailing Stop cuidará do fechamento.
+            const tpPercent = 0.0500; // 5.00%
+            const slPercent = 0.0090; // 0.90% (Maior margem para evitar violinadas)
             let tpPrice = 0;
             let slPrice = 0;
             if (signal === 'BUY') {
@@ -322,7 +334,7 @@ export class DerivBotEngine {
                 slPrice = parseFloat((currentPrice * (1 + slPercent)).toFixed(2));
             }
             
-            const reason = `[Regime: ${regime}] Score: ${score.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
+            const reason = `[Regime: ${regime}] Score: ${maxScore.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
             this.onSignal(signal, currentPrice, reason, tpPrice, slPrice);
         }
     }

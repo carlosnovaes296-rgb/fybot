@@ -180,9 +180,8 @@ export class DerivConnectionManager {
         // Atualiza Equity globalmente
         state.equity = state.balance + profit;
 
-        const trade = state.trades.find((t: any) => t.id === contractId || t.id.startsWith("PENDING_"));
+        const trade = state.trades.find((t: any) => String(t.id) === contractId);
         if (trade) {
-          trade.id = contractId; // Fixes pending ID
           trade.profit = profit;
           
           if (isSold) {
@@ -216,12 +215,8 @@ export class DerivConnectionManager {
                 }
             }
           } else {
-            // TRAILING STOP (VIOLINADA) - Regra 6
-            // Fechar antecipadamente se bater a meta de $10 de lucro!
-            if (profit >= 10) {
-                this.addUserLog(userId, `🎯 [META ATINGIDA] Lucro chegou a $${profit.toFixed(2)} antes dos 5 minutos! Fechando com lucro garantido!`);
-                ws.send(JSON.stringify({ sell: contractId, price: 0 }));
-            }
+            // TRAILING STOP (SURF INFINITO) - Regra 6
+            // Removemos o limite rígido de lucro para deixar ele surfar o mercado todo!
             
             const peaks = this.userPeakProfits.get(userId)!;
             if (!peaks[contractId]) peaks[contractId] = 0;
@@ -230,13 +225,15 @@ export class DerivConnectionManager {
               peaks[contractId] = profit;
             }
 
-            // Se o pico for maior que $0.50 (pra não ser tão sensível) e lucro cair 20% do pico (mantendo 80%)
+            // Trailing Stop Inteligente: 
+            // Se já passamos de $0.50 de lucro, nós acompanhamos o preço.
+            // Se o lucro cair 20% do topo máximo alcançado (segurando 80% do lucro na mão), a gente corta a ordem!
             if (peaks[contractId] > 0.50 && profit < (peaks[contractId] * 0.8)) {
-                this.addUserLog(userId, `🛡️ [VIOLINADA PROTEGIDA] Lucro caiu de $${peaks[contractId].toFixed(2)} para $${profit.toFixed(2)}. Fechando ordem para garantir 80%!`);
+                this.addUserLog(userId, `🏄 [SURF FINALIZADO] O mercado voltou! Lucro caiu de $${peaks[contractId].toFixed(2)} para $${profit.toFixed(2)}. Fechando para garantir 80% do topo!`);
                 ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                 peaks[contractId] = 0; // Reseta para evitar spam
             }
-            
+
             // --- LÓGICA DE GRID (PREÇO MÉDIO DE RECUPERAÇÃO) ---
             const entryPrice = Number(contract.entry_spot || contract.buy_price);
             const currentSpot = Number(contract.current_spot);
@@ -250,7 +247,7 @@ export class DerivConnectionManager {
                 if (dropPercent >= 0.02 && openCount === 1) {
                     this.addUserLog(userId, `📉 [GRID NÍVEL 1] Recuo negativo atingiu 0.02% (${dropPercent.toFixed(3)}%). Disparando Ordem 2!`);
                     const tpPercent = 0.0002;
-                    const slPercent = 0.0050; // 0.50%
+                    const slPercent = 0.0090; // 0.90% fixo (Maior margem)
                     const engineTp = isBuy ? currentSpot * (1 + tpPercent) : currentSpot * (1 - tpPercent);
                     const engineSl = isBuy ? currentSpot * (1 - slPercent) : currentSpot * (1 + slPercent);
                     this.executeSignal(userId, isBuy ? 'BUY' : 'SELL', currentSpot, "Correção de Grid Nível 1", engineTp, engineSl);
@@ -258,7 +255,7 @@ export class DerivConnectionManager {
                 else if (dropPercent >= 0.04 && openCount === 2) {
                     this.addUserLog(userId, `📉 [GRID NÍVEL 2] Recuo negativo atingiu 0.04% (${dropPercent.toFixed(3)}%). Disparando Ordem 3!`);
                     const tpPercent = 0.0002;
-                    const slPercent = 0.0050; // 0.50%
+                    const slPercent = 0.0090; // 0.90% fixo (Maior margem)
                     const engineTp = isBuy ? currentSpot * (1 + tpPercent) : currentSpot * (1 - tpPercent);
                     const engineSl = isBuy ? currentSpot * (1 - slPercent) : currentSpot * (1 + slPercent);
                     this.executeSignal(userId, isBuy ? 'BUY' : 'SELL', currentSpot, "Correção de Grid Nível 2", engineTp, engineSl);
@@ -278,9 +275,15 @@ export class DerivConnectionManager {
           const state = this.getUserState(userId);
           state.trades = (state.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
         } else {
-          const contractId = data.buy.transaction_id || data.buy.contract_id;
+          const contractId = String(data.buy.transaction_id || data.buy.contract_id);
           console.log(`[DerivConnectionManager] Ordem aberta com sucesso para ${userId}!`);
           this.addUserLog(userId, `🚀 Ordem aberta na corretora com sucesso! ID: ${contractId}`);
+          
+          const state = this.getUserState(userId);
+          const pending = state.trades.find((t: any) => String(t.id).startsWith('PENDING_'));
+          if (pending) {
+              pending.id = contractId;
+          }
         }
       }
       
@@ -314,6 +317,16 @@ export class DerivConnectionManager {
     
     ws.on('close', () => {
         this.userSockets.delete(userId);
+        const state = this.getUserState(userId);
+        if (state && state.botRunning) {
+            this.addUserLog(userId, `⚠️ Conexão de envio de ordens perdida. Tentando reconectar...`);
+            setTimeout(() => {
+                const checkState = this.getUserState(userId);
+                if (checkState && checkState.botRunning) {
+                    this.start(userId);
+                }
+            }, 5000);
+        }
     });
   }
 
@@ -340,10 +353,10 @@ export class DerivConnectionManager {
         return;
     }
 
-    // Regra Extra: Limite máximo absoluto de ordens simultâneas travado em 3 (Sistema Grid)
+    // Regra Extra: Limite máximo absoluto de ordens simultâneas travado em 1 (Grid Desativado)
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
-    if (openTradesCount >= 3) {
-        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Já existem 3 ordens abertas simultâneas (Grid Máximo). Novo sinal bloqueado!`);
+    if (openTradesCount >= 1) {
+        this.addUserLog(userId, `✋ [LIMITE DE ORDENS] Já existe 1 ordem aberta. Aguardando finalização para buscar nova entrada.`);
         return;
     }
 
@@ -358,16 +371,21 @@ export class DerivConnectionManager {
 
     this.addUserLog(userId, `🚀 [SINAL RECEBIDO] ${reason}. Executando ${direction}...`);
 
-    // Regra 5: Stake Dinâmica de 1% do Saldo
+    // Regra 5: Stake Dinâmica de 10% do Saldo (Ajustado a pedido do usuário, ordem única super agressiva)
     const balance = state.balance > 0 ? state.balance : 1000;
-    const dynamicStake = Math.max(0.5, parseFloat((balance * 0.01).toFixed(2))); // Mínimo $0.50
+    const dynamicStake = Math.max(0.5, parseFloat((balance * 0.10).toFixed(2))); // Mínimo $0.50
 
     const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
     const multiplierValue = 100;
     
     // Converte os preços absolutos de TP/SL para o valor monetário esperado pela API da Deriv
-    const tpAmount = parseFloat((Math.abs((engineTp - price) / price) * dynamicStake * multiplierValue).toFixed(2));
-    const slAmount = parseFloat((Math.abs((engineSl - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    let tpAmount = parseFloat((Math.abs((engineTp - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    let slAmount = parseFloat((Math.abs((engineSl - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    
+    // A corretora Deriv exige margens financeiras seguras para o Limit Order (TP/SL)
+    // Para evitar qualquer erro de limite (LimitOrderAmountTooLow), forçamos $0.50 como mínimo absoluto.
+    if (tpAmount < 0.50) tpAmount = 0.50;
+    if (slAmount < 0.50) slAmount = 0.50;
     
     // 1. Envia a Ordem de Compra Direta (Multipliers para Ouro)
     ws.send(JSON.stringify({

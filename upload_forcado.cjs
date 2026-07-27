@@ -64,6 +64,7 @@ conn.on('ready', async () => {
     await uploadFile('./backend/deriv/routes.ts', '/root/fybot/backend/deriv/routes.ts');
     await uploadFile('./backend/deriv/websocket.ts', '/root/fybot/backend/deriv/websocket.ts');
     await uploadFile('./backend/services/DerivBotEngine.ts', '/root/fybot/backend/services/DerivBotEngine.ts');
+    await uploadFile('./backend/services/DerivConnectionManager.ts', '/root/fybot/backend/services/DerivConnectionManager.ts');
     await uploadFile('./backend/services/derivService.ts', '/root/fybot/backend/services/derivService.ts');
     await uploadFile('./backend/db/mysql.ts', '/root/fybot/backend/db/mysql.ts');
     
