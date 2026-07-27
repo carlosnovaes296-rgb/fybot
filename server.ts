@@ -19,17 +19,7 @@ import * as dbHelper from './backend/db/mysql.ts';
 let mysqlPool: mysql.Pool | null = null;
 
 const isTradingTime = (): boolean => {
-  const now = new Date();
-  const day = now.getDay(); // 0 = Domingo, 1 = Segunda ... 5 = Sexta, 6 = Sábado
-  const hour = now.getHours();
-
-  if (day === 0 || day === 6) return false;
-
-  if (day >= 1 && day <= 5) {
-    return hour >= 6 && hour < 17;
-  }
-
-  return false;
+  return true; // Temporariamente liberado para testes
 };
 
 // Remove PG pool logic
@@ -320,19 +310,7 @@ async function startServer() {
   };
 
   const isTradingWindowOpen = () => {
-    const brtNow = getBrazilTime();
-    const day = brtNow.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
-    const hours = brtNow.getHours();
-    
-    // Sábado e Domingo fechado
-    if (day === 0 || day === 6) return false;
-    
-    // Segunda a Sexta: aberto apenas >= 6h e < 17h
-    if (day >= 1 && day <= 5) {
-      return hours >= 6 && hours < 17;
-    }
-    
-    return false;
+    return true; // Temporariamente liberado para testes
   };
 
   const getNextSessionStart = () => {

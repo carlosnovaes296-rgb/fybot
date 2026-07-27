@@ -321,8 +321,7 @@ export class DerivBotEngine {
             this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
             
             // SL e TP para Ouro (XAUUSD) baseado em porcentagem
-            // TP Gigante (5%) para permitir SURFAR a tendência infinita. O Trailing Stop cuidará do fechamento.
-            const tpPercent = 0.0500; // 5.00%
+            const tpPercent = 0.0002; // 0.02% (Scalping Rápido)
             const slPercent = 0.0090; // 0.90% (Maior margem para evitar violinadas)
             let tpPrice = 0;
             let slPrice = 0;
