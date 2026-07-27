@@ -284,10 +284,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
               });
               if (onPriceUpdate) onPriceUpdate(Number(c.close));
            } else if (data.error) {
-               console.error("[FYBOT] Erro retornado pela Deriv API:", data.error);
                if (data.error.code === 'MarketIsClosed') {
-                   console.warn("[FYBOT] Mercado Fechado! Requisitando histórico sem inscrição ao vivo...");
+                   console.log("[FYBOT] Mercado Fechado! Requisitando histórico sem inscrição ao vivo...");
                    requestCandles(0);
+               } else {
+                   console.error("[FYBOT] Erro retornado pela Deriv API:", data.error);
                }
            }
         } catch (err) {
