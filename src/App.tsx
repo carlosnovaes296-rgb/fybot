@@ -1914,13 +1914,15 @@ export default function App() {
             </div>
 
             <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
-              <button
-                onClick={toggleAccountType}
-                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
-                className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
-              >
-                CONTA DEMO
-              </button>
+              {currentUser?.id === '1' && (
+                <button
+                  onClick={toggleAccountType}
+                  disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                  className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+                >
+                  CONTA DEMO
+                </button>
+              )}
               <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'REAL'}
@@ -1974,13 +1976,15 @@ export default function App() {
             <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
           </div>
           <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            <button
-              onClick={toggleAccountType}
-              disabled={loading || currentUser?.activeAccountType === 'DEMO'}
-              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
-            >
-              DEMO
-            </button>
+            {currentUser?.id === '1' && (
+              <button
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+              >
+                DEMO
+              </button>
+            )}
             <button
               onClick={toggleAccountType}
               disabled={loading || currentUser?.activeAccountType === 'REAL'}
@@ -3828,14 +3832,16 @@ export default function App() {
                                 <Globe size={16} />
                                 {language === 'en' ? 'GET REAL TOKEN' : 'GERAR TOKEN REAL'}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
-                                className="flex-1 py-3 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
-                              >
-                                <Globe size={16} />
-                                {language === 'en' ? 'GET DEMO TOKEN' : 'GERAR TOKEN DEMO'}
-                              </button>
+                              {currentUser?.id === '1' && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                                  className="flex-1 py-3 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
+                                >
+                                  <Globe size={16} />
+                                  {language === 'en' ? 'GET DEMO TOKEN' : 'GERAR TOKEN DEMO'}
+                                </button>
+                              )}
                             </div>
 
                             <div className="space-y-4 border-t border-white/5 pt-4">
@@ -3856,22 +3862,24 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                  🟢 Token da Conta Demo
-                                </label>
-                                <div className="relative">
-                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                  <input
-                                    type="text"
-                                    value={profileForm.derivTokenDemo || ''}
-                                    onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                                    onBlur={autoSaveTokens}
-                                    placeholder="Cole o token da conta DEMO aqui (pat_...)"
-                                    className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
-                                  />
+                              {currentUser?.id === '1' && (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                    🟢 Token da Conta Demo
+                                  </label>
+                                  <div className="relative">
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                    <input
+                                      type="text"
+                                      value={profileForm.derivTokenDemo || ''}
+                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                                      onBlur={autoSaveTokens}
+                                      placeholder="Cole o token da conta DEMO aqui (pat_...)"
+                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
+                                    />
+                                  </div>
                                 </div>
-                              </div>
+                              )}
 
                               <button
                                 type="button"
