@@ -145,7 +145,7 @@ export class DerivConnectionManager {
 
     ws.on('open', () => {
       this.addUserLog(userId, `✅ [WS] Conectado à Deriv!`);
-      
+
       // Mantém a conexão viva a cada 25 segundos
       pingInterval = setInterval(() => {
         if (ws.readyState === ws.OPEN) {
@@ -366,6 +366,17 @@ export class DerivConnectionManager {
 
   public executeSignal(userId: string, direction: 'BUY' | 'SELL', price: number, reason: string, engineTp: number, engineSl: number) {
     const state = this.getUserState(userId);
+
+    // CORRIGIDO: auto-desbloqueio. Antes, "systemBlocked" era ligado quando a meta diária
+    // era batida (com um "blockedUntil" calculado), mas nada neste arquivo voltava a checar
+    // esse horário para desligar o bloqueio — ou seja, uma vez bloqueado, o bot nunca mais
+    // abria ordem novamente em execuções futuras, mesmo depois do horário previsto.
+    if (state.systemBlocked && state.blockedUntil && new Date() >= new Date(state.blockedUntil)) {
+      state.systemBlocked = false;
+      state.dailyProfit = 0;
+      state.blockedUntil = null;
+      this.addUserLog(userId, `🔓 [DESBLOQUEIO AUTOMÁTICO] Horário de bloqueio expirou. Sistema liberado para novas operações.`);
+    }
 
     // Se o lucro de hoje já passou ou é igual à meta, garante que fique bloqueado.
     const target = state.dailyProfitTarget || (state.balance * 0.05);
