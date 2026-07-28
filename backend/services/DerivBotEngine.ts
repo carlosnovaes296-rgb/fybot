@@ -87,7 +87,16 @@ export class DerivBotEngine {
             }
         });
 
+        let enginePingInterval: NodeJS.Timeout;
+
         this.ws.on('open', () => {
+            // Ping a cada 25s para manter a conexão viva
+            enginePingInterval = setInterval(() => {
+                if (this.ws?.readyState === NodeWebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({ ping: 1 }));
+                }
+            }, 25000);
+
             console.log(`[DerivBotEngine] Feed conectado e autenticado. Solicitando histórico M15 e H1 para ${this.symbol}...`);
             if (this.onLog) this.onLog(`📊 Conectado ao feed da Deriv. Baixando histórico M15 e H1 do ${this.symbol}...`);
             this.isConnected = true;
@@ -167,6 +176,7 @@ export class DerivBotEngine {
         });
 
         this.ws.on('close', () => {
+            clearInterval(enginePingInterval);
             console.log('[DerivBotEngine] Conexão com feed fechada. Tentando reconectar em 5s...');
             if (this.onLog) this.onLog(`⚠️ Conexão com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
@@ -176,6 +186,7 @@ export class DerivBotEngine {
         });
 
         this.ws.on('error', (err) => {
+            clearInterval(enginePingInterval);
             console.error('[DerivBotEngine] Erro no socket de feed:', err);
             this.ws?.close();
         });

@@ -2038,20 +2038,20 @@ export default function App() {
                         label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
                         value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
-                        icon={<Wallet className="text-emerald-400" />}
+                        icon={<Wallet className="text-amber-500" />}
                         trendPositive={true}
-                        labelClassName="text-emerald-400"
-                        valueClassName="text-emerald-400"
+                        labelClassName="text-amber-500"
+                        valueClassName="text-amber-500"
                         trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                       />
                       <StatCard
                         label={t.dashboard.dailyTargetLabel}
                         value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta="2%"
-                        icon={<Target className="text-emerald-400" />}
+                        icon={<Target className="text-amber-500" />}
                         trendPositive={true}
-                        labelClassName="text-emerald-400"
-                        valueClassName="text-emerald-400"
+                        labelClassName="text-amber-500"
+                        valueClassName="text-amber-500"
                         trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
                         subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                       />
@@ -2064,9 +2064,9 @@ export default function App() {
                             label={t.dashboard.dailyProfitLabel}
                             value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                             delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
-                            icon={<TrendingUp className="text-emerald-400" />}
-                            valueClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
-                            labelClassName={realTimeProfit >= 0 ? "text-emerald-400" : "text-red-400"}
+                            icon={<TrendingUp className="text-amber-500" />}
+                            valueClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
+                            labelClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
                             trendPositive={realTimeProfit >= 0}
                             subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                           />

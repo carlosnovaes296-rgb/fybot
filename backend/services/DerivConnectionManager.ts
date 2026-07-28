@@ -141,9 +141,18 @@ export class DerivConnectionManager {
 
     this.userSockets.set(userId, ws);
     this.userPeakProfits.set(userId, {});
+    let pingInterval: NodeJS.Timeout;
 
     ws.on('open', () => {
       this.addUserLog(userId, `✅ [WS] Conectado à Deriv!`);
+      
+      // Mantém a conexão viva a cada 25 segundos
+      pingInterval = setInterval(() => {
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ ping: 1 }));
+        }
+      }, 25000);
+
       if (needsAuthCommand) {
         this.addUserLog(userId, `Autenticando via fluxo clássico V3...`);
         ws.send(JSON.stringify({ authorize: tokenToUse }));
@@ -326,10 +335,12 @@ export class DerivConnectionManager {
     });
 
     ws.on('error', (err: any) => {
+      clearInterval(pingInterval);
       this.addUserLog(userId, `🚨 [ERRO WS] Falha ao conectar: ${err.message}`);
     });
 
     ws.on('close', () => {
+      clearInterval(pingInterval);
       this.userSockets.delete(userId);
       const state = this.getUserState(userId);
       if (state && state.botRunning) {
