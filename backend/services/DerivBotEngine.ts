@@ -9,14 +9,14 @@ export class DerivBotEngine {
     private isConnected = false;
     public riskProfile: string = 'CONSERVATIVE';
     private currentToken: string = '';
-    
+
     // Armazenamento de Histórico OHLC
     private candlesM15: Candle[] = [];
     private candlesH1: Candle[] = [];
-    
+
     // Cooldown para evitar spam de ordens
     private lastSignalTime: number = 0;
-    
+
     // Callbacks to notify server.ts
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
     public onRegimeChange?: (regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL') => void;
@@ -30,60 +30,60 @@ export class DerivBotEngine {
     public async connectWithToken(token: string) {
         if (this.isConnected) return;
         this.currentToken = token;
-        
-        console.log(`[DerivBotEngine] Autenticando Motor via API v1 OTP usando token: ${token.substring(0,8)}...`);
+
+        console.log(`[DerivBotEngine] Autenticando Motor via API v1 OTP usando token: ${token.substring(0, 8)}...`);
         if (this.onLog) this.onLog(`📡 Autenticando Motor de Análise na Deriv...`);
         let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${this.appId}&l=PT`;
         try {
-             // Buscar accounts para descobrir account_id e gerar OTP direto na Deriv
-             const headers = {
-                 'Authorization': `Bearer ${token}`,
-                 'Deriv-App-ID': '33TVM6cBQ9GfSjbwQHHdE',
-                 'Content-Type': 'application/json'
-             };
-             const accRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
-             const accData: any = await accRes.json();
-             
-             let accountId = '';
-             const contasArray = accData.accounts || accData.data || accData;
-             if (Array.isArray(contasArray)) {
-                 // Pega a conta DEMO para operar os testes (Prioriza VRT)
-                 let demoAcc = contasArray.find((a: any) => {
-                     const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
-                     return id.includes('VRT') || id.startsWith('VR');
-                 });
-                 if (!demoAcc) {
-                     demoAcc = contasArray.find((a: any) => {
-                         const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
-                         return id.includes('VOT') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
-                     });
-                 }
-                 if (demoAcc) accountId = demoAcc.account_id || demoAcc.loginid || demoAcc.id;
-             }
+            // Buscar accounts para descobrir account_id e gerar OTP direto na Deriv
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Deriv-App-ID': '33TVM6cBQ9GfSjbwQHHdE',
+                'Content-Type': 'application/json'
+            };
+            const accRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
+            const accData: any = await accRes.json();
 
-             if (accountId) {
-                 const otpRes = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`, {
-                     method: 'POST', headers, body: '{}'
-                 });
-                 const otpData: any = await otpRes.json();
-                 if (otpData?.data?.url) {
-                     wsUrl = otpData.data.url;
-                     console.log("[DerivBotEngine] Magic URL OTP obtida DIRETAMENTE da Deriv com sucesso!");
-                     if (this.onLog) this.onLog(`✅ Conexão Blindada (OTP) estabelecida para leitura de Velas!`);
-                 }
-             } else {
-                 console.log("[DerivBotEngine] Conta DEMO não encontrada, falha ao gerar OTP.");
-                 if (this.onLog) this.onLog(`⚠️ Falha ao criar conexão blindada: Conta virtual não encontrada.`);
-             }
-        } catch(e) {
-             console.error("[DerivBotEngine] Falha ao obter OTP para o motor", e);
-             if (this.onLog) this.onLog(`⚠️ Erro de rede ao conectar o motor.`);
+            let accountId = '';
+            const contasArray = accData.accounts || accData.data || accData;
+            if (Array.isArray(contasArray)) {
+                // Pega a conta DEMO para operar os testes (Prioriza VRT)
+                let demoAcc = contasArray.find((a: any) => {
+                    const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
+                    return id.includes('VRT') || id.startsWith('VR');
+                });
+                if (!demoAcc) {
+                    demoAcc = contasArray.find((a: any) => {
+                        const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
+                        return id.includes('VOT') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
+                    });
+                }
+                if (demoAcc) accountId = demoAcc.account_id || demoAcc.loginid || demoAcc.id;
+            }
+
+            if (accountId) {
+                const otpRes = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`, {
+                    method: 'POST', headers, body: '{}'
+                });
+                const otpData: any = await otpRes.json();
+                if (otpData?.data?.url) {
+                    wsUrl = otpData.data.url;
+                    console.log("[DerivBotEngine] Magic URL OTP obtida DIRETAMENTE da Deriv com sucesso!");
+                    if (this.onLog) this.onLog(`✅ Conexão Blindada (OTP) estabelecida para leitura de Velas!`);
+                }
+            } else {
+                console.log("[DerivBotEngine] Conta DEMO não encontrada, falha ao gerar OTP.");
+                if (this.onLog) this.onLog(`⚠️ Falha ao criar conexão blindada: Conta virtual não encontrada.`);
+            }
+        } catch (e) {
+            console.error("[DerivBotEngine] Falha ao obter OTP para o motor", e);
+            if (this.onLog) this.onLog(`⚠️ Erro de rede ao conectar o motor.`);
         }
 
         this.ws = new NodeWebSocket(wsUrl, {
-            headers: { 
-              'Origin': 'https://fybot.life',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            headers: {
+                'Origin': 'https://fybot.life',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
@@ -91,25 +91,25 @@ export class DerivBotEngine {
             console.log(`[DerivBotEngine] Feed conectado e autenticado. Solicitando histórico M15 e H1 para ${this.symbol}...`);
             if (this.onLog) this.onLog(`📊 Conectado ao feed da Deriv. Baixando histórico M15 e H1 do ${this.symbol}...`);
             this.isConnected = true;
-            
-            // Subscreve M1 (60s) para sinais ultra-rápidos
+
+            // Subscreve M15 (900s) para sinais
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
                 count: 100, // Precisamos de pelo menos 55 para EMA e S/R
                 style: 'candles',
-                granularity: 60,
+                granularity: 900, // CORRIGIDO: era 60 (M1), agora M15 de verdade
                 subscribe: 1,
-                req_id: 900 // ID mantido igual por simplicidade interna
+                req_id: 900
             }));
 
-            // Subscreve M5 (300s) para tendência
+            // Subscreve H1 (3600s) para tendência
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
                 count: 100,
                 style: 'candles',
-                granularity: 300,
+                granularity: 3600, // CORRIGIDO: era 300 (M5), agora H1 de verdade
                 subscribe: 1,
                 req_id: 3600
             }));
@@ -151,6 +151,7 @@ export class DerivBotEngine {
                         close: Number(ohlc.close)
                     };
 
+                    // Agora bate com o que foi realmente assinado (900 = M15, 3600 = H1)
                     if (ohlc.granularity === 900) {
                         this.updateCandleSeries(this.candlesM15, candle);
                     } else if (ohlc.granularity === 3600) {
@@ -170,7 +171,7 @@ export class DerivBotEngine {
             if (this.onLog) this.onLog(`⚠️ Conexão com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
             setTimeout(() => {
-                 if (this.currentToken) this.connectWithToken(this.currentToken);
+                if (this.currentToken) this.connectWithToken(this.currentToken);
             }, 5000);
         });
 
@@ -185,7 +186,7 @@ export class DerivBotEngine {
             series.push(newCandle);
             return;
         }
-        
+
         const lastCandle = series[series.length - 1];
         if (newCandle.epoch === lastCandle.epoch) {
             // Atualiza vela atual
@@ -204,7 +205,7 @@ export class DerivBotEngine {
         }
 
         // --- PREPARAÇÃO DE DADOS ---
-        
+
         const currentPrice = this.candlesM15[this.candlesM15.length - 1].close;
         const pricesH1 = this.candlesH1.map(c => c.close);
         const pricesM15 = this.candlesM15.map(c => c.close);
@@ -212,7 +213,7 @@ export class DerivBotEngine {
         // --- INDICADORES H1 ---
         const atrH1 = Indicators.atr(this.candlesH1, 14);
         const adxH1 = Indicators.adx(this.candlesH1, 14);
-        
+
         // --- INDICADORES M15 ---
         const atrM15 = Indicators.atr(this.candlesM15, 14);
         const rsiM15 = Indicators.rsi(pricesM15, 14);
@@ -263,10 +264,11 @@ export class DerivBotEngine {
                 this.onLog(`🧠 Analisando... Regime: ${regime} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(2)}`);
             }
         }
-        
-        // Aumentamos o rigor da pontuação para ele NÃO entrar à toa
-        let requiredScore = 50;
-        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 40;
+
+        // Baixamos um pouco o rigor para que o Ouro (ativo mais complexo) consiga gerar sinais
+        let requiredScore = 35;
+        // PONTUAÇÃO BALANCEADA: Exige a média + um pullback de RSI para entrar seguro e buscar a meta.
+        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 25;
 
         // --- Sistema de Pontuação (Confluência) ---
         // 1. Tendência Principal (ADX + DMI)
@@ -304,9 +306,9 @@ export class DerivBotEngine {
         } else if (scoreSell >= requiredScore && scoreSell > scoreBuy) {
             signal = 'SELL';
         }
-        
+
         const maxScore = Math.max(scoreBuy, scoreSell);
-        
+
         console.log(`[ANÁLISE] Regime: ${regime} | Score: ${maxScore} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
 
 
@@ -314,12 +316,12 @@ export class DerivBotEngine {
             // Cooldown RESTAURADO para podermos ler o erro da Deriv
             const now = Date.now();
             if (now - this.lastSignalTime < 30000) {
-                 return;
+                return;
             }
             this.lastSignalTime = now;
-            
+
             this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
-            
+
             // SL e TP para Ouro (XAUUSD) baseado em porcentagem
             const tpPercent = 0.0002; // 0.02% (Scalping Rápido)
             const slPercent = 0.0090; // 0.90% (Maior margem para evitar violinadas)
@@ -332,7 +334,7 @@ export class DerivBotEngine {
                 tpPrice = parseFloat((currentPrice * (1 - tpPercent)).toFixed(2));
                 slPrice = parseFloat((currentPrice * (1 + slPercent)).toFixed(2));
             }
-            
+
             const reason = `[Regime: ${regime}] Score: ${maxScore.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
             this.onSignal(signal, currentPrice, reason, tpPrice, slPrice);
         }
@@ -355,20 +357,20 @@ export class DerivBotEngine {
             const currentLow = candles[i].low;
 
             // Pivot High (Fractal Superior)
-            if (currentHigh > candles[i-1].high && currentHigh > candles[i-2].high &&
-                currentHigh > candles[i+1].high && currentHigh > candles[i+2].high) {
+            if (currentHigh > candles[i - 1].high && currentHigh > candles[i - 2].high &&
+                currentHigh > candles[i + 1].high && currentHigh > candles[i + 2].high) {
                 highs.push(currentHigh);
             }
 
             // Pivot Low (Fractal Inferior)
-            if (currentLow < candles[i-1].low && currentLow < candles[i-2].low &&
-                currentLow < candles[i+1].low && currentLow < candles[i+2].low) {
+            if (currentLow < candles[i - 1].low && currentLow < candles[i - 2].low &&
+                currentLow < candles[i + 1].low && currentLow < candles[i + 2].low) {
                 lows.push(currentLow);
             }
         }
-        return { 
-            highs: highs.sort((a, b) => a - b), 
-            lows: lows.sort((a, b) => a - b) 
+        return {
+            highs: highs.sort((a, b) => a - b),
+            lows: lows.sort((a, b) => a - b)
         };
     }
 }

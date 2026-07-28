@@ -4,6 +4,32 @@ import { Trade } from '../types';
 import { getOtpWebSocketUrl } from '../api/derivOtp';
 import { APP_ID } from '../config';
 
+function calculateEMA(data: any[], period: number) {
+  const result = [];
+  if (data.length < period) return result;
+  
+  const k = 2 / (period + 1);
+  let ema = 0;
+  
+  for (let i = 0; i < period; i++) {
+    const val = data[i]?.close;
+    if (typeof val === 'number' && !isNaN(val)) {
+        ema += val;
+    }
+  }
+  ema = ema / period;
+  result.push({ time: data[period - 1].time, value: ema });
+  
+  for (let i = period; i < data.length; i++) {
+    const val = data[i]?.close;
+    if (typeof val === 'number' && !isNaN(val)) {
+        ema = (val - ema) * k + ema;
+        result.push({ time: data[i].time, value: ema });
+    }
+  }
+  return result;
+}
+
 interface TradingChartProps {
   trades: Trade[];
   symbol?: string;
@@ -19,6 +45,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const ma8SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const ma21SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const candlesDataRef = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   
   // Guardamos as linhas de preço ativas para poder remover quando o trade fechar
@@ -64,8 +93,22 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
       wickDownColor: '#ef4444',
     });
 
+    const ma8Series = chart.addLineSeries({
+      color: '#eab308', // Amarelo (rápida)
+      lineWidth: 2,
+      crosshairMarkerVisible: false,
+    });
+
+    const ma21Series = chart.addLineSeries({
+      color: '#a855f7', // Roxo (média)
+      lineWidth: 2,
+      crosshairMarkerVisible: false,
+    });
+
     chartRef.current = chart;
     seriesRef.current = candleSeries;
+    ma8SeriesRef.current = ma8Series;
+    ma21SeriesRef.current = ma21Series;
 
     // Função auxiliar para processar trades e avisar o App
     const emitTrades = (newTrades: Trade[]) => {
@@ -269,19 +312,68 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
               .sort((a: any, b: any) => a.time - b.time);
               
               if (cData.length > 0) {
-                candleSeries.setData(cData);
-                chart.timeScale().fitContent();
+                try {
+                  candlesDataRef.current = cData;
+                  candleSeries.setData(cData);
+                  
+                  const ema8Data = calculateEMA(cData, 8);
+                  if (ema8Data.length > 0) ma8SeriesRef.current?.setData(ema8Data);
+                  
+                  const ema21Data = calculateEMA(cData, 21);
+                  if (ema21Data.length > 0) ma21SeriesRef.current?.setData(ema21Data);
+                  
+                  chart.timeScale().fitContent();
+                } catch(e) {
+                  console.error("Erro ao desenhar grafico/medias:", e);
+                }
                 if (onPriceUpdate) onPriceUpdate(cData[cData.length - 1].close);
               }
            } else if (data.msg_type === 'ohlc' && data.ohlc && isMounted) {
               const c = data.ohlc;
-              candleSeries.update({
+              const newCandle = {
                 time: Number(c.open_time) as any,
                 open: Number(c.open),
                 high: Number(c.high),
                 low: Number(c.low),
                 close: Number(c.close)
-              });
+              };
+              
+              candleSeries.update(newCandle);
+              
+              // Atualiza os dados locais para recalcular a SMA
+              const candles = candlesDataRef.current;
+              if (candles.length > 0) {
+                const lastCandle = candles[candles.length - 1];
+                if (lastCandle.time === newCandle.time) {
+                   candles[candles.length - 1] = newCandle;
+                } else if (newCandle.time > lastCandle.time) {
+                   candles.push(newCandle);
+                   if (candles.length > 1000) candles.shift();
+                }
+                
+                const calcLastEMA = (period: number) => {
+                  const emaData = calculateEMA(candles, period);
+                  if (emaData.length > 0) {
+                     return emaData[emaData.length - 1].value;
+                  }
+                  return null;
+                };
+
+                try {
+                  const lastEma8 = calcLastEMA(8);
+                  if (lastEma8 !== null && !isNaN(lastEma8)) {
+                    ma8SeriesRef.current?.update({ time: newCandle.time, value: lastEma8 });
+                  }
+                  
+                  const lastEma21 = calcLastEMA(21);
+                  if (lastEma21 !== null && !isNaN(lastEma21)) {
+                    ma21SeriesRef.current?.update({ time: newCandle.time, value: lastEma21 });
+                  }
+                } catch(e) {
+                  console.error("Erro ao dar update na EMA:", e);
+                }
+              }
+
               if (onPriceUpdate) onPriceUpdate(Number(c.close));
            } else if (data.error) {
                if (data.error.code === 'MarketIsClosed') {

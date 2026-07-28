@@ -50,11 +50,11 @@ import {
   Crown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import DailyTargetSystem from './components/DailyTargetSystem';
+import DailyTargetSystem from './src/components/DailyTargetSystem';
 // @ts-ignore
-import fybotLogo from './assets/images/fybot_new_logo_1779835693847.png';
+import fybotLogo from './src/assets/images/fybot_new_logo_1779835693847.png';
 // @ts-ignore
-import fybotLoginBg from './assets/images/fybot_neon_dubai.png';
+import fybotLoginBg from './src/assets/images/fybot_neon_dubai.png';
 import {
   AreaChart,
   Area,
@@ -74,19 +74,19 @@ import {
   Stats,
   Config,
   Language
-} from './types';
-import { translations } from './translations';
-import { safeFetch } from './utils';
-import { LicenseCountdown, LicenseHeaderButton } from './components/LicenseCountdown';
-import { NavItem } from './components/NavItem';
-import { StatCard } from './components/StatCard';
-import { StrategyGauge } from './components/StrategyGauge';
-import { WeightControl } from './components/WeightControl';
-import { StrategyMetric } from './components/StrategyMetric';
-import { AffiliateLevel } from './components/AffiliateLevel';
-import { Step } from './components/Step';
-import { BenefitCard, BenefitItem } from './components/BenefitCard';
-import { PricingCard } from './components/PricingCard';
+} from './src/types';
+import { translations } from './src/translations';
+import { safeFetch } from './src/utils';
+import { LicenseCountdown, LicenseHeaderButton } from './src/components/LicenseCountdown';
+import { NavItem } from './src/components/NavItem';
+import { StatCard } from './src/components/StatCard';
+import { StrategyGauge } from './src/components/StrategyGauge';
+import { WeightControl } from './src/components/WeightControl';
+import { StrategyMetric } from './src/components/StrategyMetric';
+import { AffiliateLevel } from './src/components/AffiliateLevel';
+import { Step } from './src/components/Step';
+import { BenefitCard, BenefitItem } from './src/components/BenefitCard';
+import { PricingCard } from './src/components/PricingCard';
 
 
 /*
@@ -338,7 +338,7 @@ export default function App() {
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
-  const [selectedInterval, setSelectedInterval] = useState('5M');
+  const [selectedInterval, setSelectedInterval] = useState('15M');
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');

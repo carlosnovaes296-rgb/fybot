@@ -19,7 +19,7 @@ import * as dbHelper from './backend/db/mysql.ts';
 let mysqlPool: mysql.Pool | null = null;
 
 const isTradingTime = (): boolean => {
-  return true; // Temporariamente liberado para testes
+  return true; // Liberado 24h para testes da madrugada
 };
 
 // Remove PG pool logic
@@ -310,7 +310,7 @@ async function startServer() {
   };
 
   const isTradingWindowOpen = () => {
-    return true; // Temporariamente liberado para testes
+    return true; // Liberado 24h para testes da madrugada
   };
 
   const getNextSessionStart = () => {

@@ -385,7 +385,7 @@ export default function App() {
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
-  const [selectedInterval, setSelectedInterval] = useState('5M');
+  const [selectedInterval, setSelectedInterval] = useState('15M');
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
@@ -2072,16 +2072,7 @@ export default function App() {
                           />
                         );
                       })()}
-                      <StatCard
-                        label={language === "en" ? "LOSS LIMIT (20% PER ORDER)" : language === "es" ? "LÍMITE DE PÉRDIDA (20% POR ORDEN)" : "LIMITE DE PERDA (20% SOBRE O VALOR DA ORDEM)"}
-                        value={isConnected ? `$0.00` : 'Conectando...'}
-                        delta="20%"
-                        icon={<AlertTriangle className="text-red-400" />}
-                        trendPositive={false}
-                        labelClassName="text-red-400"
-                        valueClassName="text-red-400"
-                        trend={[5, 4, 4, 3, 3, 2, 2, 1, 1, 0, 0, 1]}
-                      />
+
                       {stats.activeLicense?.expiryDate ? (
                         <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                       ) : stats.pendingPayment ? (
@@ -2194,7 +2185,7 @@ export default function App() {
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
                               className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${selectedInterval === interval
-                                ? 'bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-500'
+                                ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border border-emerald-500'
                                 : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5'
                                 }`}
                             >
