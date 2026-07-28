@@ -210,8 +210,8 @@ export class DerivBotEngine {
     }
 
     private analyzeMarket() {
-        if (this.candlesM15.length < 50 || this.candlesH1.length < 50) {
-            // console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/50 | H1: ${this.candlesH1.length}/50`);
+        if (this.candlesM15.length < 35 || this.candlesH1.length < 35) {
+            // console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/35 | H1: ${this.candlesH1.length}/35`);
             return;
         }
 

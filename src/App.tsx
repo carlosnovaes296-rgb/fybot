@@ -1914,7 +1914,7 @@ export default function App() {
             </div>
 
             <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
-              {currentUser?.id === '1' && (
+              {currentUser?.role === 'ADMIN' && (
                 <button
                   onClick={toggleAccountType}
                   disabled={loading || currentUser?.activeAccountType === 'DEMO'}
@@ -1976,7 +1976,7 @@ export default function App() {
             <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
           </div>
           <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            {currentUser?.id === '1' && (
+            {currentUser?.role === 'ADMIN' && (
               <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'DEMO'}
@@ -2767,15 +2767,15 @@ export default function App() {
                   />
                   <PricingCard
                     title=""
-                    price={500}
-                    priceSubtext="Licença Livre"
-                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Bot livre 24 horas'}
+                    price={100}
+                    priceSubtext="Licença 180 dias"
+                    desc={language === 'en' ? 'Bot Pro License' : language === 'es' ? 'Licencia Bot Pro' : 'Licença Bot Pro'}
                     descSize="text-base font-bold"
                     descColor="text-emerald-400"
                     features={[]}
                     language={language}
-                    image="/awake_bot.png"
-                    onBuy={() => setShowPaymentModal({ title: "MEU BOT", price: 500 })}
+                    image="/bot_pro.png"
+                    onBuy={() => setShowPaymentModal({ title: "BOT PRO", price: 100 })}
                   />
                   <PricingCard
                     isVip
@@ -3832,7 +3832,7 @@ export default function App() {
                                 <Globe size={16} />
                                 {language === 'en' ? 'GET REAL TOKEN' : 'GERAR TOKEN REAL'}
                               </button>
-                              {currentUser?.id === '1' && (
+                              {currentUser?.role === 'ADMIN' && (
                                 <button
                                   type="button"
                                   onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
@@ -3862,7 +3862,7 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {currentUser?.id === '1' && (
+                              {currentUser?.role === 'ADMIN' && (
                                 <div className="space-y-2">
                                   <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
                                     🟢 Token da Conta Demo
