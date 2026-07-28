@@ -378,22 +378,8 @@ export class DerivConnectionManager {
       this.addUserLog(userId, `🔓 [DESBLOQUEIO AUTOMÁTICO] Horário de bloqueio expirou. Sistema liberado para novas operações.`);
     }
 
-    // Se o lucro de hoje já passou ou é igual à meta, garante que fique bloqueado.
-    const target = state.dailyProfitTarget || (state.balance * 0.05);
-    if (target > 0 && state.dailyProfit >= target && userId !== '1') {
-      state.systemBlocked = true;
-    }
-
-    if (state.systemBlocked && userId !== '1') {
-      this.addUserLog(userId, `🔒 Sinal de ${direction} ignorado: Sistema bloqueado.`);
-      return;
-    }
-
-    // Regra 8: Trava de envio de novas ordens se lucro atingir a meta (2%)
-    if (target > 0 && state.dailyProfit >= target && userId !== '1') {
-      this.addUserLog(userId, `🛡️ [META PROTEGIDA] Lucro atual ($${state.dailyProfit.toFixed(2)}) atingiu a meta de 2% ($${target.toFixed(2)}). Aguardando fechamento das ordens abertas para bloquear a tela!`);
-      return;
-    }
+    // Trava de meta diária foi removida a pedido do usuário.
+    // O sistema agora opera livremente sem bloqueio ao atingir a meta.
 
     // NOVO: Filtro de Tendência - só abre ordem se a direção do sinal estiver
     // a favor do regime de mercado atual (definido pelas chamadas a handleRegimeChange).
