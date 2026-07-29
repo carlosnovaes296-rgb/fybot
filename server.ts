@@ -459,7 +459,13 @@ async function startServer() {
         state.dailyProfit = rawDailyProfit - state.startupProfitOffset; // Zera imediatamente para o frontend
       state.customStartingBalance = state.balance; // Define a nova base de cálculo para os limites 5% e 2%
       state.systemBlocked = false;
-      addUserLog(userId, "🔄 [RESET MANUAL] Lucro diário zerado. Perdas/ganhos e flutuantes atuais se tornaram a nova base $0.00.");
+      
+      // Limpa qualquer ordem fantasma que tenha ficado travada na memória como OPEN
+      if (state.trades) {
+        state.trades = state.trades.filter((t: any) => t.status !== 'OPEN');
+      }
+
+      addUserLog(userId, "🔄 [RESET MANUAL] Lucro diário zerado e ordens travadas limpas.");
       addUserLog(userId, "🟢 Operações automáticas liberadas para novas sessões.");
       res.json({ success: true, dailyProfit: state.dailyProfit, systemBlocked: state.systemBlocked });
     } catch (e: any) {

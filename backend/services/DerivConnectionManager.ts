@@ -160,6 +160,7 @@ export class DerivConnectionManager {
         // Já autorizado via OTP, iniciar inscrições direto
         ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
+        ws.send(JSON.stringify({ portfolio: 1 })); // Puxar o portfólio para verificação de fantasmas
       }
     });
 
@@ -174,7 +175,27 @@ export class DerivConnectionManager {
         }
         ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
+        ws.send(JSON.stringify({ portfolio: 1 })); // Puxar o portfólio na conexão principal
         this.addUserLog(userId, `✅ [WS] Monitoramento de saldo e contratos ativado.`);
+      }
+
+      // Sincronização do Portfólio (Limpa ordens Fantasmas Presas na Memória)
+      if (data.msg_type === 'portfolio') {
+        if (data.portfolio && data.portfolio.contracts) {
+          const activeContracts = data.portfolio.contracts.map((c: any) => String(c.contract_id));
+          let ghostFound = false;
+          
+          state.trades.forEach((trade: any) => {
+            if (trade.status === 'OPEN' && !activeContracts.includes(String(trade.id)) && !String(trade.id).startsWith('PENDING')) {
+              trade.status = 'CLOSED';
+              ghostFound = true;
+            }
+          });
+
+          if (ghostFound) {
+            this.addUserLog(userId, `🧹 [SISTEMA] Limpeza Automática: Ordem que fechou enquanto o bot estava offline foi removida da memória.`);
+          }
+        }
       }
 
       // Atualiza Saldo
