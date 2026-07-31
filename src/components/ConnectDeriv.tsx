@@ -23,22 +23,29 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: savedUser.id, derivToken: token })
         });
-        
+
         // Simula o recarregamento com o token na URL para o App.tsx processar
         window.location.href = `/?token1=${token}&acct1=Conta_Manual`;
+      } else {
+        alert('Nenhum usuário logado encontrado. Faça login antes de conectar.');
+        setLoading(false);
       }
     } catch (error) {
       console.error(error);
       alert('Erro ao conectar. Tente novamente.');
       setLoading(false);
+    }
+  };
+
   const handleOAuthConnect = async () => {
     try {
       const clientId = '33SRHHormRjw8l1LxKtKl';
       const redirectUri = 'https://fybot.life/';
 
       window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${clientId}&redirect_uri=${redirectUri}&l=PT&brand=deriv`;
-    } catch (e: any) {
-      alert("Error generating PKCE: " + e.message);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      alert('Erro ao iniciar OAuth: ' + message);
     }
   };
 
@@ -51,7 +58,7 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       <motion.div
         initial={{ scale: 0.95, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -65,7 +72,7 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
           >
             <X size={24} />
           </button>
-          
+
           <div className="flex items-center gap-4 mb-2">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#ff4d4d] to-[#cc0000] flex items-center justify-center">
               <Globe className="text-white" size={24} />
@@ -130,6 +137,20 @@ export const ConnectDeriv: React.FC<ConnectDerivProps> = ({ onClose }) => {
             >
               {loading ? 'Conectando...' : 'Conectar Manualmente'}
               {!loading && <ArrowRight size={20} />}
+            </button>
+
+            <div className="relative flex items-center py-2">
+              <div className="flex-grow border-t border-white/10"></div>
+              <span className="flex-shrink-0 mx-4 text-gray-500 text-sm">OU</span>
+              <div className="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <button
+              onClick={handleOAuthConnect}
+              className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              Conectar via OAuth Deriv
+              <ArrowRight size={20} />
             </button>
           </div>
         </div>

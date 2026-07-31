@@ -1,41 +1,67 @@
 import { WebSocket as NodeWebSocket } from 'ws';
 import { Indicators, Candle } from './Indicators.ts';
 
-export class DerivBotEngine {
+// Motor de sinais baseado em EMA8/EMA21 (estratégia separada do DerivBotEngine.ts
+// original, que usa ADX/RSI/Pivots). Mantém a MESMA interface de callbacks
+// (onSignal / onRegimeChange / onLog) e o MESMO fluxo de conexão (OTP + fallback
+// clássico), para plugar direto no server.ts do mesmo jeito que o motor antigo.
+export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
-    private appId = '1089'; // Usamos o App ID oficial da Deriv para suportar tokens pat_
-    // Usando Ouro (XAUUSD)
+    private appId = '1089'; // App ID oficial da Deriv (suporta tokens pat_)
     private symbol = 'frxXAUUSD';
     private isConnected = false;
-    public riskProfile: string = 'CONSERVATIVE';
-    private currentToken: string = '';
+    private currentToken = '';
+    public riskProfile?: string = 'CONSERVATIVE';
 
-    // Armazenamento de Histórico OHLC
+    // Só precisamos de uma série de velas (M15): a tendência e a entrada nesta
+    // estratégia vêm inteiramente do cruzamento e da posição do preço em relação
+    // às duas médias, no mesmo timeframe (Requisitos 1, 2 e 3).
     private candlesM15: Candle[] = [];
-    private candlesH1: Candle[] = [];
 
-    // Cooldown para evitar spam de ordens
-    private lastSignalTime: number = 0;
+    // Períodos fixos da estratégia (Requisito 1)
+    private readonly EMA_FAST = 8;
+    private readonly EMA_SLOW = 21;
 
-    // Callbacks to notify server.ts
+    // TP automático fixo em % do preço de entrada (0.50%) para cada ordem.
+    // Ex.: preço de 2400.00 -> distância de TP = 2400.00 * 0.0050 = 12.00
+    private readonly TP_PERCENT = 0.0050; // 0.50%
+
+    // Tendência atual, definida pelo cruzamento EMA8/EMA21 (Requisito 2)
+    private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+
+    // Evita reenviar o mesmo sinal repetidas vezes dentro da mesma vela M15 ainda
+    // se formando (mesma trava usada no motor original).
+    private lastSignalCandleEpoch: number | null = null;
+    private lastSignalTime = 0;
+
+    // Throttle do log de monitoramento
+    private lastMonitorLogTime = 0;
+
+    // Callbacks para o server.ts (mesma assinatura do motor original)
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
     public onRegimeChange?: (regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL') => void;
     public onLog?: (msg: string) => void;
-    private lastRegime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
 
-    constructor() {
-        // Agora aguardamos o server.ts chamar connectWithToken(token) passando um PAT token válido.
+    public disconnect() {
+        if (this.ws) {
+            console.log('[DerivBotEngineEMA] Forçando desconexão via comando do usuário...');
+            this.ws.terminate();
+            this.ws = null;
+        }
+        this.isConnected = false;
     }
 
-    public async connectWithToken(token: string) {
-        if (this.isConnected) return;
+    public async connectWithToken(token: string, force: boolean = false) {
+        if (this.isConnected && !force) return;
+        if (force && this.isConnected) {
+            this.disconnect();
+        }
         this.currentToken = token;
 
-        console.log(`[DerivBotEngine] Autenticando Motor via API v1 OTP usando token: ${token.substring(0, 8)}...`);
-        if (this.onLog) this.onLog(`📡 Autenticando Motor de Análise na Deriv...`);
+        console.log(`[DerivBotEngineEMA] Autenticando Motor EMA8/21 via API v1 OTP usando token: ${token.substring(0, 8)}...`);
+        if (this.onLog) this.onLog(`📡 Autenticando Motor EMA8/21 na Deriv...`);
         let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${this.appId}&l=PT`;
         try {
-            // Buscar accounts para descobrir account_id e gerar OTP direto na Deriv
             const headers = {
                 'Authorization': `Bearer ${token}`,
                 'Deriv-App-ID': '33TVM6cBQ9GfSjbwQHHdE',
@@ -47,7 +73,6 @@ export class DerivBotEngine {
             let accountId = '';
             const contasArray = accData.accounts || accData.data || accData;
             if (Array.isArray(contasArray)) {
-                // Pega a conta DEMO para operar os testes (Prioriza VRT)
                 let demoAcc = contasArray.find((a: any) => {
                     const id = (a.loginid || a.account_id || a.id || "").toString().toUpperCase();
                     return id.includes('VRT') || id.startsWith('VR');
@@ -68,17 +93,20 @@ export class DerivBotEngine {
                 const otpData: any = await otpRes.json();
                 if (otpData?.data?.url) {
                     wsUrl = otpData.data.url;
-                    console.log("[DerivBotEngine] Magic URL OTP obtida DIRETAMENTE da Deriv com sucesso!");
+                    console.log("[DerivBotEngineEMA] Magic URL OTP obtida DIRETAMENTE da Deriv com sucesso!");
                     if (this.onLog) this.onLog(`✅ Conexão Blindada (OTP) estabelecida para leitura de Velas!`);
                 }
             } else {
-                console.log("[DerivBotEngine] Conta DEMO não encontrada, falha ao gerar OTP.");
+                console.log("[DerivBotEngineEMA] Conta DEMO não encontrada, falha ao gerar OTP.");
                 if (this.onLog) this.onLog(`⚠️ Falha ao criar conexão blindada: Conta virtual não encontrada.`);
             }
         } catch (e) {
-            console.error("[DerivBotEngine] Falha ao obter OTP para o motor", e);
+            console.error("[DerivBotEngineEMA] Falha ao obter OTP para o motor", e);
             if (this.onLog) this.onLog(`⚠️ Erro de rede ao conectar o motor.`);
         }
+
+        // Aguarda 2 segundos antes de conectar para não cruzar com a conexão do ConnectionManager e evitar bloqueio anti-spam da corretora
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         this.ws = new NodeWebSocket(wsUrl, {
             headers: {
@@ -88,69 +116,60 @@ export class DerivBotEngine {
         });
 
         let enginePingInterval: NodeJS.Timeout;
+        let pongTimeout: NodeJS.Timeout;
 
         this.ws.on('open', () => {
-            // Ping a cada 25s para manter a conexão viva
             enginePingInterval = setInterval(() => {
-                if (this.ws?.readyState === NodeWebSocket.OPEN) {
+                if (this.ws?.readyState === 1) {
                     this.ws.send(JSON.stringify({ ping: 1 }));
+                    pongTimeout = setTimeout(() => {
+                        console.log('[DerivBotEngineEMA] Ping timeout! Forçando encerramento da conexão travada.');
+                        this.ws?.terminate();
+                    }, 10000);
                 }
             }, 25000);
 
-            console.log(`[DerivBotEngine] Feed conectado e autenticado. Solicitando histórico M15 e H1 para ${this.symbol}...`);
-            if (this.onLog) this.onLog(`📊 Conectado ao feed da Deriv. Baixando histórico M15 e H1 do ${this.symbol}...`);
+            console.log(`[DerivBotEngineEMA] Feed conectado. Solicitando histórico M15 para ${this.symbol}...`);
+            if (this.onLog) this.onLog(`📊 Conectado ao feed da Deriv. Baixando histórico M15 do ${this.symbol}...`);
             this.isConnected = true;
 
-            // Subscreve M15 (900s) para sinais
+            // Só precisamos do M15: EMA8/EMA21 e a entrada são calculadas nesse
+            // mesmo timeframe (sem necessidade de H1 como no motor antigo).
             this.ws?.send(JSON.stringify({
                 ticks_history: this.symbol,
                 end: 'latest',
-                count: 100, // Precisamos de pelo menos 55 para EMA e S/R
+                count: 100, // suficiente para EMA21 + margem de aquecimento
                 style: 'candles',
-                granularity: 900, // CORRIGIDO: era 60 (M1), agora M15 de verdade
+                granularity: 900, // M15
                 subscribe: 1,
                 req_id: 900
-            }));
-
-            // Subscreve H1 (3600s) para tendência
-            this.ws?.send(JSON.stringify({
-                ticks_history: this.symbol,
-                end: 'latest',
-                count: 100,
-                style: 'candles',
-                granularity: 3600, // CORRIGIDO: era 300 (M5), agora H1 de verdade
-                subscribe: 1,
-                req_id: 3600
             }));
         });
 
         this.ws.on('message', (data: string) => {
             try {
                 const response = JSON.parse(data);
+
+                if (response.msg_type === 'ping') {
+                    clearTimeout(pongTimeout);
+                    return;
+                }
+
                 if (response.error) {
-                    console.error('[DerivBotEngine] Erro da Deriv:', response.error);
+                    console.error('[DerivBotEngineEMA] Erro da Deriv:', response.error);
                     if (this.onLog) this.onLog(`⛔ Erro da Deriv na leitura de velas: ${response.error.message}`);
                     return;
                 }
 
-                // Initial History
-                if (response.msg_type === 'candles') {
-                    const candles = response.candles.map((c: any) => ({
+                if (response.msg_type === 'candles' && response.req_id === 900) {
+                    this.candlesM15 = response.candles.map((c: any) => ({
                         epoch: c.epoch, open: c.open, high: c.high, low: c.low, close: c.close
                     }));
-                    if (response.req_id === 900) {
-                        this.candlesM15 = candles;
-                        console.log(`[DerivBotEngine] Carregado histórico M15: ${this.candlesM15.length} velas`);
-                        if (this.onLog) this.onLog(`📈 Histórico rápido carregado (${this.candlesM15.length} velas)`);
-                    } else if (response.req_id === 3600) {
-                        this.candlesH1 = candles;
-                        console.log(`[DerivBotEngine] Carregado histórico H1: ${this.candlesH1.length} velas`);
-                        if (this.onLog) this.onLog(`📈 Histórico de tendência carregado (${this.candlesH1.length} velas)`);
-                    }
+                    console.log(`[DerivBotEngineEMA] Carregado histórico M15: ${this.candlesM15.length} velas`);
+                    if (this.onLog) this.onLog(`📈 Histórico M15 carregado (${this.candlesM15.length} velas)`);
                 }
 
-                // Streaming Updates (OHLC)
-                if (response.msg_type === 'ohlc') {
+                if (response.msg_type === 'ohlc' && response.ohlc.granularity === 900) {
                     const ohlc = response.ohlc;
                     const candle: Candle = {
                         epoch: ohlc.open_time,
@@ -159,25 +178,28 @@ export class DerivBotEngine {
                         low: Number(ohlc.low),
                         close: Number(ohlc.close)
                     };
+                    // isNewCandle não é mais usado para gatilho (ver comentário abaixo),
+                    // mas updateCandleSeries continua sendo chamado para manter a série
+                    // de velas M15 sempre atualizada (fechada ou em formação).
+                    this.updateCandleSeries(this.candlesM15, candle);
 
-                    // Agora bate com o que foi realmente assinado (900 = M15, 3600 = H1)
-                    if (ohlc.granularity === 900) {
-                        this.updateCandleSeries(this.candlesM15, candle);
-                    } else if (ohlc.granularity === 3600) {
-                        this.updateCandleSeries(this.candlesH1, candle);
-                    }
-
-                    // A cada tick que atualiza a vela, rodamos a lógica
+                    // O usuário quer reentradas múltiplas ou imediatas se as condições permitirem.
+                    // Portanto, analisamos o mercado A CADA TICK, e não apenas no fechamento da vela.
+                    // Isso é seguro: analyzeMarket() sempre lê o preço da última vela JÁ FECHADA
+                    // (candlesM15[length-2]), então o valor de referência só muda de fato quando
+                    // uma vela nova realmente fecha — chamar com mais frequência só reavalia a
+                    // mesma tendência mais vezes, sem usar preço "no meio da vela".
                     this.analyzeMarket();
                 }
             } catch (err) {
-                console.error('[DerivBotEngine] Erro ao parsear mensagem:', err);
+                console.error('[DerivBotEngineEMA] Erro ao parsear mensagem:', err);
             }
         });
 
         this.ws.on('close', () => {
             clearInterval(enginePingInterval);
-            console.log('[DerivBotEngine] Conexão com feed fechada. Tentando reconectar em 5s...');
+            clearTimeout(pongTimeout);
+            console.log('[DerivBotEngineEMA] Conexão com feed fechada. Tentando reconectar em 5s...');
             if (this.onLog) this.onLog(`⚠️ Conexão com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
             setTimeout(() => {
@@ -187,201 +209,120 @@ export class DerivBotEngine {
 
         this.ws.on('error', (err) => {
             clearInterval(enginePingInterval);
-            console.error('[DerivBotEngine] Erro no socket de feed:', err);
-            this.ws?.close();
+            clearTimeout(pongTimeout);
+            console.error('[DerivBotEngineEMA] Erro no socket de feed:', err);
+            this.ws?.terminate();
         });
     }
 
-    private updateCandleSeries(series: Candle[], newCandle: Candle) {
+    // Retorna true quando uma vela NOVA foi aberta (a anterior fechou de vez).
+    private updateCandleSeries(series: Candle[], newCandle: Candle): boolean {
         if (series.length === 0) {
             series.push(newCandle);
-            return;
+            return false;
         }
-
         const lastCandle = series[series.length - 1];
         if (newCandle.epoch === lastCandle.epoch) {
-            // Atualiza vela atual
             series[series.length - 1] = newCandle;
+            return false;
         } else if (newCandle.epoch > lastCandle.epoch) {
-            // Nova vela abriu
             series.push(newCandle);
-            if (series.length > 200) series.shift(); // Manter no max 200 velas na memória
+            if (series.length > 200) series.shift();
+            return true;
         }
+        return false;
     }
 
     private analyzeMarket() {
-        if (this.candlesM15.length < 35 || this.candlesH1.length < 35) {
-            // console.log(`[DerivBotEngine] Aguardando dados... M15: ${this.candlesM15.length}/35 | H1: ${this.candlesH1.length}/35`);
-            return;
+        if (this.candlesM15.length < this.EMA_SLOW + 5) return;
+
+        const closes = this.candlesM15.map(c => c.close);
+        const emaFastSeries = Indicators.ema(closes, this.EMA_FAST);
+        const emaSlowSeries = Indicators.ema(closes, this.EMA_SLOW);
+
+        const emaFast = emaFastSeries[emaFastSeries.length - 1];
+        const emaSlow = emaSlowSeries[emaSlowSeries.length - 1];
+
+        // A vela que acabou de fechar é a penúltima da série no momento em que uma
+        // vela nova abriu (a série já recebeu o open da vela seguinte).
+        const closedCandle = this.candlesM15[this.candlesM15.length - 2];
+        const currentPrice = closedCandle.close;
+
+        // Requisito 2: cruzamento das EMAs define a tendência
+        let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+        if (emaFast > emaSlow) trend = 'TREND_UP';
+        else if (emaFast < emaSlow) trend = 'TREND_DOWN';
+
+        if (trend !== this.lastTrend) {
+            this.lastTrend = trend;
+            this.onRegimeChange?.(trend);
+            this.onLog?.(`🧭 Cruzamento de EMAs: nova tendência ${trend} (EMA8: ${emaFast.toFixed(2)} / EMA21: ${emaSlow.toFixed(2)})`);
         }
 
-        // --- PREPARAÇÃO DE DADOS ---
+        const nowLog = Date.now();
+        if (nowLog - this.lastMonitorLogTime >= 15000) {
+            this.lastMonitorLogTime = nowLog;
 
-        const currentPrice = this.candlesM15[this.candlesM15.length - 1].close;
-        const pricesH1 = this.candlesH1.map(c => c.close);
-        const pricesM15 = this.candlesM15.map(c => c.close);
+            let aguardando = "";
+            if (trend === 'TREND_UP' && currentPrice <= emaFast) aguardando = "(Aguardando preço subir acima da EMA8)";
+            if (trend === 'TREND_DOWN' && currentPrice >= emaFast) aguardando = "(Aguardando preço cair abaixo da EMA8)";
 
-        // --- INDICADORES H1 ---
-        const atrH1 = Indicators.atr(this.candlesH1, 14);
-        const adxH1 = Indicators.adx(this.candlesH1, 14);
-
-        // --- INDICADORES M15 ---
-        const atrM15 = Indicators.atr(this.candlesM15, 14);
-        const rsiM15 = Indicators.rsi(pricesM15, 14);
-
-        const currentAtrH1 = atrH1[atrH1.length - 1];
-        const currentAtrM15 = atrM15[atrM15.length - 1];
-        const currentAdx = adxH1.adx[adxH1.adx.length - 1];
-        const currentPdi = adxH1.pdi[adxH1.pdi.length - 1];
-        const currentNdi = adxH1.ndi[adxH1.ndi.length - 1];
-        const currentRsi = rsiM15[rsiM15.length - 1];
-
-        // --- SMART EMA (Depende do Ratio ATR) ---
-        const smartEmaPeriod = this.getSmartEmaPeriod(currentAtrM15, currentAtrH1);
-        const emaH1 = Indicators.ema(pricesH1, smartEmaPeriod);
-        const currentEma = emaH1[emaH1.length - 1];
-
-        // --- REGIME DE MERCADO ---
-        let regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentAdx > 25) { // ADX > 25 indica Tendência Forte
-            if (currentPrice > currentEma && currentPdi > currentNdi) {
-                regime = 'TREND_UP';
-            } else if (currentPrice < currentEma && currentNdi > currentPdi) {
-                regime = 'TREND_DOWN';
-            }
+            this.onLog?.(`🧠 [EMA8/21] Tendência: ${trend} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${emaFast.toFixed(2)} ${aguardando}`);
         }
 
-        if (regime !== this.lastRegime) {
-            this.lastRegime = regime;
-            if (this.onRegimeChange) {
-                this.onRegimeChange(regime);
-            }
-        }
-
-        // --- SUPORTE E RESISTÊNCIA (PIVOTS M15) ---
-        const pivots = this.getPivots(this.candlesM15, 30);
-        const nearestRes = pivots.highs.find(h => h > currentPrice) || currentPrice + (currentAtrM15 * 2);
-        const nearestSup = pivots.lows.slice().reverse().find(l => l < currentPrice) || currentPrice - (currentAtrM15 * 2);
-
-        // --- PULLBACK OU CONTINUAÇÃO ---
+        // O usuário pediu para remover a condição extra de cruzamento (preço x média).
+        // Agora o robô atira baseado PURAMENTE na tendência: se EMA8 > EMA21, é compra.
+        // Se EMA8 < EMA21, é venda. Sem esperar confirmação do preço.
+        // Requisito 6: nunca contra a tendência — o sinal só existe dentro do
+        // próprio regime, então operações contra-tendência são impossíveis aqui;
+        // isso também é reforçado por handleRegimeChange/executeSignal do lado da
+        // execução (DerivConnectionManager), como segunda trava.
         let signal: 'BUY' | 'SELL' | null = null;
-        let scoreBuy = 0;
-        let scoreSell = 0;
-
-        // Log de Monitoramento a cada 30 segundos para debugging na UI
-        const agora = new Date();
-        if (agora.getSeconds() % 15 === 0) {
-            if (this.onLog) {
-                this.onLog(`🧠 Analisando... Regime: ${regime} | RSI: ${currentRsi.toFixed(1)} | Preço: ${currentPrice.toFixed(2)}`);
-            }
-        }
-
-        // Baixamos um pouco o rigor para que o Ouro (ativo mais complexo) consiga gerar sinais
-        let requiredScore = 35;
-        // PONTUAÇÃO BALANCEADA: Exige a média + um pullback de RSI para entrar seguro e buscar a meta.
-        if (this.riskProfile === 'AGGRESSIVE') requiredScore = 25;
-
-        // --- Sistema de Pontuação (Confluência) ---
-        // 1. Tendência Principal (ADX + DMI)
-        if (regime === 'TREND_UP') scoreBuy += 20;
-        if (regime === 'TREND_DOWN') scoreSell += 20;
-
-        // 2. Tendência Curta (Preço vs EMA)
-        if (currentPrice > currentEma) scoreBuy += 15;
-        if (currentPrice < currentEma) scoreSell += 15;
-
-        // 3. Força da Tendência (ADX)
-        if (currentAdx > 25) {
-            scoreBuy += 10;
-            scoreSell += 10;
-        }
-
-        // 4. RSI (Filtro de Exaustão / Pullback)
-        // Para COMPRAR, é melhor que o RSI não esteja sobrecomprado (ideal < 60)
-        if (currentRsi < 55) scoreBuy += 10;
-        if (currentRsi < 40) scoreBuy += 10; // Pullback perfeito
-
-        // Para VENDER, é melhor que o RSI não esteja sobrevendido (ideal > 40)
-        if (currentRsi > 45) scoreSell += 10;
-        if (currentRsi > 60) scoreSell += 10; // Pullback perfeito
-
-        // 5. Espaço até Suporte/Resistência (Evitar comprar na cara da parede)
-        const roomToRes = nearestRes - currentPrice;
-        const roomToSup = currentPrice - nearestSup;
-        if (roomToRes > (currentAtrM15 * 1.5)) scoreBuy += 10;
-        if (roomToSup > (currentAtrM15 * 1.5)) scoreSell += 10;
-
-        // --- Decisão Final ---
-        if (scoreBuy >= requiredScore && scoreBuy > scoreSell) {
+        if (trend === 'TREND_UP') {
             signal = 'BUY';
-        } else if (scoreSell >= requiredScore && scoreSell > scoreBuy) {
+        } else if (trend === 'TREND_DOWN') {
             signal = 'SELL';
         }
 
-        const maxScore = Math.max(scoreBuy, scoreSell);
+        // Reentradas (Requisito 6): assim que a ordem/sequência DCA anterior for
+        // encerrada e a tendência ainda favorecer a mesma direção, este bloco
+        // gera um novo sinal automaticamente. O controle de "não abrir Ordem 1
+        // nova enquanto já existe sequência de DCA ativa" já vive no
+        // DerivConnectionManager (openTradesCount / userDcaState).
+        if (!signal) return;
 
-        console.log(`[ANÁLISE] Regime: ${regime} | Score: ${maxScore} | Signal: ${signal || 'NENHUM'} | RSI: ${currentRsi.toFixed(1)} | ADX: ${currentAdx.toFixed(1)}`);
+        const currentCandleEpoch = closedCandle.epoch;
+        // O usuário solicitou remover a trava de vela para permitir múltiplas ordens na mesma vela.
+        // if (currentCandleEpoch === this.lastSignalCandleEpoch) return;
 
+        const now = Date.now();
+        if (now - this.lastSignalTime < 5000) return; // trava mínima de segurança de 5s
 
-        if (signal && this.onSignal) {
-            // Cooldown RESTAURADO para podermos ler o erro da Deriv
-            const now = Date.now();
-            if (now - this.lastSignalTime < 30000) {
-                return;
-            }
-            this.lastSignalTime = now;
+        this.lastSignalTime = now;
+        this.lastSignalCandleEpoch = currentCandleEpoch;
 
-            this.onLog?.(`🚀 ENVIANDO ORDEM PARA A CORRETORA: ${signal}!`);
+        // SL de partida baseado em volatilidade (ATR), como antes.
+        const atr = Indicators.atr(this.candlesM15, 14);
+        const currentAtr = atr[atr.length - 1] || (currentPrice * 0.003);
+        const slDistance = currentAtr * 1.0;
 
-            // SL e TP para Ouro (XAUUSD) baseado em porcentagem
-            const tpPercent = 0.0002; // 0.02% (Scalping Rápido)
-            const slPercent = 0.0090; // 0.90% (Maior margem para evitar violinadas)
-            let tpPrice = 0;
-            let slPrice = 0;
-            if (signal === 'BUY') {
-                tpPrice = parseFloat((currentPrice * (1 + tpPercent)).toFixed(2));
-                slPrice = parseFloat((currentPrice * (1 - slPercent)).toFixed(2));
-            } else {
-                tpPrice = parseFloat((currentPrice * (1 - tpPercent)).toFixed(2));
-                slPrice = parseFloat((currentPrice * (1 + slPercent)).toFixed(2));
-            }
+        // TP automático fixo em 0.50% do preço de entrada para CADA ordem
+        // (independe do ATR — é sempre currentPrice * TP_PERCENT). A partir daí,
+        // quem eleva o alvo acompanhando o pico do preço (Requisito 7, nunca
+        // recua) continua sendo o DerivConnectionManager, que tem visibilidade do
+        // lucro real reportado pela corretora (proposal_open_contract).
+        const tpDistance = currentPrice * this.TP_PERCENT;
 
-            const reason = `[Regime: ${regime}] Score: ${maxScore.toFixed(0)} | ADX: ${currentAdx.toFixed(1)} | S/R: [${nearestSup.toFixed(2)} - ${nearestRes.toFixed(2)}]`;
-            this.onSignal(signal, currentPrice, reason, tpPrice, slPrice);
+        let tpPrice = 0, slPrice = 0;
+        if (signal === 'BUY') {
+            tpPrice = parseFloat((currentPrice + tpDistance).toFixed(2));
+            slPrice = parseFloat((currentPrice - slDistance).toFixed(2));
+        } else {
+            tpPrice = parseFloat((currentPrice - tpDistance).toFixed(2));
+            slPrice = parseFloat((currentPrice + slDistance).toFixed(2));
         }
-    }
 
-    private getSmartEmaPeriod(atrM15: number, atrH1: number): number {
-        const ratio = atrM15 / (atrH1 === 0 ? 1 : atrH1);
-        if (ratio < 0.2) return 55; // Volatilidade baixa, EMA longa
-        if (ratio > 0.5) return 16; // Volatilidade alta, EMA rápida
-        return 34; // Padrão
-    }
-
-    private getPivots(candles: Candle[], lookback: number): { highs: number[], lows: number[] } {
-        const highs: number[] = [];
-        const lows: number[] = [];
-        const start = Math.max(0, candles.length - lookback);
-
-        for (let i = start + 2; i < candles.length - 2; i++) {
-            const currentHigh = candles[i].high;
-            const currentLow = candles[i].low;
-
-            // Pivot High (Fractal Superior)
-            if (currentHigh > candles[i - 1].high && currentHigh > candles[i - 2].high &&
-                currentHigh > candles[i + 1].high && currentHigh > candles[i + 2].high) {
-                highs.push(currentHigh);
-            }
-
-            // Pivot Low (Fractal Inferior)
-            if (currentLow < candles[i - 1].low && currentLow < candles[i - 2].low &&
-                currentLow < candles[i + 1].low && currentLow < candles[i + 2].low) {
-                lows.push(currentLow);
-            }
-        }
-        return {
-            highs: highs.sort((a, b) => a - b),
-            lows: lows.sort((a, b) => a - b)
-        };
+        const reason = `[EMA8/21] Tendência ${trend} (EMA8 ${signal === 'BUY' ? '>' : '<'} EMA21) | TP automático ${(this.TP_PERCENT * 100).toFixed(2)}%`;
+        this.onSignal?.(signal, currentPrice, reason, tpPrice, slPrice);
     }
 }

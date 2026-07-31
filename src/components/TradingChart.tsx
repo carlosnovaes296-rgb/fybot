@@ -449,15 +449,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
            // Linha de Entrada com Lucro em Tempo Real
            const safeProfit = trade.profit !== undefined ? Number(trade.profit) : 0;
            const profitText = !isNaN(safeProfit) && safeProfit !== 0 ? ` [$${safeProfit.toFixed(2)}]` : '';
-           const entryLine = series.createPriceLine({
-              price: Number(trade.openPrice),
-              color: safeProfit > 0 ? '#22c55e' : (safeProfit < 0 ? '#ef4444' : '#3b82f6'),
-              lineWidth: 2,
-              lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true,
-              title: `ENTRY (${trade.type})${profitText}`,
-           });
-           priceLinesRef.current.push(entryLine);
+           if (Number(trade.openPrice) > 0) {
+             const entryLine = series.createPriceLine({
+                price: Number(trade.openPrice),
+                color: safeProfit > 0 ? '#22c55e' : (safeProfit < 0 ? '#ef4444' : '#3b82f6'),
+                lineWidth: 2,
+                lineStyle: LineStyle.Dashed,
+                axisLabelVisible: true,
+                title: `ENTRY (${trade.type})${profitText}`,
+             });
+             priceLinesRef.current.push(entryLine);
+           }
 
            if (trade.tp !== undefined && trade.tp !== null && Number(trade.tp) > 0) {
               const tpLine = series.createPriceLine({

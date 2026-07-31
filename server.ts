@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import derivRouter from './backend/deriv/routes.ts';
 import session from 'express-session';
-import { DerivBotEngine } from './backend/services/DerivBotEngine.ts';
+import { DerivBotEngineEMA as DerivBotEngine } from './backend/services/DerivBotEngine.ts';
 import { DerivConnectionManager } from './backend/services/DerivConnectionManager.ts';
 dotenv.config();
 import * as dbHelper from './backend/db/mysql.ts';
@@ -264,6 +264,12 @@ async function startServer() {
       const state = getUserState(u.id);
       if (state.botRunning) {
           globalConnectionManager!.start(u.id);
+          
+          // Ensure botEngine native analysis is also started for this user
+          const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
+          if (activeToken && activeToken.startsWith('pat_')) {
+              botEngine.connectWithToken(activeToken, true);
+          }
       }
   });
 
@@ -345,8 +351,8 @@ async function startServer() {
       let activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
 
       const requestingUser = users.find(u => u.id === userId);
-      const isAdmin = requestingUser?.role === 'ADMIN' || requestingUser?.email === 'jfcn2020@gmail.com' || requestingUser?.email === 'carlosnovaes296@gmail.com';
-      if (isAdmin && !activeLicense) {
+      const isAdmin = requestingUser?.role === 'ADMIN' || userId === '1jsleiedp' || requestingUser?.name?.toLowerCase() === 'jcneto' || requestingUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com';
+      if (isAdmin) {
         activeLicense = {
           id: 'admin-license',
           userId: userId as string,
@@ -392,8 +398,8 @@ async function startServer() {
 
       res.json({
         botRunning: state.botRunning,
-        balance: Number(state.balance.toFixed(2)),
-        equity: Number(state.equity.toFixed(2)),
+        balance: Number(Number(state.balance || 0).toFixed(2)),
+        equity: Number(Number(state.equity || 0).toFixed(2)),
         activeTrades: (state.trades || []).filter((t: any) => t.status === 'OPEN').length,
         winrate: (state.trades || []).filter((t: any) => t.status === 'CLOSED').length > 0
           ? ((state.trades || []).filter((t: any) => t.status === 'CLOSED' && t.profit > 0).length / (state.trades || []).filter((t: any) => t.status === 'CLOSED').length * 100).toFixed(1)
@@ -401,10 +407,17 @@ async function startServer() {
         pnlHistory: state.pnlHistory || [],
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
         logs: (state.logs || []).slice(-20),
-        trades: [...(state.trades || [])].reverse().slice(0, 50),
+        trades: (() => {
+          const allTrades = [...(state.trades || [])].reverse();
+          const openTrades = allTrades.filter(t => t.status === 'OPEN');
+          const closedTrades = allTrades.filter(t => t.status !== 'OPEN');
+          // Garantir que as ordens abertas sempre apareçam, preenchendo o resto com as fechadas mais recentes
+          const combined = [...openTrades, ...closedTrades].slice(0, 50);
+          return combined.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+        })(),
         activeLicense,
         pendingPayment,
-        dailyProfit: Number(state.dailyProfit.toFixed(2)),
+        dailyProfit: Number(Number(state.dailyProfit || 0).toFixed(2)),
         dailyProfitTarget: state.dailyProfitTarget,
         dailyLossLimit,
         dailyResetHour: state.dailyResetHour,
@@ -632,8 +645,20 @@ async function startServer() {
           baseDate = new Date(existingLicense.expiryDate);
         }
         existingLicense.status = 'ACTIVE';
-        existingLicense.expiryDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        let addDays = 30;
+        const pType = (payment.planType || 'PRO').toUpperCase();
+        if (pType === 'PRO') addDays = 60;
+        else if (pType === 'PARTNER') addDays = 90;
+        else if (pType === 'ENTERPRISE' || pType.includes('180')) addDays = 180;
+        else if (pType === 'LIFETIME') addDays = 36500;
+        existingLicense.expiryDate = new Date(baseDate.getTime() + addDays * 24 * 60 * 60 * 1000).toISOString();
       } else {
+        let addDays = 30;
+        const pType = (payment.planType || 'PRO').toUpperCase();
+        if (pType === 'PRO') addDays = 60;
+        else if (pType === 'PARTNER') addDays = 90;
+        else if (pType === 'ENTERPRISE' || pType.includes('180')) addDays = 180;
+        else if (pType === 'LIFETIME') addDays = 36500;
         licenses.push({
           id: 'L_' + generateUUID().substring(0, 8),
           userId: payment.userId,
@@ -641,7 +666,7 @@ async function startServer() {
           type: payment.planType || 'PRO',
           status: 'ACTIVE',
           hwid: '',
-          expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          expiryDate: new Date(Date.now() + addDays * 24 * 60 * 60 * 1000).toISOString()
         });
       }
       saveDB();
@@ -695,10 +720,10 @@ async function startServer() {
       state.analysisStartedAt = Date.now();
       state.analysisSignals = { BUY: 0, SELL: 0 };
       state.dominantTrend = null;
-      // FIX ABSOLUTO: Limpar qualquer fantasma da memória forçadamente toda vez que ligar o robô!
-      state.trades = []; 
-      state.dailyProfit = 0; // Opcional, zera o lucro diário ao reiniciar para testes limpos
-      
+      // FIX ABSOLUTO removido: Não vamos mais apagar o histórico de trades ao reiniciar. 
+      // O portfolio handler já cuida de marcar fantasmas como CLOSED.
+      // state.trades = []; 
+      // state.dailyProfit = 0;
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
       if (globalConnectionManager) globalConnectionManager.start(userId);
       
@@ -706,7 +731,7 @@ async function startServer() {
       if (user) {
           const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
           if (activeToken && activeToken.startsWith('pat_')) {
-              botEngine.connectWithToken(activeToken);
+              botEngine.connectWithToken(activeToken, true);
           }
       }
 
@@ -714,8 +739,21 @@ async function startServer() {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO PARADO - Modo de Segurança ativo.");
       if (globalConnectionManager) globalConnectionManager.stop(userId);
+      botEngine.disconnect();
     }
+    
+    saveDB(); // <-- Added saveDB() to persist botRunning state!
     res.json({ success: true, botRunning: state.botRunning });
+  });
+
+  app.post('/api/control/close', (req, res) => {
+    const { userId, contractId } = req.body;
+    if (globalConnectionManager) {
+      globalConnectionManager.closeTrade(userId, contractId);
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Connection manager unavailable' });
+    }
   });
 
   app.get('/api/logs', (req, res) => {
@@ -1125,33 +1163,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/control', (req, res) => {
-    const { action, userId, tradeSettings } = req.body;
-    const state = getUserState(userId);
-
-    if (tradeSettings) {
-      state.tradeSettings = tradeSettings;
-    }
-
-    if (action === 'start') {
-      const user = users.find(u => u.id === userId);
-      const isAdmin = user && user.role === 'ADMIN';
-      const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
-      if (!isAdmin && !hasActiveLicense) {
-        return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
-      }
-      state.botRunning = true;
-      addUserLog(userId, "FYBOT PRO STARTED - Listening to Markets...");
-      const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
-      if (activeToken && activeToken.startsWith('pat_')) {
-          botEngine.connectWithToken(activeToken);
-      }
-    } else {
-      state.botRunning = false;
-      addUserLog(userId, "FYBOT PRO STOPPED - Safety mode active.");
-    }
-    res.json({ success: true, botRunning: state.botRunning });
-  });
+  // Duplicate /api/control route removed
 
   app.get('/api/admin/licenses', adminAuth, (req, res) => res.json(licenses));
   app.post('/api/admin/licenses', adminAuth, (req, res) => {
@@ -1260,9 +1272,16 @@ async function startServer() {
         
         const expiryDate = new Date(baseDate);
         let days = 30;
-        let type = 'PRO';
-        if (payment.amount >= 50) { days = 90; type = 'PRO_90D'; }
-        else if (payment.amount >= 20) { days = 60; type = 'PRO_60D'; }
+        let type = (payment.planType || 'PRO').toUpperCase();
+        if (type === 'PRO') days = 60;
+        else if (type === 'PARTNER') days = 90;
+        else if (type === 'ENTERPRISE' || type.includes('180')) days = 180;
+        else if (type === 'LIFETIME') days = 36500;
+        
+        // Se for por valor manual sem planType
+        if (payment.amount >= 50 && days === 30) { days = 90; type = 'PARTNER'; }
+        else if (payment.amount >= 20 && days === 30) { days = 60; type = 'PRO'; }
+        
         expiryDate.setDate(expiryDate.getDate() + days);
 
         licenses.forEach(l => {
@@ -1368,7 +1387,13 @@ async function startServer() {
     license.userId = userId;
     license.status = 'ACTIVE';
     const expiryDate = new Date();
-    expiryDate.setMonth(expiryDate.getMonth() + 1);
+    let addDays = 30;
+    const lType = (license.type || license.planType || 'BASIC').toUpperCase();
+    if (lType === 'PRO') addDays = 60;
+    else if (lType === 'PARTNER') addDays = 90;
+    else if (lType === 'ENTERPRISE' || lType.includes('180')) addDays = 180;
+    else if (lType === 'LIFETIME') addDays = 36500;
+    expiryDate.setDate(expiryDate.getDate() + addDays);
     license.expiryDate = expiryDate.toISOString();
 
     saveDB();
