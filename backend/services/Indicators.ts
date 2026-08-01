@@ -4,6 +4,7 @@ export interface Candle {
     high: number;
     low: number;
     close: number;
+    volume?: number;
 }
 
 export class Indicators {
@@ -137,5 +138,41 @@ export class Indicators {
             }
         }
         return rsiArray;
+    }
+
+    // Highest High over the last 'period' candles
+    static highestHigh(candles: Candle[], period: number): number {
+        if (candles.length < period) return 0;
+        let max = -Infinity;
+        // Search backwards from the most recently CLOSED candle (assume candles array contains only closed or we exclude the very last if forming)
+        // Usually, the user passes a sliced array of closed candles.
+        for (let i = candles.length - period; i < candles.length; i++) {
+            if (candles[i].high > max) max = candles[i].high;
+        }
+        return max;
+    }
+
+    // Lowest Low over the last 'period' candles
+    static lowestLow(candles: Candle[], period: number): number {
+        if (candles.length < period) return 0;
+        let min = Infinity;
+        for (let i = candles.length - period; i < candles.length; i++) {
+            if (candles[i].low < min) min = candles[i].low;
+        }
+        return min;
+    }
+
+    // Average Volume over the last 'period' candles
+    static averageVolume(candles: Candle[], period: number): number {
+        if (candles.length < period) return 0;
+        let sum = 0;
+        let count = 0;
+        for (let i = candles.length - period; i < candles.length; i++) {
+            if (candles[i].volume !== undefined) {
+                sum += candles[i].volume;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0;
     }
 }

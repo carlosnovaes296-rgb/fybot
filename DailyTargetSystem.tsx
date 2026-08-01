@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ShieldCheck,
   AlertTriangle,
-  Settings,
   TrendingUp,
   RefreshCw,
   Sliders,
@@ -67,6 +66,7 @@ const targetTranslations = {
     antiOvertradingDesc: "Impede novas e-entradas após bater a primeira meta do dia.",
     saveConfigBtn: "Salvar Configurações",
     configSuccess: "Parâmetros da Meta Diária atualizados!",
+    configError: "Erro ao salvar configurações. Tente novamente.",
     manualResetSuccess: "Ciclo diário resetado! Operações liberadas.",
     simulations: "Painel de Simulações de Risco"
   },
@@ -99,6 +99,7 @@ const targetTranslations = {
     antiOvertradingDesc: "Blocks duplicate trading after daily target is met.",
     saveConfigBtn: "Save Operational Settings",
     configSuccess: "Daily Target parameters updated!",
+    configError: "Error saving settings. Please try again.",
     manualResetSuccess: "Daily cycle reset! Operations unlocked.",
     simulations: "Risk Simulation Controls"
   },
@@ -131,6 +132,7 @@ const targetTranslations = {
     antiOvertradingDesc: "Evita operaciones impulsivas después del primer objetivo diario.",
     saveConfigBtn: "Guardar Parámetros",
     configSuccess: "¡Parámetros de Meta Diaria actualizados!",
+    configError: "Error al guardar la configuración. Inténtalo de nuevo.",
     manualResetSuccess: "¡Ciclo diario reiniciado! Operaciones desbloqueadas.",
     simulations: "Panel de Simulación de Riesgo"
   }
@@ -254,9 +256,12 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
       if (res.ok) {
         await fetchStatus();
         showNotification(t.configSuccess);
+      } else {
+        showNotification(t.configError);
       }
     } catch (err) {
       console.error(err);
+      showNotification(t.configError);
     } finally {
       setSaving(false);
     }
@@ -268,6 +273,9 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
   const liveTarget = stats.balance * 0.02;
   const pct = Math.min(100, Math.max(0, (totalDailyProfit / (liveTarget || 200)) * 100));
   const isBlocked = !!stats.systemBlocked;
+  // Quando bloqueado, o motivo é inferido pelo sinal do lucro do dia:
+  // lucro >= 0 -> meta diária batida; lucro < 0 -> limite de perda atingido.
+  const blockedByLoss = isBlocked && totalDailyProfit < 0;
 
   return (
     <div id="v8-daily-target-module" className="relative w-full space-y-2">
@@ -286,6 +294,88 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
       </AnimatePresence>
 
       <div className="flex flex-col gap-6 w-full">
+        {/* Status card — visível para todos os usuários, não só admin */}
+        <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-wider">{t.title}</h2>
+              <p className="text-[10px] text-white/40 mt-1">{t.subtitle}</p>
+            </div>
+            <div
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${isBlocked
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : stats.botRunning
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-white/5 border-white/10 text-white/40'
+                }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isBlocked ? 'bg-red-400' : stats.botRunning ? 'bg-emerald-400 animate-pulse' : 'bg-white/30'}`} />
+              {isBlocked ? t.blocked : stats.botRunning ? t.active : t.offline}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold flex items-center gap-1.5">
+                <TrendingUp size={12} className="text-yellow-500" />
+                {t.currentProfit}
+              </p>
+              <p className={`text-sm font-mono font-black ${realTimeProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {realTimeProfit >= 0 ? '+' : ''}${realTimeProfit.toFixed(2)}
+              </p>
+            </div>
+            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${blockedByLoss ? 'bg-red-500' : 'bg-yellow-500'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[9px] text-white/30 font-mono">
+              <span>0%</span>
+              <span>{t.targetValue}: ${liveTarget.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {floatingProfit !== 0 && (
+            <p className="text-[9px] text-white/30 font-mono">
+              Floating P&L: <span className={floatingProfit >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}>{floatingProfit >= 0 ? '+' : ''}${floatingProfit.toFixed(2)}</span>
+            </p>
+          )}
+
+          <AnimatePresence>
+            {isBlocked && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={`rounded-2xl p-4 border space-y-2 overflow-hidden ${blockedByLoss ? 'bg-red-500/5 border-red-500/20' : 'bg-emerald-500/5 border-emerald-500/20'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className={blockedByLoss ? 'text-red-400' : 'text-emerald-400'} />
+                  <p className={`text-[10px] font-black uppercase tracking-widest ${blockedByLoss ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {blockedByLoss ? t.lossMsgHeader : t.blockedMsgHeader}
+                  </p>
+                </div>
+                <p className="text-[10px] text-white/50 leading-relaxed">
+                  {blockedByLoss ? t.lossCongratsMsg : t.congratsMsg}
+                </p>
+                <div className="flex items-center gap-1.5 text-[9px] text-white/40 font-bold">
+                  <Check size={11} className={blockedByLoss ? 'text-red-400' : 'text-emerald-400'} />
+                  {blockedByLoss ? t.lossProtected : t.successProtected}
+                  <span className="text-white/20">·</span>
+                  <ShieldCheck size={11} />
+                  {t.vpsStatus}
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-white/5 mt-1">
+                  <span className="text-[9px] text-white/40 uppercase tracking-widest font-bold">{t.nextSession}</span>
+                  <span className="text-xs font-mono font-black text-white">{countdown}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {isAdmin && (
           <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-between">
             <div className="space-y-4">
@@ -295,46 +385,6 @@ export default function DailyTargetSystem({ stats, language, fetchStatus, isAdmi
               </h3>
 
               <form onSubmit={handleSaveConfig} className="space-y-4">
-                {/* Daily target selection */}
-                {/* 
-                <div>
-                  <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">
-                    {t.targetValue} (USD)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-xs text-white/30">$</span>
-                    <input
-                      type="number"
-                      value={Math.round((stats.balance || 0) * 0.02)}
-                      readOnly
-                      disabled
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white/50 cursor-not-allowed"
-                    />
-                    <span className="absolute right-3 top-2 text-[10px] text-yellow-500 font-bold bg-yellow-500/10 px-2 py-0.5 rounded">AUTO (2%)</span>
-                  </div>
-                </div>
-                */}
-
-                {/* Daily loss limit (read-only, 10% of bankroll) */}
-                {/*
-                <div>
-                  <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">
-                    {t.lossValue} (USD)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-xs text-white/30">$</span>
-                    <input
-                      type="number"
-                      value={Math.round((stats.balance || 0) * 0.10)}
-                      readOnly
-                      disabled
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-7 pr-3 text-sm font-mono font-bold text-white/50 cursor-not-allowed"
-                    />
-                    <span className="absolute right-3 top-2 text-[10px] text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded">AUTO (10%)</span>
-                  </div>
-                </div>
-                */}
-
                 {/* Automatic reset time config */}
                 <div>
                   <label className="block text-[10px] text-white/40 uppercase tracking-widest mb-1.5 font-bold">

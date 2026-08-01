@@ -1,5 +1,5 @@
 // src/config.ts
-export const PAT_TOKEN = 'PAT_b8ca3ece2ec75fc9153f1770f8208ae1de6c84e70d605118a4e69af4a951bdd0';
+export const PAT_TOKEN = 'pat_a6a6d07e6e0a49027cc1c04ab47c52816b679aeef18542afc8fbf565c70bd1cd';
 // App ID OAuth registado em api.deriv.com (com redirect URL correto)
 export const APP_ID = '1089';
 

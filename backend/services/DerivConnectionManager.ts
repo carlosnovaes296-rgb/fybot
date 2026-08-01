@@ -380,144 +380,39 @@ export class DerivConnectionManager {
                 trade.status = 'CLOSED';
                 state.dailyProfit += profit;
                 this.openContractIds.get(userId)?.delete(contractId);
-                const anchors = this.userTpAnchor.get(userId);
-                if (anchors) delete anchors[contractId];
                 this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
-
-                const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
-                if (openTradesCount === 0) {
-                  if (this.userDcaState.has(userId)) {
-                    this.addUserLog(userId, `🔄 [DCA] Ciclo finalizado. Robô livre para buscar nova entrada (Ordem 1).`);
-                    this.userDcaState.delete(userId);
-                  }
-                }
               }
             } else {
-              // Lógica de DCA (Ordens 2 a 6)
-              let dcaState = this.userDcaState.get(userId);
-
-              if (!dcaState) {
-                const openTradesList = state.trades
-                  .filter((t: any) => t.status === 'OPEN')
-                  .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime());
-                if (openTradesList.length > 0) {
-                  const direction = contract.contract_type === 'MULTUP' ? 'BUY' : 'SELL';
-                  // CORREÇÃO: a âncora do grid deve ser o preço de entrada da
-                  // Ordem 1 (a mais ANTIGA aberta), não o entry_spot/current_spot
-                  // do contrato cujo tick chegou primeiro após a reconexão (podia
-                  // ser a Ordem 3, 4 etc., distorcendo o cálculo de % de recuo).
-                  const oldestTrade = openTradesList[0];
-                  const reconstructedAnchor = (oldestTrade && oldestTrade.openPrice)
-                    ? oldestTrade.openPrice
-                    : (contract.entry_spot || contract.current_spot);
-                  dcaState = {
-                    direction,
-                    anchorPrice: reconstructedAnchor,
-                    ordersOpened: openTradesList.length,
-                    tpDistancePct: 0.005,
-                    slDistancePct: 0.005
-                  };
-                  this.userDcaState.set(userId, dcaState);
-                  this.addUserLog(userId, `🔄 [SISTEMA] Estado DCA reconstruído para ordem órfã após reinício (Direção: ${direction}, Ordens: ${openTradesList.length}, Âncora: ${reconstructedAnchor}).`);
-                }
-              }
-
-              if (dcaState && dcaState.ordersOpened < DerivConnectionManager.MAX_DCA_ORDERS) {
-                const currentSpot = contract.current_spot;
-
-                // Captura a âncora exata no primeiro tick da Ordem 1, se ela foi criada pelo executeSignal com valor 0
-                if (dcaState.ordersOpened === 1 && dcaState.anchorPrice === 0) {
-                  const initialAnchor = contract.entry_spot || contract.current_spot;
-                  if (initialAnchor) {
-                    dcaState.anchorPrice = initialAnchor;
-                    this.userDcaState.set(userId, dcaState);
-                    this.addUserLog(userId, `⚓ [DCA] Âncora fixada no preço de entrada inicial: ${initialAnchor}`);
-                  }
-                }
-
-                if (currentSpot && dcaState.anchorPrice > 0) {
-                  const diffPct = (currentSpot - dcaState.anchorPrice) / dcaState.anchorPrice;
-                  const isAgainstBuy = dcaState.direction === 'BUY' && diffPct < 0;
-                  const isAgainstSell = dcaState.direction === 'SELL' && diffPct > 0;
-
-                  const targetLevelIndex = dcaState.ordersOpened - 1; // Ordem 2 = índice 0
-                  const triggerRecuo = DerivConnectionManager.DCA_RETRACEMENT_LEVELS[targetLevelIndex];
-
-                  const now = Date.now();
-                  if (!dcaState.lastLogTime || now - dcaState.lastLogTime > 15000) {
-                    dcaState.lastLogTime = now;
-                    this.userDcaState.set(userId, dcaState);
-                    if (triggerRecuo) {
-                      const isAgainst = isAgainstBuy || isAgainstSell;
-                      const status = isAgainst ? 'CONTRA (Aguardando DCA)' : 'A FAVOR (Lucro)';
-                      this.addUserLog(userId, `🔎 [DCA DEBUG] Ordem ${dcaState.ordersOpened} | Preço Atual: ${Number(currentSpot).toFixed(2)} | Status: ${status} | Distância: ${(Math.abs(diffPct) * 100).toFixed(4)}% | Gatilho Ordem ${dcaState.ordersOpened + 1}: ${(triggerRecuo * 100).toFixed(4)}%`);
-                    }
-                  }
-
-                  if (isAgainstBuy || isAgainstSell) {
-                    const absRecuo = Math.abs(diffPct);
-
-                    if (triggerRecuo && absRecuo >= triggerRecuo) {
-                      dcaState.ordersOpened++; // Incrementa antes para evitar duplo disparo
-                      this.userDcaState.set(userId, dcaState);
-                      this.addUserLog(userId, `⚠️ [DCA] Recuo de ${(absRecuo * 100).toFixed(2)}% atingido! Disparando Ordem ${dcaState.ordersOpened} do grid (Direção: ${dcaState.direction}).`);
-
-                      const tpPrice = dcaState.direction === 'BUY' ? currentSpot * (1 + dcaState.tpDistancePct) : currentSpot * (1 - dcaState.tpDistancePct);
-                      const slPrice = dcaState.direction === 'BUY' ? currentSpot * (1 - dcaState.slDistancePct) : currentSpot * (1 + dcaState.slDistancePct);
-
-                      this.placeOrder(userId, state, dcaState.direction, currentSpot, tpPrice, slPrice);
-                    }
-                  }
-                }
-              }
-
-              // Requisito 5: PROTEÇÃO DE BANCA (Trailing Stop)
-              // Acompanha o preço enquanto a ordem estiver no positivo. Se o lucro
-              // recuar 10% em relação ao topo já alcançado, fecha automaticamente
-              // para proteger o que já foi ganho (trava 90% do pico).
-              if (!this.userPeakProfits.has(userId)) {
-                this.userPeakProfits.set(userId, {});
-              }
+              // Requisito 7 & 5: Break-Even (+1 ATR) e Trailing Stop (1 ATR)
+              if (!this.userPeakProfits.has(userId)) this.userPeakProfits.set(userId, {});
               const peaks = this.userPeakProfits.get(userId)!;
               if (!peaks[contractId]) peaks[contractId] = 0;
 
               const numProfit = Number(profit || 0);
-              const numPeak = Number(peaks[contractId] || 0);
+              const atrProfitUSD = trade.atrProfitUSD || 1.0; 
 
-              if (numProfit > numPeak) {
+              if (numProfit > peaks[contractId]) {
                 peaks[contractId] = numProfit;
               }
 
-              const TRAILING_RETRACEMENT = 0.10; // 10% de recuo do topo
-              if (numPeak > 0.50 && numProfit < (numPeak * (1 - TRAILING_RETRACEMENT))) {
-                this.addUserLog(userId, `🛡️ [TRAILING SL] Recuo de 10% detectado! Lucro caiu de $${numPeak.toFixed(2)} para $${numProfit.toFixed(2)}. Fechando para proteger a banca (90% do topo)!`);
-                ws.send(JSON.stringify({ sell: contractId, price: 0 }));
-                peaks[contractId] = 0; // Reseta para evitar spam
+              // Break-Even (+1 ATR atingido)
+              if (numProfit >= atrProfitUSD && !trade.beSet) {
+                 trade.beSet = true;
+                 this.addUserLog(userId, `🛡️ [BREAK-EVEN] Lucro atingiu +1 ATR ($${numProfit.toFixed(2)}). Posição protegida!`);
               }
 
-              // Requisito 7: TP DINÂMICO — acompanha os picos do preço, NUNCA recua.
-              // Diferente do trailing acima (que FECHA a ordem no recuo), aqui nós
-              // apenas EMPURRAMOS o alvo de take_profit registrado na corretora para
-              // mais longe conforme o lucro atinge novos picos. Se o lucro cair, o
-              // alvo simplesmente permanece onde estava — nunca é reduzido.
-              const anchors = this.userTpAnchor.get(userId) || {};
-              const currentAnchor = anchors[contractId];
-              if (currentAnchor !== undefined && currentAnchor > 0 && profit > 0) {
-                // Quando o lucro se aproxima do alvo atual (90%+), estica o alvo mais
-                // um pouco (50% do valor do alvo atual, mínimo $0.50) para deixar o
-                // preço continuar correndo a favor da tendência.
-                const numCurrentAnchor = Number(currentAnchor || 0);
-                if (numProfit >= numCurrentAnchor * 0.9) {
-                  const newAnchor = parseFloat((numCurrentAnchor + Math.max(numCurrentAnchor * 0.5, 0.50)).toFixed(2));
-                  ws.send(JSON.stringify({
-                    contract_update: 1,
-                    contract_id: contractId,
-                    limit_order: { take_profit: newAnchor }
-                  }));
-                  anchors[contractId] = newAnchor; // só aumenta, nunca reduz
-                  this.userTpAnchor.set(userId, anchors);
-                  this.addUserLog(userId, `🎯 [TP DINÂMICO] Alvo de lucro elevado de $${currentAnchor.toFixed(2)} para $${newAnchor.toFixed(2)} (acompanhando o pico do preço).`);
-                }
+              // Fechamento no zero a zero se recuar após BE
+              if (trade.beSet && numProfit < 0.10) {
+                 this.addUserLog(userId, `🛡️ [BREAK-EVEN ACIONADO] O preço recuou. Fechando ordem para proteger o capital no 0x0.`);
+                 ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+                 trade.status = 'CLOSED'; // Evitar spam
+              }
+
+              // Trailing Stop de 1 ATR após Break-Even (distância do topo alcançado)
+              if (trade.beSet && numProfit < (peaks[contractId] - atrProfitUSD)) {
+                 this.addUserLog(userId, `🏃 [TRAILING STOP] Recuo de 1 ATR detectado do topo ($${peaks[contractId].toFixed(2)} -> $${numProfit.toFixed(2)}). Fechando ordem com lucro!`);
+                 ws.send(JSON.stringify({ sell: contractId, price: 0 }));
+                 trade.status = 'CLOSED'; // Evitar spam
               }
             }
           }
@@ -532,14 +427,20 @@ export class DerivConnectionManager {
             const state = this.getUserState(userId);
             state.trades = (state.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
 
-            // Libera o motor se a Ordem 1 falhou
-            const dcaState = this.userDcaState.get(userId);
-            if (dcaState && dcaState.ordersOpened === 1) {
+            if (data.error.code === 'MarketIsClosed' || data.error.subcode === 'MarketIsClosed') {
+              this.addUserLog(userId, `🛑 [SISTEMA] Mercado fechado! O robô será pausado automaticamente para evitar repetições de tentativa.`);
+              state.botRunning = false;
               this.userDcaState.delete(userId);
-              this.addUserLog(userId, `🔄 [SISTEMA] Motor destravado (Ordem 1 falhou).`);
-            } else if (dcaState && dcaState.ordersOpened > 1) {
-              dcaState.ordersOpened--;
-              this.userDcaState.set(userId, dcaState);
+            } else {
+              // Libera o motor se a Ordem 1 falhou
+              const dcaState = this.userDcaState.get(userId);
+              if (dcaState && dcaState.ordersOpened === 1) {
+                this.userDcaState.delete(userId);
+                this.addUserLog(userId, `🔄 [SISTEMA] Motor destravado (Ordem 1 falhou).`);
+              } else if (dcaState && dcaState.ordersOpened > 1) {
+                dcaState.ordersOpened--;
+                this.userDcaState.set(userId, dcaState);
+              }
             }
           } else {
             const contractId = String(data.buy.contract_id || data.buy.transaction_id);
@@ -662,32 +563,23 @@ export class DerivConnectionManager {
 
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
 
-    // DEBUG: Vamos printar exatamente o que o motor de ordens está vendo
-    this.addUserLog(userId, `🛠️ [DEBUG EXEC] Sinal recebido: ${direction} | Ordens abertas: ${openTradesCount} | DCA Ativo: ${this.userDcaState.has(userId)}`);
+    // Bloqueio de Meta Diária e Limite de Perda Diária
+    const balance = state.balance > 0 ? state.balance : 1000;
+    const dailyTarget = balance * 0.05; // 5% de meta
+    const dailyLossLimit = -(balance * 0.06); // 6% de perda máxima
 
-    // Bloqueio de Meta Diária
-    if (state.dailyTarget && state.dailyTarget > 0 && state.dailyProfit >= state.dailyTarget) {
-      this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${state.dailyTarget.toFixed(2)}) atingida. O robô não abrirá novas ordens iniciais hoje.`);
+    if (state.dailyProfit >= dailyTarget) {
+      this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${dailyTarget.toFixed(2)}) atingida. O robô não abrirá novas ordens hoje.`);
       return;
     }
 
-    // Requisito 6: Filtro de Tendência - só abre ordem se a direção do sinal
-    // estiver a favor do regime de mercado atual (definido via handleRegimeChange,
-    // alimentado pelo cruzamento EMA8/EMA21 do motor). Nunca abre contra a tendência.
-    const trend = this.userTrend.get(userId);
-    if (trend) {
-      const trendFavorsBuy = trend === 'TREND_UP' || trend === 'LATERAL';
-      const trendFavorsSell = trend === 'TREND_DOWN' || trend === 'LATERAL';
-      if ((direction === 'BUY' && !trendFavorsBuy) || (direction === 'SELL' && !trendFavorsSell)) {
-        this.addUserLog(userId, `⛔ [CONTRA-TENDÊNCIA] Sinal de ${direction} ignorado: tendência atual é ${trend}.`);
-        return;
-      }
-    } else {
-      this.addUserLog(userId, `⚠️ [TENDÊNCIA DESCONHECIDA] Ainda não recebi o regime de mercado. Permitindo sinal de ${direction} por padrão.`);
+    if (state.dailyProfit <= dailyLossLimit) {
+      this.addUserLog(userId, `🛑 [LIMITE DE PERDA] Perda diária atingida ($${state.dailyProfit.toFixed(2)}). O robô parou para proteger a banca.`);
+      return;
     }
 
-    if (openTradesCount > 0 || this.userDcaState.has(userId)) {
-      // Ignorando sinal do motor pois já estamos com grid rodando (Ordem 1 já foi feita).
+    if (openTradesCount >= 3) {
+      this.addUserLog(userId, `⚠️ [LIMITE ORDENS] Máximo de 3 ordens simultâneas atingido.`);
       return;
     }
 
@@ -697,17 +589,7 @@ export class DerivConnectionManager {
       return;
     }
 
-    this.addUserLog(userId, `🚀 [SINAL RECEBIDO] ${reason}. Executando Ordem 1 (${direction})...`);
-
-    // Inicia o Grid de DCA guardando o estado do ciclo
-    this.userDcaState.set(userId, {
-      direction,
-      anchorPrice: 0, // Será atualizado com o entry_spot exato no primeiro tick do contrato
-      ordersOpened: 1,
-      tpDistancePct: Math.abs((engineTp - price) / price),
-      slDistancePct: Math.abs((engineSl - price) / price)
-    });
-
+    this.addUserLog(userId, `🚀 [SINAL RECEBIDO] ${reason}. Executando ordem ${direction}...`);
     this.placeOrder(userId, state, direction, price, engineTp, engineSl);
   }
 
@@ -717,31 +599,31 @@ export class DerivConnectionManager {
 
     const balance = state.balance > 0 ? state.balance : 1000;
     const manualStake = this.manualStakes.get(userId);
-    // O usuário solicitou que o lote seja fixo, abandonando o cálculo de % da banca.
-    // Lote fixo padrão será 5.00 a pedido do usuário.
-    const dynamicStake = manualStake && manualStake > 0
-      ? parseFloat(manualStake.toFixed(2))
-      : 5.00;
+    const multiplierValue = 100;
+    
+    // Risco fixo de 1.5% da banca por operação
+    const riskAmountUSD = balance * 0.015;
+    
+    // Distância do preço até o SL (2 ATR) e até o TP (3 ATR)
+    const slDistancePct = Math.abs((engineSl - price) / price);
+    const tpDistancePct = Math.abs((engineTp - price) / price);
+    
+    // 1 ATR em Pct é metade da distância do SL
+    const atrDistancePct = slDistancePct / 2;
+
+    // Stake 100% inteligente (Ignora o valor manual do painel)
+    let dynamicStake = parseFloat((riskAmountUSD / (multiplierValue * slDistancePct)).toFixed(2));
+      
+    if (dynamicStake < 1.0) dynamicStake = 1.0; // Mínimo absoluto na Deriv
 
     const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
-    const multiplierValue = 100;
 
-    let tpAmount = parseFloat((Math.abs((engineTp - price) / price) * dynamicStake * multiplierValue).toFixed(2));
-    let slAmount = parseFloat((Math.abs((engineSl - price) / price) * dynamicStake * multiplierValue).toFixed(2));
+    let tpAmount = parseFloat((tpDistancePct * dynamicStake * multiplierValue).toFixed(2));
+    let slAmount = parseFloat((slDistancePct * dynamicStake * multiplierValue).toFixed(2));
 
-    // A Deriv exige um mínimo absoluto de 0.10 USD para qualquer Take Profit ou Stop Loss (LimitOrderAmountTooLow).
-    // Se o cálculo matemático for menor que 0.10, temos que forçar 0.10 para a ordem ser aceita.
     if (tpAmount < 0.10) tpAmount = 0.10;
     if (slAmount < 0.10) slAmount = 0.10;
-
-    if (slAmount > dynamicStake) {
-      this.addUserLog(userId, `⚠️ [AJUSTE SL] Stop Loss ($${slAmount.toFixed(2)}) excedia o stake ($${dynamicStake.toFixed(2)}). Ajustado.`);
-      slAmount = dynamicStake;
-    }
-
-    const queue = this.pendingTpQueue.get(userId) || [];
-    queue.push(tpAmount);
-    this.pendingTpQueue.set(userId, queue);
+    if (slAmount > dynamicStake) slAmount = dynamicStake;
 
     ws.send(JSON.stringify({
       buy: 1,
@@ -770,7 +652,9 @@ export class DerivConnectionManager {
       status: 'OPEN',
       profit: 0,
       tp: engineTp,
-      sl: engineSl
+      sl: engineSl,
+      atrProfitUSD: atrDistancePct * dynamicStake * multiplierValue,
+      beSet: false
     };
     state.trades.unshift(realTrade);
   }

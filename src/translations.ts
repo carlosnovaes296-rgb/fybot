@@ -126,6 +126,9 @@ export const translations = {
       card4Title: "Partnership License",
       card4Desc: "Activate 5 Free Bots on your first level.",
       card4Features: ["Gain free access to trade 24 hours.", "For 180 days"],
+      card5Title: "Bot Pro License",
+      card5Desc: "Access to the bot for 180 days.",
+      card5Features: ["180 Days License"],
       period: "DAYS"
     },
     installation: {
@@ -301,6 +304,9 @@ export const translations = {
       card4Title: "Licença Parceria",
       card4Desc: "Ativar 5 Bot livre em seu primeiro nível.",
       card4Features: ["Ganha acesso livre para operar 24 horas.", "Durante 180 dias"],
+      card5Title: "Licença Bot Pro",
+      card5Desc: "Acesso ao robô para 180 dias.",
+      card5Features: ["Licença de 180 dias"],
       period: "DIAS"
     },
     installation: {
@@ -476,6 +482,9 @@ export const translations = {
       card4Title: "Licencia Asociación",
       card4Desc: "Activar 5 Bot libre en su primer nivel.",
       card4Features: ["Gana acceso libre para operar 24 horas.", "Durante 180 días"],
+      card5Title: "Licencia Bot Pro",
+      card5Desc: "Acceso al bot por 180 días.",
+      card5Features: ["Licencia de 180 días"],
       period: "DÍAS"
     },
     installation: {

@@ -36,6 +36,15 @@ conn.on('ready', () => {
       appStream.on('close', () => {
         console.log('📤 App.tsx uploaded!');
 
+        // Upload translations.ts
+        const transContent = fs.readFileSync('./src/translations.ts');
+        const transStream = sftp.createWriteStream('/root/fybot/src/translations.ts');
+        transStream.write(transContent);
+        transStream.end();
+
+        transStream.on('close', () => {
+          console.log('📤 translations.ts uploaded!');
+
         // Upload DerivBotEngine.ts
         const derivBotContent = fs.readFileSync('./backend/services/DerivBotEngine.ts');
         const derivBotStream = sftp.createWriteStream('/root/fybot/backend/services/DerivBotEngine.ts');
@@ -65,6 +74,7 @@ conn.on('ready', () => {
         }); // conn.exec
           }); // indStream.on
         }); // derivBotStream.on
+        }); // transStream.on
       }); // appStream.on
     }); // typesStream.on
   }); // serverStream.on

@@ -50,7 +50,7 @@ conn.on('ready', async () => {
     await uploadFile('./src/translations.ts', '/root/fybot/src/translations.ts');
     
     console.log('📤 2. Enviando o DailyTargetSystem...');
-    await uploadFile('./src/components/DailyTargetSystem.tsx', '/root/fybot/src/components/DailyTargetSystem.tsx');
+    await uploadFile('./DailyTargetSystem.tsx', '/root/fybot/src/components/DailyTargetSystem.tsx');
     
     console.log('📤 3. Enviando o TradingChart.tsx (o Gráfico Azul!)...');
     await uploadFile('./src/components/TradingChart.tsx', '/root/fybot/src/components/TradingChart.tsx');

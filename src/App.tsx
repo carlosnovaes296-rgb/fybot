@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -132,191 +132,6 @@ async function handleDerivPKCELogin(clientId: string) {
 // --------------------
 
 
-/*
-const _unused_translations = {
-  en: {},
-  pt: {},
-  es: {
-    common: {
-      buyNow: "COMPRAR AHORA",
-      proAccount: "CUENTA PRO",
-      warning: "Aviso",
-      recommended: "Recomendado"
-    },
-    sidebar: {
-      dashboard: "Panel",
-      strategies: "Estrategias",
-      analytics: "Analítica",
-      history: "Historial",
-      licenses: "Activar Licencia",
-      installation: "Instalación",
-      affiliates: "Afiliados",
-      admin: "Administración",
-      settings: "Configuración",
-      logout: "Salir"
-    },
-    header: {
-      active: "Motor Activo",
-      idle: "Motor Inactivo",
-      equity: "Capital Total",
-      stop: "PARAR FYBOT",
-      start: "INICIAR FYBOT",
-      locked: "🔒 SISTEMA BLOQUEADO",
-      broker: "Corredor: MetaTrader 5 Cloud"
-    },
-    login: {
-      subTitle: "Ingrese sus credenciales para acceder al panel v8.",
-      email: "E-mail",
-      password: "Contraseña",
-      button: "ENTRAR AL SISTEMA",
-      authorized: "Solo Personal Autorizado",
-      noAccount: "¿No tienes una cuenta?",
-      signUp: "Regístrate ahora",
-      haveAccount: "¿Ya tienes una cuenta?",
-      login: "Inicia sesión aquí",
-      name: "Nombre Completo",
-      registerButton: "CREAR CUENTA"
-    },
-    dashboard: {
-      balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (2% de la Banca)",
-      dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
-      dailyProfitLabel: "Ganancia de Hoy",
-      activeTrades: "Posiciones Activas",
-      winrate: "Tasa de Acierto",
-      stepByStep: "Paso a Paso",
-      installV8: "Instalar Robot v8",
-      fullGuide: "Guía Completa",
-      signalIntel: "Inteligencia de Señal",
-      signalDesc: "Motor de consenso multifactorial agregado",
-      recentExecutions: "Ejecuciones Recentes",
-      viewFull: "VER HISTORIAL COMPLETO",
-      noTrades: "No se han ejecutado operaciones en la sesión actual",
-      running: "EN CURSO",
-      intelStatus: "Estado de Inteligencia",
-      intelDesc: "La estrategia está sincronizada con los nodos de MetaTrader 5 Cloud. Las rutas de arbitraje en tiempo real están estrictamente restringidas por los parámetros de riesgo actuales.",
-      adjustWeights: "Ajustar Pesos",
-      smc: "Estructura SMC",
-      momentum: "Impulso",
-      aiBias: "Lógica de Sesgo de IA",
-      licenseExpires: "LA LICENCIA EXPIRA EN",
-      activeLicense: "LICENCIA ACTIVA",
-      grantAccess: "Liberar Acceso",
-      activateLicense: "Activar Licencia",
-      enterKey: "Ingrese su Clave de Licencia",
-      keyPlaceholder: "FY-XXXX-XXXX-XXXX",
-      activate: "Activar",
-      validating: "Validando...",
-      successKey: "¡Licencia activada con éxito!",
-      days: "Días",
-      hrs: "Hrs",
-      min: "Min",
-      sec: "Seg",
-      remaining: "restantes",
-      status: "Estado"
-    },
-    strategies: {
-      highAccuracy: "Alta Precisión",
-      trendFollowing: "Seguidor de Tendencia",
-      neuralInference: "Inferencia Neural",
-      smcTitle: "Conceptos de Dinero Inteligente (SMC)",
-      smcDesc: "Detección de Bloques de Órdenes Institucionales y mapeo de Liquidez",
-      momTitle: "Motor de Impulso",
-      momDesc: "Seguimiento de velocidad y divergencia RSI/Estocástico",
-      aiTitle: "Sensor de Sesgo de IA",
-      aiDesc: "Sentimiento multi-tiempo y análisis de clúster de volumen",
-      consensusMap: "Mapa de Consenso del Algoritmo",
-      structureAlign: "Alineación de Estructura",
-      structureDesc: "SMC debe confirmar una Ruptura de Estructura (BOS) o Cambio de Carácter (CHoCH) en el intervalo de 15M antes de la calificación de la operación.",
-      momentumThreshold: "Umbral de Impulso",
-      momentumDesc: "El Motor de Impulso requiere un mínimo de 4 velas consecutivas en la dirección de la señal o una ruptura de alta volatilidad.",
-      neuralConfidence: "Confianza Neural",
-      neuralDesc: "La operación solo se autoriza si la puntuación de Sesgo de IA proporciona una probabilidad >60% para la continuación de la tendencia actual.",
-      executionStatus: "Estado de Ejecución",
-      scanningMsg: "Actualmente escaneando 24 pools de liquidez clave y 4 pares forex principales para configuraciones de alta probabilidad."
-    },
-    analytics: {
-      winRate: "Tasa de Victoria",
-      vsLastWeek: "vs última semana",
-      profitFactor: "Factor de Beneficio",
-      maxDrawdown: "Reducción Máxima",
-      avgTradeTime: "Tiempo Promedio de Operación",
-      equityCurve: "Curva de Equidad",
-      performanceTrack: "Seguimiento del desempeño en los últimos 30 días de negociación",
-      advancedMetrics: "Métricas Avanzadas",
-      aiInsight: "Insight de IA",
-      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en XAUUSD y reducir la exposición en pares GBP en las próximas 48h.",
-      viewFullAnalysis: "VER ANÁLISE COMPLETO"
-    },
-    plans: {
-      title: "Elija su Licencia FYBOT",
-      subTitle: "Active su robot y comience a operar automáticamente en el mercado internacional Forex.",
-      card1Title: "Licencia Básica",
-      card1Desc: "Ideal para principiantes que desean probar la tecnología SMC.",
-      card1Features: ["Licencia de 30 días"],
-      card2Title: "Licencia Pro",
-      card2Desc: "El mejor valor para traders intermedios.",
-      card2Features: ["Licencia de 60 días"],
-      card3Title: "Institucional Pro",
-      card3Desc: "Máximo rendimiento para capital profesional.",
-      card3Features: ["Licencia de 90 días"],
-      period: "DÍAS"
-    },
-    installation: {
-      title: "🚀 Paso Inicial: Descargar su Robot",
-      subTitle: "Versión v8 Professional — Compatible con MetaTrader 5",
-      downEx5: "DESCARGAR .EX5 SOLO",
-      downZip: "DESCARGAR PAQUETE COMPLETO (.ZIP)",
-      step1: "Extraiga el .zip o guarde el archivo .ex5 en una carpeta accesible.",
-      step2: "Abra MetaTrader 5, vaya a Archivo > Abrir Carpeta de Datos.",
-      step3: "Navegue a MQL5 > Experts y pegue el archivo del robot allí.",
-      step4: "Reinicie MT5, localice el robot en el Navegador y arrástrelo al gráfico."
-    },
-    settings: {
-      accountFinance: "Cuenta y Finanzas",
-      accountFinanceDesc: "Configure su identidad y dirección de retiro",
-      fullName: "Nombre Completo",
-      emailAddress: "Dirección de Correo",
-      updatePassword: "Actualizar Contraseña",
-      passwordPlaceholder: "Dejar en blanco para mantener la actual",
-      usdtWallet: "Billetera USDT (BEP20)",
-      walletPlaceholder: "0x...",
-      updateProfileBtn: "ACTUALIZAR PERFIL",
-      engineConfig: "Configuración del Motor",
-      engineConfigDesc: "Parámetros de riesgo y consistencia en el trading",
-      riskProfile: "Perfil de Riesgo",
-      lotMultiplier: "Multiplicador de Lote",
-      minConsensus: "Puntuación de Consenso Mínima",
-      usdtReceiver: "Billetera Receptora de Pagos USDT BEP-20",
-      saveConfigBtn: "GUARDAR CONFIGURACIÓN",
-      strategyWeights: "Pesos del Sesgo de Estrategia",
-      warningSMC: "Aviso",
-      warningSMCDesc: "Inclinarse demasiado hacia el Impulso puede aumentar el drawdown durante las fases de consolidación. El equilibrio recomendado es de 40/40/20."
-    },
-    admin: {
-      userManagement: "Gestión de Usuarios",
-      userManagementDesc: "Administre los usuarios de FYBOT y el estado de sus cuentas",
-      licenseRegistry: "Registro de Licencias",
-      pendingVerification: "Verificación Pendiente",
-      noPendingPayments: "No hay pagos pendientes para aprobación.",
-      paymentHistoryLedger: "Libro de Historial de Pagos",
-      transactionId: "ID de Transacción",
-      user: "Usuario",
-      amount: "Monto",
-      method: "Método",
-      status: "Estado",
-      hash: "Hash"
-    }
-  }
-};
-*/
-
-
-
-
-
-
-
 export default function App() {
   const [language, setLanguage] = useState<Language>('pt');
   const t = translations[language];
@@ -392,7 +207,7 @@ export default function App() {
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
-  const [selectedInterval, setSelectedInterval] = useState('1M');
+  const [selectedInterval, setSelectedInterval] = useState('30M');
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
@@ -416,8 +231,16 @@ export default function App() {
     localStorage.setItem('fybotTradeSettings', JSON.stringify(updated));
   };
 
-  const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase() === 'jcneto' || currentUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || currentUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com';
-  const hasActiveLicense = isUserAdmin || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
+  // CORRIGIDO: hasActiveLicense agora usa useMemo para não recalcular a cada
+  // render (o polling de status roda a cada 1s, então recalcular licenses.some()
+  // em toda renderização era desnecessário).
+  const hasActiveLicense = useMemo(() => {
+    return (
+      currentUser?.role === 'ADMIN' ||
+      licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') ||
+      (stats.activeLicense != null && stats.activeLicense.status === 'ACTIVE')
+    );
+  }, [currentUser?.role, currentUser?.id, licenses, stats.activeLicense]);
 
   const [profileForm, setProfileForm] = useState({
     name: currentUser?.name || '',
@@ -911,7 +734,11 @@ export default function App() {
     setWithdrawalLoading(true);
     setWithdrawalMessage(null);
 
-    if (parseFloat(withdrawAmount) < 50) {
+    // CORRIGIDO: parseFloat('') retorna NaN, e "NaN < 50" é falso, então um
+    // campo vazio ou não numérico passava direto por esta validação. Agora
+    // tratamos explicitamente o caso de valor inválido/ausente.
+    const parsedAmount = parseFloat(withdrawAmount);
+    if (!withdrawAmount || isNaN(parsedAmount) || parsedAmount < 50) {
       setWithdrawalMessage({
         text: language === 'en' ? 'Minimum withdrawal is $50.00 USD.' : language === 'es' ? 'El retiro mínimo es de $50.00 USD.' : 'O saque mínimo permitido é de $50.00 USD.',
         isError: true
@@ -931,7 +758,7 @@ export default function App() {
       return;
     }
 
-    if (parseFloat(withdrawAmount) > availableBalance) {
+    if (parsedAmount > availableBalance) {
       setWithdrawalMessage({
         text: language === 'en' ? 'Insufficient balance for this amount.' : language === 'es' ? 'Saldo insuficiente para este monto.' : 'Saldo insuficiente para o valor solicitado.',
         isError: true
@@ -1367,7 +1194,6 @@ export default function App() {
       if (!data.success) {
         alert("Failed to close trade: " + (data.error || "Unknown error"));
       } else {
-        alert(language === 'en' ? 'Close command sent to broker! Wait a few seconds for the status to update.' : 'Comando de fechamento enviado para a corretora! Aguarde alguns segundos para o painel atualizar.');
         fetchStatus();
       }
     } catch (e) {
@@ -1696,12 +1522,7 @@ export default function App() {
           </div>
 
           <NavItem icon={<LayoutDashboard size={20} />} label={t.sidebar.dashboard} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
-          {currentUser?.role === 'ADMIN' && (
-            <>
-              <NavItem icon={<Activity size={20} />} label={t.sidebar.strategies} active={activeTab === 'strategies'} onClick={() => { setActiveTab('strategies'); setIsMobileMenuOpen(false); }} />
-              <NavItem icon={<BarChart3 size={20} />} label={t.sidebar.analytics} active={activeTab === 'analytics'} onClick={() => { setActiveTab('analytics'); setIsMobileMenuOpen(false); }} />
-            </>
-          )}
+
           {/* History menu item removed by request */}
           <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
@@ -2114,8 +1935,8 @@ export default function App() {
                         );
                       })()}
 
-                      {(isUserAdmin || stats.activeLicense?.expiryDate) ? (
-                        <LicenseCountdown expiryDate={stats.activeLicense?.expiryDate || '2099-12-31T23:59:59.000Z'} t={t} licenseKey={stats.activeLicense?.key || 'ADMIN-MASTER-KEY'} />
+                      {stats.activeLicense?.expiryDate ? (
+                        <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
                       ) : stats.pendingPayment ? (
                         <div
                           onClick={() => setActiveTab('plans')}
@@ -2173,29 +1994,43 @@ export default function App() {
                           <div className="w-full max-w-xl mx-auto bg-[#0f0f12] border border-white/5 rounded-2xl px-4 py-2 relative overflow-hidden flex flex-col justify-center">
                             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
 
-                            <div className="flex items-center justify-between mb-1.5 relative z-10">
-                              <div className="flex items-center gap-1.5">
-                                <Cpu size={12} className="text-yellow-500 animate-pulse" />
-                                <span className="text-[10px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
-                                  {Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / ((stats.balance || 0) * 0.02)) * 100)).toFixed(0)}% PROG.
-                                </span>
-                                <span className="text-[9px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-1.5 py-0.5 rounded">
-                                  {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
-                                </span>
-                              </div>
-                            </div>
+                            {(() => {
+                              // CORRIGIDO: quando stats.balance é 0 (ex: usuário ainda
+                              // "Conectando..."), a divisão (dailyProfit / (balance * 0.02))
+                              // resultava em Infinity/NaN, quebrando a largura da barra de
+                              // progresso (width: NaN%). Agora protegemos contra balance <= 0.
+                              const safeTarget = (stats.balance || 0) * 0.02;
+                              const progressPct = safeTarget > 0
+                                ? Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / safeTarget) * 100))
+                                : 0;
+                              return (
+                                <>
+                                  <div className="flex items-center justify-between mb-1.5 relative z-10">
+                                    <div className="flex items-center gap-1.5">
+                                      <Cpu size={12} className="text-yellow-500 animate-pulse" />
+                                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
+                                        {progressPct.toFixed(0)}% PROG.
+                                      </span>
+                                      <span className="text-[9px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-1.5 py-0.5 rounded">
+                                        {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
+                                      </span>
+                                    </div>
+                                  </div>
 
-                            <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
-                              <div
-                                className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
-                                style={{ width: `${Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / ((stats.balance || 0) * 0.02)) * 100))}%` }}
-                              >
-                                <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
-                              </div>
-                            </div>
+                                  <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
+                                    <div
+                                      className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
+                                      style={{ width: `${progressPct}%` }}
+                                    >
+                                      <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
 
                             {stats.systemBlocked && (
                               <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1 flex items-center justify-center">
@@ -2221,7 +2056,7 @@ export default function App() {
                         </div>
 
                         <div className="flex gap-3 whitespace-nowrap">
-                          {['5M', '15M', '1H'].map((interval) => (
+                          {['15M', '30M', '1H'].map((interval) => (
                             <button
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
@@ -2238,9 +2073,17 @@ export default function App() {
 
                       {/* Live price tickers */}
                       <div className="flex gap-3 mb-4">
-                        {[
-                          { sym: (currentUser?.assets && currentUser.assets.split(',')[0].trim()) || "XAUUSD", base: 2335.40, color: '#f59e0b' }
-                        ].map(({ sym, base, color }, i) => {
+                        {(() => {
+                          // CORRIGIDO: `assets` não existe na interface `User` (types.ts),
+                          // então `currentUser?.assets` sempre resultava em `undefined` e
+                          // quebrava a checagem de tipos do TypeScript. Lemos via cast local
+                          // em vez de acessar o campo diretamente na interface tipada.
+                          const userAssets = (currentUser as unknown as { assets?: string } | null)?.assets;
+                          const firstSymbol = (userAssets && userAssets.split(',')[0].trim()) || "XAUUSD";
+                          return [
+                            { sym: firstSymbol, base: 2335.40, color: '#f59e0b' }
+                          ];
+                        })().map(({ sym, base, color }, i) => {
                           const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
                           const currentLive = livePrice > 0 ? livePrice : base;
                           const price = (currentLive + (livePrice > 0 ? 0 : tickDelta)).toFixed(2);
@@ -2264,21 +2107,14 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[600px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
+                      <div className="flex-1 min-h-[700px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
                         <TradingChart trades={trades} symbol={"XAUUSD"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} onPriceUpdate={setLivePrice} />
-                      </div>
-
-                      {/* Strategy Gauges — circular */}
-                      <div className="mt-6 grid grid-cols-3 gap-4">
-                        <StrategyGauge label={t.dashboard.smc} percentage={stats.liveSignals?.smc || 80} color="#3b82f6" />
-                        <StrategyGauge label={t.dashboard.momentum} percentage={stats.liveSignals?.momentum || 70} color="#10b981" />
-                        <StrategyGauge label={t.dashboard.aiBias} percentage={stats.liveSignals?.ai || 90} color="#8b5cf6" />
                       </div>
                     </div>
                   </div>
 
                   {/* Sidebar — Configs & Live Console */}
-                  {(currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase() === 'jcneto' || currentUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || currentUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com') && (
+                  {currentUser?.role === 'ADMIN' && (
                     <div className="flex flex-col gap-6 h-full">
                       {/* <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} /> */}
 
@@ -2412,7 +2248,12 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/[0.03]">
                         {(() => {
-                          const filtered = (stats.trades || []).filter((tr: any) => {
+                          // CORRIGIDO: a tabela filtrava `stats.trades`, campo que nunca é
+                          // preenchido pelo backend (/api/status não devolve essa chave).
+                          // Quem realmente recebe as operações em tempo real é o estado
+                          // local `trades`, populado via onTradesUpdate no <TradingChart />.
+                          // Antes disso, a tabela ficava sempre vazia mesmo com trades ativos.
+                          const filtered = (trades || []).filter((tr: any) => {
                             const statusMatch = tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
                             return statusMatch;
                           });
@@ -2447,13 +2288,27 @@ export default function App() {
                                   {(trade.symbol || '').replace(/frx/i, '').replace(/FRX/i, '').replace('UNKNOWN', 'XAUUSD') || 'XAUUSD'}
                                 </td>
                                 <td className="py-3.5">
-                                  <span className={`px-2 py-0.5 rounded-md text-sm font-black ${
-                                    (trade.type === 'BUY' || trade.type === 'MULTUP' || trade.type === 'CALL')
-                                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                      : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                    }`}>
-                                    {(trade.type === 'MULTUP' || trade.type === 'CALL') ? 'BUY' : (trade.type === 'MULTDOWN' || trade.type === 'PUT') ? 'SELL' : trade.type}
-                                  </span>
+                                  {(() => {
+                                    // CORRIGIDO: `Trade.type` em types.ts é tipado como
+                                    // 'BUY' | 'SELL' apenas, mas a API da Deriv também retorna
+                                    // MULTUP/MULTDOWN/CALL/PUT como tipo de contrato. Comparar
+                                    // esses literais direto contra `trade.type` fazia o
+                                    // TypeScript rejeitar a build ("types have no overlap").
+                                    // Convertendo para string antes de comparar evita o erro
+                                    // sem precisar alterar a definição do tipo em types.ts.
+                                    const rawType = String(trade.type);
+                                    const isBuy = rawType === 'BUY' || rawType === 'MULTUP' || rawType === 'CALL';
+                                    const isSell = rawType === 'MULTDOWN' || rawType === 'PUT';
+                                    const displayType = (rawType === 'MULTUP' || rawType === 'CALL') ? 'BUY' : isSell ? 'SELL' : rawType;
+                                    return (
+                                      <span className={`px-2 py-0.5 rounded-md text-sm font-black ${isBuy
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                        }`}>
+                                        {displayType}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="py-3.5 font-mono text-white/50">{trade.lot}</td>
                                 <td className="py-3.5 font-mono text-white/70">{Number(trade.openPrice || 0).toFixed(5)}</td>
@@ -2522,7 +2377,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'strategies' && currentUser?.role === 'ADMIN' && (
+            {false && activeTab === 'strategies' && currentUser?.role === 'ADMIN' && (
               <motion.div
                 key="strategies"
                 initial={{ opacity: 0, y: 20 }}
@@ -2632,7 +2487,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'analytics' && currentUser?.role === 'ADMIN' && (
+            {false && activeTab === 'analytics' && currentUser?.role === 'ADMIN' && (
               <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 20 }}
@@ -2820,29 +2675,13 @@ export default function App() {
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
                   <PricingCard
-                    title=""
+                    title={t.plans.card5Title}
                     price={100}
-                    priceSubtext="Licença 180 dias"
-                    desc={language === 'en' ? 'Bot Pro License' : language === 'es' ? 'Licencia Bot Pro' : 'Licença Bot Pro'}
-                    descSize="text-base font-bold"
-                    descColor="text-emerald-400"
-                    features={[]}
-                    language={language}
-                    image="/bot_pro.png"
-                    onBuy={() => setShowPaymentModal({ title: "BOT PRO", price: 100 })}
-                  />
-                  <PricingCard
-                    isVip
-                    title="LÍDER VIP"
-                    titleColor="text-[#f59e0b] uppercase tracking-wider font-black"
-                    price={0}
-                    customPriceText="180 DIAS"
-                    desc={t.plans.card4Desc}
-                    descSize="text-sm font-medium leading-relaxed"
-                    descColor="text-white/80"
-                    features={t.plans.card4Features}
+                    desc={t.plans.card5Desc}
+                    features={t.plans.card5Features}
                     language={language}
                     image="/fybot-logo.png.png"
+                    onBuy={() => setShowPaymentModal({ title: t.plans.card5Title, price: 100 })}
                   />
                 </div>
 

@@ -49,6 +49,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
   const ma21SeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const candlesDataRef = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+  // CORRIGIDO: referência para o timeout de reconexão, para poder cancelá-lo
+  // no cleanup do efeito e evitar reconectar um componente já desmontado.
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Guardamos as linhas de preço ativas para poder remover quando o trade fechar
   const priceLinesRef = useRef<any[]>([]);
@@ -135,8 +138,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
     if (timeframe === '15M') granularity = 900;
     if (timeframe === '30M') granularity = 1800;
     if (timeframe === '1H') granularity = 3600;
-    let bypassAuth = false;
-    let isMagic = false;
+
+    // CORRIGIDO: a reconexão automática dependia de uma variável `bypassAuth`
+    // que era declarada como `false` e NUNCA era alterada em nenhum lugar do
+    // arquivo. Isso fazia com que o bloco de reconexão em `socket.onclose`
+    // (`if (bypassAuth && isMounted) { connectWS(); }`) fosse código morto —
+    // se o WebSocket caísse por qualquer motivo (timeout, instabilidade de
+    // rede, etc.), o gráfico ficava permanentemente desconectado até o usuário
+    // trocar de símbolo/timeframe/token ou recarregar a página. Substituímos
+    // por uma reconexão genérica com pequeno atraso, cancelável no cleanup.
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
 
     const connectWS = async () => {
       let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
@@ -146,16 +158,28 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
           try {
              // 33TVM... é o App ID restrito de backend usado para os Tokens Nativos PAT
              const res = await getOtpWebSocketUrl(cleanedToken, '33TVM6cBQ9GfSjbwQHHdE', '', accountType);
+             // CORRIGIDO: `connectWS` é assíncrono por causa do `await` acima.
+             // Se o componente for desmontado (troca de aba, navegação, etc.)
+             // enquanto essa chamada ainda está pendente, o cleanup do efeito
+             // já rodou e `wsRef.current` ainda era `null` naquele momento —
+             // então o WebSocket criado por esta função DEPOIS do cleanup
+             // nunca era fechado (ficava vazando conexão em segundo plano).
+             // Agora verificamos `isMounted` logo após o await, antes de criar
+             // o socket.
+             if (!isMounted) return;
              wsUrl = res.url;
-             isMagic = true;
              console.log("[FYBOT] Usando Magic URL OTP para o gráfico!");
           } catch(e) {
              console.error("[FYBOT] Erro ao pegar Magic URL para gráfico, usando fallback público", e);
+             if (!isMounted) return;
           }
       }
 
+      if (!isMounted) return;
+
       const socket = new WebSocket(wsUrl);
       wsRef.current = socket;
+      const isMagic = cleanedToken.startsWith('pat_') && wsUrl !== `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}&l=PT`;
 
       const requestCandles = (subscribe = 1) => {
         console.log("[FYBOT] Requisitando histórico de velas para o símbolo:", symbol, "Subscribe:", subscribe);
@@ -175,6 +199,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
 
       socket.onopen = () => {
         console.log("[FYBOT] WebSocket Conectado diretamente à Deriv.");
+        // Reseta o contador de tentativas assim que uma conexão é bem-sucedida
+        reconnectAttempts = 0;
         const isValidWsToken = cleanedToken !== '' && cleanedToken !== 'undefined' && cleanedToken !== 'null';
         
         if (isMagic) {
@@ -184,7 +210,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
            socket.send(JSON.stringify({ portfolio: 1 }));
            socket.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
         }
-        else if (isValidWsToken && !bypassAuth && !cleanedToken.startsWith('pat_')) {
+        else if (isValidWsToken && !cleanedToken.startsWith('pat_')) {
           console.log("[FYBOT] Enviando autorização API clássica...");
           socket.send(JSON.stringify({ authorize: cleanedToken }));
         } else {
@@ -390,11 +416,27 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
 
       socket.onclose = () => {
          console.log("[FYBOT] WebSocket fechado.");
-         // Se fechou por causa do bypass, reconectamos em modo público imediatamente
-         if (bypassAuth && isMounted) {
-            console.log("[FYBOT] Reconectando em Modo Público...");
-            connectWS();
+         if (!isMounted) return;
+         // CORRIGIDO: reconexão automática genuína (a antiga dependia de
+         // `bypassAuth`, que nunca era setado como `true`). Usamos um pequeno
+         // atraso crescente e um limite de tentativas para não martelar o
+         // servidor caso a URL/token esteja permanentemente inválida. O timeout
+         // é guardado em `reconnectTimeoutRef` para poder ser cancelado no
+         // cleanup do efeito.
+         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts += 1;
+            const delay = Math.min(1000 * reconnectAttempts, 10000);
+            console.log(`[FYBOT] Tentando reconectar em ${delay / 1000}s (tentativa ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isMounted) connectWS();
+            }, delay);
+         } else {
+            console.error("[FYBOT] Número máximo de tentativas de reconexão atingido. Desistindo.");
          }
+      };
+
+      socket.onerror = (err) => {
+         console.error("[FYBOT] Erro de WebSocket:", err);
       };
     };
 
@@ -402,6 +444,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
 
     return () => {
       isMounted = false;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -411,7 +457,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
         console.error("Error removing chart:", e);
       }
     };
-  }, [symbol, timeframe, derivToken]);
+    // CORRIGIDO: `accountType` é usado dentro do efeito (repassado para
+    // `getOtpWebSocketUrl`), mas não estava na lista de dependências. Se o
+    // usuário trocasse de conta (DEMO/REAL) sem que `derivToken` mudasse no
+    // mesmo instante, o gráfico continuaria conectado com a conta antiga até
+    // o próximo remount. Adicionamos `accountType` às dependências.
+  }, [symbol, timeframe, derivToken, accountType]);
 
   // 3. Efeito separado para desenhar as ordens (TP/SL/Markers) quando `trades` atualiza
   useEffect(() => {

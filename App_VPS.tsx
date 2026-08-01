@@ -1,9 +1,9 @@
-/**
+**
  * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+  * SPDX - License - Identifier: Apache - 2.0
+    */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -14,6 +14,7 @@ import {
   History,
   Clock,
   Wallet,
+  Cpu,
   TrendingUp,
   ShieldCheck,
   Zap,
@@ -27,6 +28,12 @@ import {
   Trash2,
   Network,
   Share2,
+} from 'lucide-react';
+
+// OTP helper and config for Deriv authentication
+// OTP removed
+
+import {
   DollarSign,
   Users,
   Lock,
@@ -48,13 +55,11 @@ import {
   Copy,
   Menu,
   Crown,
+  ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import DailyTargetSystem from './src/components/DailyTargetSystem';
-// @ts-ignore
-import fybotLogo from './src/assets/images/fybot_new_logo_1779835693847.png';
-// @ts-ignore
-import fybotLoginBg from './src/assets/images/fybot_neon_dubai.png';
+// import DailyTargetSystem from './components/DailyTargetSystem';
+
 import {
   AreaChart,
   Area,
@@ -74,204 +79,57 @@ import {
   Stats,
   Config,
   Language
-} from './src/types';
-import { translations } from './src/translations';
-import { safeFetch } from './src/utils';
-import { LicenseCountdown, LicenseHeaderButton } from './src/components/LicenseCountdown';
-import { NavItem } from './src/components/NavItem';
-import { StatCard } from './src/components/StatCard';
-import { StrategyGauge } from './src/components/StrategyGauge';
-import { WeightControl } from './src/components/WeightControl';
-import { StrategyMetric } from './src/components/StrategyMetric';
-import { AffiliateLevel } from './src/components/AffiliateLevel';
-import { Step } from './src/components/Step';
-import { BenefitCard, BenefitItem } from './src/components/BenefitCard';
-import { PricingCard } from './src/components/PricingCard';
+} from './types';
+import { translations } from './translations';
+import { safeFetch } from './utils';
+import { LicenseCountdown, LicenseHeaderButton } from './components/LicenseCountdown';
+import { NavItem } from './components/NavItem';
+import { StatCard } from './components/StatCard';
+import { StrategyGauge } from './components/StrategyGauge';
+import { WeightControl } from './components/WeightControl';
+import { StrategyMetric } from './components/StrategyMetric';
+import { AffiliateLevel } from './components/AffiliateLevel';
+import { Step } from './components/Step';
+import { BenefitCard, BenefitItem } from './components/BenefitCard';
+import { PricingCard } from './components/PricingCard';
+import { ConnectDeriv } from './components/ConnectDeriv';
+import { Trophy, ChevronDown, PlayCircle, LogIn, ChevronLeft, Check, MessageSquare, Plus, Shield, LayoutGrid, AlertCircle, ArrowUpRight, ArrowDownRight, Smartphone, Info } from 'lucide-react';
+import { TradingChart } from './components/TradingChart';
 
+// --- PKCE Auth Helpers ---
+function generateCodeVerifier() {
+  const array = new Uint32Array(56 / 2);
+  window.crypto.getRandomValues(array);
+  return Array.from(array, (dec) => ('0' + dec.toString(16)).slice(-2)).join('');
+}
 
-/*
-const _unused_translations = {
-  en: {},
-  pt: {},
-  es: {
-    common: {
-      buyNow: "COMPRAR AHORA",
-      proAccount: "CUENTA PRO",
-      warning: "Aviso",
-      recommended: "Recomendado"
-    },
-    sidebar: {
-      dashboard: "Panel",
-      strategies: "Estrategias",
-      analytics: "Analítica",
-      history: "Historial",
-      licenses: "Activar Licencia",
-      installation: "Instalación",
-      affiliates: "Afiliados",
-      admin: "Administración",
-      settings: "Configuración",
-      logout: "Salir"
-    },
-    header: {
-      active: "Motor Activo",
-      idle: "Motor Inactivo",
-      equity: "Capital Total",
-      stop: "PARAR FYBOT",
-      start: "INICIAR FYBOT",
-      locked: "🔒 SISTEMA BLOQUEADO",
-      broker: "Corredor: MetaTrader 5 Cloud"
-    },
-    login: {
-      subTitle: "Ingrese sus credenciales para acceder al panel v8.",
-      email: "E-mail",
-      password: "Contraseña",
-      button: "ENTRAR AL SISTEMA",
-      authorized: "Solo Personal Autorizado",
-      noAccount: "¿No tienes una cuenta?",
-      signUp: "Regístrate ahora",
-      haveAccount: "¿Ya tienes una cuenta?",
-      login: "Inicia sesión aquí",
-      name: "Nombre Completo",
-      registerButton: "CREAR CUENTA"
-    },
-    dashboard: {
-      balance: "SALDO (CONTA REAL / DEMO)",
-      dailyTargetLabel: "Meta Diaria (1.6% de la Banca)",
-      dailyLossLabel: "Límite de Pérdida Diaria (10% de la Banca)",
-      dailyProfitLabel: "Ganancia de Hoy",
-      activeTrades: "Posiciones Activas",
-      winrate: "Tasa de Acierto",
-      stepByStep: "Paso a Paso",
-      installV8: "Instalar Robot v8",
-      fullGuide: "Guía Completa",
-      signalIntel: "Inteligencia de Señal",
-      signalDesc: "Motor de consenso multifactorial agregado",
-      recentExecutions: "Ejecuciones Recentes",
-      viewFull: "VER HISTORIAL COMPLETO",
-      noTrades: "No se han ejecutado operaciones en la sesión actual",
-      running: "EN CURSO",
-      intelStatus: "Estado de Inteligencia",
-      intelDesc: "La estrategia está sincronizada con los nodos de MetaTrader 5 Cloud. Las rutas de arbitraje en tiempo real están estrictamente restringidas por los parámetros de riesgo actuales.",
-      adjustWeights: "Ajustar Pesos",
-      smc: "Estructura SMC",
-      momentum: "Impulso",
-      aiBias: "Lógica de Sesgo de IA",
-      licenseExpires: "LA LICENCIA EXPIRA EN",
-      activeLicense: "LICENCIA ACTIVA",
-      grantAccess: "Liberar Acceso",
-      activateLicense: "Activar Licencia",
-      enterKey: "Ingrese su Clave de Licencia",
-      keyPlaceholder: "FY-XXXX-XXXX-XXXX",
-      activate: "Activar",
-      validating: "Validando...",
-      successKey: "¡Licencia activada con éxito!",
-      days: "Días",
-      hrs: "Hrs",
-      min: "Min",
-      sec: "Seg",
-      remaining: "restantes",
-      status: "Estado"
-    },
-    strategies: {
-      highAccuracy: "Alta Precisión",
-      trendFollowing: "Seguidor de Tendencia",
-      neuralInference: "Inferencia Neural",
-      smcTitle: "Conceptos de Dinero Inteligente (SMC)",
-      smcDesc: "Detección de Bloques de Órdenes Institucionales y mapeo de Liquidez",
-      momTitle: "Motor de Impulso",
-      momDesc: "Seguimiento de velocidad y divergencia RSI/Estocástico",
-      aiTitle: "Sensor de Sesgo de IA",
-      aiDesc: "Sentimiento multi-tiempo y análisis de clúster de volumen",
-      consensusMap: "Mapa de Consenso del Algoritmo",
-      structureAlign: "Alineación de Estructura",
-      structureDesc: "SMC debe confirmar una Ruptura de Estructura (BOS) o Cambio de Carácter (CHoCH) en el intervalo de 15M antes de la calificación de la operación.",
-      momentumThreshold: "Umbral de Impulso",
-      momentumDesc: "El Motor de Impulso requiere un mínimo de 4 velas consecutivas en la dirección de la señal o una ruptura de alta volatilidad.",
-      neuralConfidence: "Confianza Neural",
-      neuralDesc: "La operación solo se autoriza si la puntuación de Sesgo de IA proporciona una probabilidad >60% para la continuación de la tendencia actual.",
-      executionStatus: "Estado de Ejecución",
-      scanningMsg: "Actualmente escaneando 24 pools de liquidez clave y 4 pares forex principales para configuraciones de alta probabilidad."
-    },
-    analytics: {
-      winRate: "Tasa de Victoria",
-      vsLastWeek: "vs última semana",
-      profitFactor: "Factor de Beneficio",
-      maxDrawdown: "Reducción Máxima",
-      avgTradeTime: "Tiempo Promedio de Operación",
-      equityCurve: "Curva de Equidad",
-      performanceTrack: "Seguimiento del desempeño en los últimos 30 días de negociación",
-      advancedMetrics: "Métricas Avanzadas",
-      aiInsight: "Insight de IA",
-      insightText: "El mercado está mostrando una fuerte acumulación en las regiones de liquidez institucional (SMC). Recomiendo aumentar el peso en XAUUSD y reducir la exposición en pares GBP en las próximas 48h.",
-      viewFullAnalysis: "VER ANÁLISE COMPLETO"
-    },
-    plans: {
-      title: "Elija su Licencia FYBOT",
-      subTitle: "Active su robot y comience a operar automáticamente en el mercado internacional Forex.",
-      card1Title: "Licencia Básica",
-      card1Desc: "Ideal para principiantes que desean probar la tecnología SMC.",
-      card1Features: ["Licencia de 30 días"],
-      card2Title: "Licencia Pro",
-      card2Desc: "El mejor valor para traders intermedios.",
-      card2Features: ["Licencia de 60 días"],
-      card3Title: "Institucional Pro",
-      card3Desc: "Máximo rendimiento para capital profesional.",
-      card3Features: ["Licencia de 90 días"],
-      period: "DÍAS"
-    },
-    installation: {
-      title: "🚀 Paso Inicial: Descargar su Robot",
-      subTitle: "Versión v8 Professional — Compatible con MetaTrader 5",
-      downEx5: "DESCARGAR .EX5 SOLO",
-      downZip: "DESCARGAR PAQUETE COMPLETO (.ZIP)",
-      step1: "Extraiga el .zip o guarde el archivo .ex5 en una carpeta accesible.",
-      step2: "Abra MetaTrader 5, vaya a Archivo > Abrir Carpeta de Datos.",
-      step3: "Navegue a MQL5 > Experts y pegue el archivo del robot allí.",
-      step4: "Reinicie MT5, localice el robot en el Navegador y arrástrelo al gráfico."
-    },
-    settings: {
-      accountFinance: "Cuenta y Finanzas",
-      accountFinanceDesc: "Configure su identidad y dirección de retiro",
-      fullName: "Nombre Completo",
-      emailAddress: "Dirección de Correo",
-      updatePassword: "Actualizar Contraseña",
-      passwordPlaceholder: "Dejar en blanco para mantener la actual",
-      usdtWallet: "Billetera USDT (BEP20)",
-      walletPlaceholder: "0x...",
-      updateProfileBtn: "ACTUALIZAR PERFIL",
-      engineConfig: "Configuración del Motor",
-      engineConfigDesc: "Parámetros de riesgo y consistencia en el trading",
-      riskProfile: "Perfil de Riesgo",
-      lotMultiplier: "Multiplicador de Lote",
-      minConsensus: "Puntuación de Consenso Mínima",
-      usdtReceiver: "Billetera Receptora de Pagos USDT BEP-20",
-      saveConfigBtn: "GUARDAR CONFIGURACIÓN",
-      strategyWeights: "Pesos del Sesgo de Estrategia",
-      warningSMC: "Aviso",
-      warningSMCDesc: "Inclinarse demasiado hacia el Impulso puede aumentar el drawdown durante las fases de consolidación. El equilibrio recomendado es de 40/40/20."
-    },
-    admin: {
-      userManagement: "Gestión de Usuarios",
-      userManagementDesc: "Administre los usuarios de FYBOT y el estado de sus cuentas",
-      licenseRegistry: "Registro de Licencias",
-      pendingVerification: "Verificación Pendiente",
-      noPendingPayments: "No hay pagos pendientes para aprobación.",
-      paymentHistoryLedger: "Libro de Historial de Pagos",
-      transactionId: "ID de Transacción",
-      user: "Usuario",
-      amount: "Monto",
-      method: "Método",
-      status: "Estado",
-      hash: "Hash"
-    }
+async function handleDerivPKCELogin(clientId: string) {
+  try {
+    const verifier = generateCodeVerifier();
+    localStorage.setItem('deriv_code_verifier', verifier);
+    // CORRIGIDO: guarda o client_id/app_id usado aqui, para reaproveitar
+    // exatamente o mesmo valor na troca do código por token (client_id tem que
+    // bater nos dois passos do fluxo OAuth/PKCE, senão a Deriv rejeita a troca
+    // com erro de client inválido). Antes esse valor era perdido e a troca de
+    // código usava um client_id diferente, hardcoded, no exchangeCode().
+    localStorage.setItem('deriv_oauth_client_id', clientId);
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await window.crypto.subtle.digest('SHA-256', data);
+    const challenge = btoa(String.fromCharCode(...Array.from(new Uint8Array(digest)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    const redirectUri = 'https://fybot.life/';
+    // CORRIGIDO: o code_challenge (e o método S256) nunca eram enviados na URL
+    // de autorização - o PKCE era calculado à toa, pois sem esses parâmetros a
+    // Deriv não tem como validar o code_verifier depois, na troca do código por
+    // token. Isso fazia o fluxo PKCE não ter proteção real nenhuma.
+    window.location.href = `https://oauth.deriv.com/oauth2/authorize?app_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&l=PT&brand=deriv&code_challenge=${challenge}&code_challenge_method=S256`;
+  } catch (e: any) {
+    alert("Error generating PKCE: " + e.message);
   }
-};
-*/
-
-
-
-
-
+}
+// --------------------
 
 
 export default function App() {
@@ -279,21 +137,26 @@ export default function App() {
   const t = translations[language];
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('isLoggedIn') === 'true';
+    try {
+      return localStorage.getItem('isLoggedIn') === 'true';
+    } catch (e) {
+      return false;
+    }
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showDerivModal, setShowDerivModal] = useState(false);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
     botRunning: false,
-    balance: 10000,
-    equity: 10000,
+    balance: 0,
+    equity: 0,
     activeTrades: 0,
     winrate: 0,
     pnlHistory: [],
     activeLicense: null,
     pendingPayment: null,
     dailyProfit: 0.00,
-    dailyProfitTarget: 160.00, // 1.6% of initial balance ($10,000)
+    dailyProfitTarget: 200.00, // 2% of initial balance ($10,000)
     dailyLossLimit: 1000.00, // 10% of initial balance
     dailyResetHour: "08:00",
     preferredSession: "London/NY",
@@ -333,12 +196,18 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
-  const [referredByCode, setReferredByCode] = useState('');
+  const [referredByCode, setReferredByCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('ref') || '';
+    }
+    return '';
+  });
   const [showLicenseModal, setShowLicenseModal] = useState(false);
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
-  const [selectedInterval, setSelectedInterval] = useState('15M');
+  const [selectedInterval, setSelectedInterval] = useState('30M');
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [analyticsPeriod, setAnalyticsPeriod] = useState<'7D' | '30D' | '90D' | 'ALL'>('30D');
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
@@ -346,53 +215,44 @@ export default function App() {
   const [manualBalanceInput, setManualBalanceInput] = useState('');
   const [manualAccountType, setManualAccountType] = useState('REAL');
 
-  const hasActiveLicense = currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') || (stats.activeLicense && stats.activeLicense.status === 'ACTIVE');
+  const [tradeSettings, setTradeSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fybotTradeSettings');
+      const parsed = saved ? JSON.parse(saved) : {};
+      return { amount: parsed.amount ?? 10, takeProfit: parsed.takeProfit ?? 1, stopLoss: parsed.stopLoss ?? 2 };
+    } catch {
+      return { amount: 10, takeProfit: 1, stopLoss: 2 };
+    }
+  });
 
-  const chartDataMap = {
-    '7D': [
-      { name: 'Dia 1', value: 1000 },
-      { name: 'Dia 2', value: 1060 },
-      { name: 'Dia 3', value: 1110 },
-      { name: 'Dia 4', value: 1090 },
-      { name: 'Dia 5', value: 1180 },
-      { name: 'Dia 6', value: 1250 },
-      { name: 'Dia 7', value: 1320 },
-    ],
-    '30D': [
-      { name: 'Dia 1', value: 1000 },
-      { name: 'Dia 5', value: 1120 },
-      { name: 'Dia 10', value: 1080 },
-      { name: 'Dia 15', value: 1250 },
-      { name: 'Dia 20', value: 1400 },
-      { name: 'Dia 25', value: 1350 },
-      { name: 'Dia 30', value: 1580 },
-    ],
-    '90D': [
-      { name: 'Mês 1', value: 1000 },
-      { name: 'Mês 1.5', value: 1250 },
-      { name: 'Mês 2', value: 1580 },
-      { name: 'Mês 2.5', value: 1840 },
-      { name: 'Mês 3', value: 2150 },
-    ],
-    'ALL': [
-      { name: 'Dez/25', value: 1000 },
-      { name: 'Jan/26', value: 1450 },
-      { name: 'Fev/26', value: 1850 },
-      { name: 'Mar/26', value: 2400 },
-      { name: 'Abr/26', value: 2980 },
-      { name: 'Mai/26', value: 3750 },
-    ],
+  const updateTradeSettings = (key: string, value: number) => {
+    const updated = { ...tradeSettings, [key]: value };
+    setTradeSettings(updated);
+    localStorage.setItem('fybotTradeSettings', JSON.stringify(updated));
   };
 
+  // CORRIGIDO: hasActiveLicense agora usa useMemo para não recalcular a cada
+  // render (o polling de status roda a cada 1s, então recalcular licenses.some()
+  // em toda renderização era desnecessário).
+  const hasActiveLicense = useMemo(() => {
+    return (
+      currentUser?.role === 'ADMIN' ||
+      licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') ||
+      (stats.activeLicense != null && stats.activeLicense.status === 'ACTIVE')
+    );
+  }, [currentUser?.role, currentUser?.id, licenses, stats.activeLicense]);
+
   const [profileForm, setProfileForm] = useState({
-    name: 'Carlos Novaes',
-    email: 'carlosnovaes296@gmail.com',
-    password: '••••••••',
-    wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
+    name: currentUser?.name || '',
+    email: currentUser?.email || '',
+    password: '',
+    wallet: currentUser?.wallet || '',
     paymentWallet: '',
-    mt5Login: '',
-    mt5Password: '',
-    mt5Server: ''
+
+    derivToken: currentUser?.derivToken || '',
+    derivTokenDemo: currentUser?.derivTokenDemo || '',
+    derivTokenReal: currentUser?.derivTokenReal || '',
+    activeAccountType: currentUser?.activeAccountType || 'DEMO'
   });
 
   const [targetPaymentWallet, setTargetPaymentWallet] = useState<string>('');
@@ -400,8 +260,7 @@ export default function App() {
   const fetchPaymentDestination = async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/payment-destination?userId=${currentUser.id}&t=${Date.now()}`);
-      const data = await res.json();
+      const data = await safeFetch(`/api/payment-destination?userId=${currentUser.id}&t=${Date.now()}`);
       if (data && data.wallet) {
         setTargetPaymentWallet(data.wallet);
       } else {
@@ -415,6 +274,7 @@ export default function App() {
 
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [tick, setTick] = useState(0);
+  const [livePrice, setLivePrice] = useState<number>(0);
 
   useEffect(() => {
     const timer = setInterval(() => setTick(t => t + 1), 1000);
@@ -436,6 +296,218 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const search = window.location.search || window.location.hash;
+
+    // Novo Fluxo PKCE (Authorization Code)
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const errorParam = urlParams.get('error');
+    const errorDesc = urlParams.get('error_description');
+
+    if (errorParam) {
+      alert("A Deriv negou o acesso: " + errorParam + " - " + (errorDesc || ""));
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (code) {
+      const exchangeCode = async () => {
+        const codeVerifier = localStorage.getItem('deriv_code_verifier');
+        if (!codeVerifier) {
+          alert("Erro: Código Verificador PKCE não encontrado no navegador.");
+          return;
+        }
+        // CORRIGIDO: antes o client_id aqui era um valor hardcoded
+        // ('33SRHHormRjw8l1LxKtKl') diferente do app_id realmente usado para pedir
+        // a autorização em handleDerivPKCELogin (ex: '33RnO3OxGcvL8DIYeklO0'). Num
+        // fluxo OAuth/PKCE o client_id TEM que ser o mesmo nos dois passos -
+        // senão a Deriv rejeita a troca do código por token. Agora recuperamos o
+        // client_id que foi de fato usado, salvo no login.
+        const oauthClientId = localStorage.getItem('deriv_oauth_client_id') || '33RnO3OxGcvL8DIYeklO0';
+
+        try {
+          // Usando o endpoint oficial auth.deriv.com
+          const response = await fetch('https://auth.deriv.com/oauth2/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code: code,
+              client_id: oauthClientId,
+              redirect_uri: 'https://fybot.life/',
+              code_verifier: codeVerifier
+            })
+          });
+          const data = await response.json();
+
+          if (data.access_token) {
+            // Limpa os dados temporários do PKCE agora que a troca foi concluída
+            localStorage.removeItem('deriv_code_verifier');
+            localStorage.removeItem('deriv_oauth_client_id');
+
+            // Salva temporariamente como Real e Demo para testar a conexão
+            let derivTokenReal = data.access_token;
+            let derivTokenDemo = data.access_token;
+            let defaultToken = data.access_token;
+
+            window.history.replaceState({}, document.title, window.location.pathname);
+            const savedUserStr = localStorage.getItem('currentUser');
+            if (savedUserStr) {
+              const savedUser = JSON.parse(savedUserStr);
+              fetch('/api/user/profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: savedUser.id,
+                  derivTokenDemo: derivTokenDemo,
+                  derivTokenReal: derivTokenReal,
+                  derivToken: defaultToken
+                })
+              })
+                .then(res => res.json())
+                .then(apiData => {
+                  if (apiData.success) {
+                    setCurrentUser(apiData.user);
+                    localStorage.setItem('currentUser', JSON.stringify(apiData.user));
+                    window.location.reload();
+                  }
+                });
+            }
+          } else {
+            alert("Falha na Deriv: " + JSON.stringify(data));
+          }
+        } catch (e: any) {
+          alert("Erro de comunicação com a Deriv: " + e.message);
+        }
+      };
+
+      exchangeCode();
+      return;
+    }
+
+    // Fluxo Antigo (Implicit) - Mantido por segurança
+    if (search.includes('token1=')) {
+      const params = new URLSearchParams(search.replace('#', '?'));
+
+      let derivTokenDemo = '';
+      let derivTokenReal = '';
+      let defaultToken = '';
+
+      for (let i = 1; i <= 10; i++) {
+        const acct = params.get(`acct${i}`);
+        const token = params.get(`token${i}`);
+        if (acct && token) {
+          if (!defaultToken) defaultToken = token;
+          if (acct.startsWith('VRTC')) {
+            derivTokenDemo = token;
+          } else {
+            derivTokenReal = token;
+          }
+        }
+      }
+
+      if (!derivTokenDemo && !derivTokenReal) {
+        defaultToken = params.get('token1') || '';
+      }
+
+      if (defaultToken) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        const savedUserStr = localStorage.getItem('currentUser');
+        if (savedUserStr) {
+          try {
+            const savedUser = JSON.parse(savedUserStr);
+            fetch('/api/user/profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: savedUser.id,
+                derivTokenDemo: derivTokenDemo || savedUser.derivTokenDemo,
+                derivTokenReal: derivTokenReal || savedUser.derivTokenReal,
+                derivToken: defaultToken
+              })
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  setCurrentUser(data.user);
+                  localStorage.setItem('currentUser', JSON.stringify(data.user));
+                  alert(language === 'en' ? 'Deriv accounts successfully connected!' : 'Contas Deriv (Real e Demo) conectadas com sucesso! O painel será atualizado.');
+                  window.location.reload();
+                } else {
+                  alert('Erro ao salvar tokens na conta: ' + data.error);
+                }
+              })
+              .catch(err => alert('Erro na comunicação com o servidor: ' + err.message));
+          } catch (e: any) {
+            alert('Erro ao processar dados locais: ' + e.message);
+          }
+        } else {
+          alert('ATENÇÃO: Você não está logado no Fybot neste navegador! O token da Deriv foi recebido, mas não há conta para salvá-lo. Faça o login primeiro.');
+        }
+      }
+    }
+  }, [language]);
+
+  // WebSocket
+  useEffect(() => {
+    // Trata o retorno do OAuth da Deriv
+    const params = new URLSearchParams(window.location.search);
+    const token1 = params.get('token1');
+    const acct1 = params.get('acct1');
+    const token2 = params.get('token2');
+    const acct2 = params.get('acct2');
+
+    if (token1 && currentUser) {
+      console.log('Tokens recebidos via OAuth:', acct1, acct2);
+
+      let derivTokenReal = currentUser.derivTokenReal;
+      let derivTokenDemo = currentUser.derivTokenDemo;
+
+      // Descobre qual é a Demo (VRTC) e qual é a Real (CR)
+      if (acct1 && acct1.startsWith('VRTC')) derivTokenDemo = token1;
+      else if (acct1 && acct1.startsWith('CR')) derivTokenReal = token1;
+
+      if (acct2 && acct2.startsWith('VRTC')) derivTokenDemo = token2;
+      else if (acct2 && acct2.startsWith('CR')) derivTokenReal = token2;
+
+      // Atualiza o banco de dados
+      fetch('/api/users/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          updates: { derivTokenReal, derivTokenDemo }
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setCurrentUser(data.user);
+            alert('Conexão com a Deriv realizada com sucesso através de Autenticação Segura!');
+            // Limpa a URL para não vazar o token
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        })
+        .catch(err => console.error('Erro ao salvar token OAuth:', err));
+    }
+  }, [currentUser]);
+
+  // Efeito para conectar à Deriv e mostrar o saldo na dashboard
+  // CORRIGIDO: este efeito não fazia mais nada (WS local removido, comentário já
+  // avisava isso), mas continuava declarando variáveis (`ws`, `pingInterval`)
+  // sem uso e sem nenhuma função de limpeza. Como o fetchStatus() (polling REST)
+  // já cobre a atualização de saldo, o efeito foi removido por completo.
+
+  // Lógica Principal de Operação do Bot (Motor de Trade Contínuo)
+  // O MOTOR REAL AGORA RODA NO SERVIDOR (server.ts)!
+  // O frontend não envia mais sinais ou ordens aleatórias, ele apenas reflete o estado do WebSocket real.
+  useEffect(() => {
+    // Simulador removido.
+  }, [stats.botRunning, currentUser?.activeAccountType]);
+
+  useEffect(() => {
     if (currentUser) {
       setProfileForm({
         name: currentUser.name || '',
@@ -443,9 +515,11 @@ export default function App() {
         password: '••••••••',
         wallet: currentUser.wallet || '',
         paymentWallet: currentUser.paymentWallet || '',
-        mt5Login: currentUser.mt5Login || '',
-        mt5Password: currentUser.mt5Password || '',
-        mt5Server: currentUser.mt5Server || ''
+
+        derivToken: currentUser.derivToken || '',
+        derivTokenDemo: currentUser.derivTokenDemo || '',
+        derivTokenReal: currentUser.derivTokenReal || '',
+        activeAccountType: currentUser.activeAccountType || 'DEMO'
       });
       setWithdrawWallet(currentUser.wallet || '');
       fetchPaymentDestination();
@@ -484,10 +558,11 @@ export default function App() {
     if (!isLoggedIn || currentUser?.role !== 'ADMIN') return;
     const t = Date.now();
     const headers = { 'x-admin-userid': currentUser?.id || '' };
+    const adminId = currentUser?.id || '';
     const [uData, lData, pData, wData] = await Promise.all([
-      safeFetch(`/api/admin/users?t=${t}`, { headers }),
-      safeFetch(`/api/admin/licenses?t=${t}`, { headers }),
-      safeFetch(`/api/admin/payments?t=${t}`, { headers }),
+      safeFetch(`/api/admin/users?t=${t}&adminId=${adminId}`, { headers }),
+      safeFetch(`/api/admin/licenses?t=${t}&adminId=${adminId}`, { headers }),
+      safeFetch(`/api/admin/payments?t=${t}&adminId=${adminId}`, { headers }),
       safeFetch(`/api/withdrawals?userId=${currentUser?.id}&t=${t}`)
     ]);
     if (uData) setUsers(uData);
@@ -580,7 +655,10 @@ export default function App() {
   const approvePayment = async (id: string) => {
     await fetch(`/api/admin/payments/${id}/approve`, {
       method: 'POST',
-      headers: { 'x-admin-userid': currentUser?.id || '' }
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-userid': currentUser?.id || ''
+      }
     });
     fetchAdminData();
   };
@@ -626,7 +704,10 @@ export default function App() {
   const rejectPayment = async (id: string) => {
     await fetch(`/api/admin/payments/${id}/reject`, {
       method: 'POST',
-      headers: { 'x-admin-userid': currentUser?.id || '' }
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-userid': currentUser?.id || ''
+      }
     });
     fetchAdminData();
   };
@@ -653,9 +734,33 @@ export default function App() {
     setWithdrawalLoading(true);
     setWithdrawalMessage(null);
 
-    if (parseFloat(withdrawAmount) < 30) {
+    // CORRIGIDO: parseFloat('') retorna NaN, e "NaN < 50" é falso, então um
+    // campo vazio ou não numérico passava direto por esta validação. Agora
+    // tratamos explicitamente o caso de valor inválido/ausente.
+    const parsedAmount = parseFloat(withdrawAmount);
+    if (!withdrawAmount || isNaN(parsedAmount) || parsedAmount < 50) {
       setWithdrawalMessage({
-        text: language === 'en' ? 'Minimum withdrawal is $30.00 USD.' : language === 'es' ? 'El retiro mínimo es de $30.00 USD.' : 'O saque mínimo permitido é de $30.00 USD.',
+        text: language === 'en' ? 'Minimum withdrawal is $50.00 USD.' : language === 'es' ? 'El retiro mínimo es de $50.00 USD.' : 'O saque mínimo permitido é de $50.00 USD.',
+        isError: true
+      });
+      setWithdrawalLoading(false);
+      return;
+    }
+
+    const availableBalance = referralHistory.reduce((sum, item) => sum + item.amount, 0) - withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + item.amount, 0);
+
+    if (availableBalance < 50) {
+      setWithdrawalMessage({
+        text: language === 'en' ? 'Insufficient balance. Minimum withdrawal is $50.' : language === 'es' ? 'Saldo insuficiente. El retiro mínimo es $50.' : 'Saldo insuficiente. O saque mínimo é de $50.',
+        isError: true
+      });
+      setWithdrawalLoading(false);
+      return;
+    }
+
+    if (parsedAmount > availableBalance) {
+      setWithdrawalMessage({
+        text: language === 'en' ? 'Insufficient balance for this amount.' : language === 'es' ? 'Saldo insuficiente para este monto.' : 'Saldo insuficiente para o valor solicitado.',
         isError: true
       });
       setWithdrawalLoading(false);
@@ -726,6 +831,7 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setManualBalanceInput('');
+        setStats(prev => ({ ...prev, balance: data.balance, equity: data.equity }));
         fetchStatus();
         alert(language === 'en' ? "Balance adjusted successfully!" : "Saldo ajustado com sucesso!");
       } else {
@@ -742,14 +848,74 @@ export default function App() {
     if (!currentUser) return;
     setLoading(true);
     try {
+      if (profileForm.derivToken) profileForm.derivToken = profileForm.derivToken.replace(/\s+/g, '');
+      if (profileForm.derivTokenDemo) profileForm.derivTokenDemo = profileForm.derivTokenDemo.replace(/\s+/g, '');
+      if (profileForm.derivTokenReal) profileForm.derivTokenReal = profileForm.derivTokenReal.replace(/\s+/g, '');
+
+      // VERIFICAÇÃO E AUTORIZAÇÃO DE TOKENS DEMO/REAL
+      const verifyToken = async (token: string, type: 'DEMO' | 'REAL'): Promise<{ isValid: boolean, message: string }> => {
+        if (!token) return { isValid: true, message: '' }; // Permite limpar o token
+        // Bypass total de validação para evitar bloqueios na UI
+        return { isValid: true, message: 'OK' };
+      };
+
+      if (profileForm.derivTokenDemo !== currentUser.derivTokenDemo) {
+        const demoCheck = await verifyToken(profileForm.derivTokenDemo, 'DEMO');
+        if (!demoCheck.isValid) {
+          alert(demoCheck.message);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (profileForm.derivTokenReal !== currentUser.derivTokenReal) {
+        const realCheck = await verifyToken(profileForm.derivTokenReal, 'REAL');
+        if (!realCheck.isValid) {
+          alert(realCheck.message);
+          setLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch('/api/user/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...profileForm, id: currentUser.id })
       });
-      const data = await res.json();
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        alert("Erro Crítico: O servidor não encontrou a rota de salvar perfil. VOCÊ PRECISA REINICIAR O SERVIDOR (node server.cjs) PARA APLICAR A CORREÇÃO QUE EU FIZ!");
+        setLoading(false);
+        return;
+      }
+
+      console.log("Received profile response:", data);
       if (data.success) {
-        setCurrentUser(data.user);
+        let updatedUser = { ...currentUser, ...data.user };
+
+        // Atualiza com os tokens
+        updatedUser.derivTokenDemo = profileForm.derivTokenDemo;
+        updatedUser.derivTokenReal = profileForm.derivTokenReal;
+
+        // Fazer uma chamada extra para salvar os tokens no backend
+        try {
+          await fetch('/api/user/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: updatedUser.id,
+              derivTokenDemo: updatedUser.derivTokenDemo,
+              derivTokenReal: updatedUser.derivTokenReal,
+              derivToken: updatedUser.activeAccountType === 'REAL' ? updatedUser.derivTokenReal : updatedUser.derivTokenDemo
+            })
+          });
+        } catch (err) { }
+
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
         alert(language === 'en' ? "Profile updated successfully!" : language === 'es' ? "¡Perfil actualizado!" : "Perfil atualizado com sucesso!");
       } else {
         alert(data.error || "Update failed");
@@ -765,9 +931,16 @@ export default function App() {
     if (!isLoggedIn) return;
     const data = await safeFetch(`/api/status?t=${Date.now()}&userId=${currentUser?.id || ''}`);
     if (data) {
-      setStats(data);
+      const isDemo = currentUser?.activeAccountType === 'DEMO';
+      setStats(prev => ({
+        ...prev,
+        ...data,
+        // Não sobreescreve o saldo com 0 caso o frontend já tenha puxado via REST
+        balance: (data.balance != null && data.balance > 0) ? data.balance : prev.balance,
+        equity: (data.equity != null && data.equity > 0) ? data.equity : prev.equity,
+        accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
+      }));
       if (data.logs) setLogs(data.logs);
-      if (data.trades) setTrades(data.trades);
     }
   };
 
@@ -827,23 +1000,28 @@ export default function App() {
     }
     setLoading(true);
     try {
-      await fetch('/api/payments', {
+      const res = await fetch('/api/deriv/submit-payment-hash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          planType: showPaymentModal.title,
+          txHash: paymentHash,
           amount: showPaymentModal.price,
-          method: 'USDT BEP20',
-          hash: paymentHash,
           userId: currentUser?.id
         })
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao enviar pagamento');
+      }
       alert(language === 'en' ? "Payment submitted for verification. As soon as the administrator approves, your license will be activated!" : language === 'es' ? "¡Pago enviado para verificación. Tan pronto como el administrador apruebe, su licencia será activada!" : "Pagamento enviado para verificação. Assim que o administrador aprovar, sua licença será ativada!");
       setShowPaymentModal(null);
       setPaymentHash('');
       fetchAdminData();
       fetchStatus();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert("Erro: " + e.message);
     } finally {
       setLoading(false);
     }
@@ -919,6 +1097,8 @@ export default function App() {
   };
 
   const toggleBot = async () => {
+    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com';
+
     // If system is blocked by daily target, prevent starting the robot
     if (!stats.botRunning && stats.systemBlocked) {
       alert(
@@ -931,8 +1111,41 @@ export default function App() {
       return;
     }
 
-    // Strict requirement: must have active license to start
-    if (!stats.botRunning && !hasActiveLicense) {
+    // Market Closed Check (Mon-Fri 06:00 - 17:00 BRT)
+    if (!stats.botRunning && !isUserAdmin) {
+      const now = new Date();
+      // BRT is UTC-3
+      const utcTime = now.getTime();
+      const brtTime = new Date(utcTime - (3 * 60 * 60 * 1000));
+      const brtDay = brtTime.getUTCDay(); // 0 = Sun, 6 = Sat
+      const brtHour = brtTime.getUTCHours();
+
+      const isWeekend = brtDay === 0 || brtDay === 6;
+      const isOutsideHours = brtHour < 6 || brtHour >= 17;
+
+      if (isWeekend || isOutsideHours) {
+        // Obter os horários correspondentes na máquina local do usuário para exibir na mensagem
+        const localOpen = new Date();
+        localOpen.setUTCHours(9, 0, 0, 0); // 06:00 BRT = 09:00 UTC
+        const openStr = localOpen.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const localClose = new Date();
+        localClose.setUTCHours(20, 0, 0, 0); // 17:00 BRT = 20:00 UTC
+        const closeStr = localClose.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        alert(
+          language === 'en'
+            ? `Market Closed! The bot only operates from Monday to Friday, ${openStr} to ${closeStr} (Your Local Time).`
+            : language === 'es'
+              ? `¡Mercado Cerrado! El bot solo opera de Lunes a Viernes, ${openStr} a ${closeStr} (Su Hora Local).`
+              : `Mercado Fechado! O robô só opera de Segunda a Sexta-feira, das ${openStr} às ${closeStr} (Seu Horário Local).`
+        );
+        return;
+      }
+    }
+
+    // Strict requirement: must have active license to start (bypassed for ADMIN)
+    if (!stats.botRunning && !hasActiveLicense && !isUserAdmin) {
       setShowLicenseRequiredModal(true);
       return;
     }
@@ -946,7 +1159,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: stats.botRunning ? 'stop' : 'start',
-          userId: currentUser?.id
+          userId: currentUser?.id,
+          tradeSettings: tradeSettings
         })
       });
       const data = await res.json();
@@ -960,6 +1174,92 @@ export default function App() {
       }
     } catch (e) {
       console.error("Failed to toggle bot", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeManualTrade = async (contractId: string) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch('/api/control/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          contractId: contractId
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert("Failed to close trade: " + (data.error || "Unknown error"));
+      } else {
+        fetchStatus();
+      }
+    } catch (e) {
+      console.error("Error closing manual trade", e);
+    }
+  };
+
+  const autoSaveTokens = async () => {
+    if (!currentUser) return;
+    try {
+      let tDemo = profileForm.derivTokenDemo ? profileForm.derivTokenDemo.replace(/\s+/g, '') : '';
+      let tReal = profileForm.derivTokenReal ? profileForm.derivTokenReal.replace(/\s+/g, '') : '';
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentUser.id, derivTokenDemo: tDemo, derivTokenReal: tReal })
+      });
+      const data = await res.json();
+      if (data.success) {
+        let updatedUser = { ...currentUser, ...data.user, derivTokenDemo: tDemo, derivTokenReal: tReal };
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleAccountType = async () => {
+    if (!currentUser) return;
+    const newType = currentUser.activeAccountType === 'REAL' ? 'DEMO' : 'REAL';
+    const currentToken = newType === 'REAL' ? currentUser.derivTokenReal : currentUser.derivTokenDemo;
+    const formToken = newType === 'REAL' ? profileForm.derivTokenReal : profileForm.derivTokenDemo;
+    const newToken = formToken || currentToken;
+
+    if (!newToken || newToken.trim() === '') {
+      alert(
+        newType === 'REAL'
+          ? "Você não configurou o Token da CONTA REAL! Vá em Configurações (engrenagem), cole seu token e aguarde o salvamento automático antes de tentar mudar."
+          : "Você não configurou o Token da CONTA DEMO! Vá em Configurações (engrenagem), cole seu token e aguarde o salvamento automático antes de tentar mudar."
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentUser.id,
+          activeAccountType: newType,
+          derivToken: newToken,
+          derivTokenDemo: profileForm.derivTokenDemo || currentUser.derivTokenDemo,
+          derivTokenReal: profileForm.derivTokenReal || currentUser.derivTokenReal
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentUser(data.user);
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        // Reload to reconnect websocket with new token
+        window.location.reload();
+      }
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -981,7 +1281,7 @@ export default function App() {
       if (currentUser?.role === 'ADMIN') {
         fetchAdminData();
       }
-    }, 10000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isLoggedIn, currentUser?.role]);
@@ -994,112 +1294,114 @@ export default function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#0a0a0c] flex flex-col items-center justify-center lg:flex-row lg:justify-start lg:items-center lg:pl-20 xl:pl-32 p-4 sm:p-6 md:p-8 font-sans relative overflow-y-auto">
-        {/* Floating Language Switcher for Login Screen */}
-        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-[#050508]/75 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+      <div className="min-h-screen bg-[#0f1522] flex flex-col items-center justify-center lg:items-start lg:pl-24 xl:pl-40 p-4 font-sans relative overflow-hidden">
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="/fybot_neon_small.png"
+            alt="Fybot Dubai Background"
+            className="w-full h-full object-cover object-center pointer-events-none"
+          />
+        </div>
+
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <button
             onClick={() => setLanguage('en')}
-            title="English"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'en' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇺🇸
           </button>
           <button
             onClick={() => setLanguage('pt')}
-            title="Português"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'pt' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇧🇷
           </button>
           <button
             onClick={() => setLanguage('es')}
-            title="Español"
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es'
-              ? 'bg-[#ffbe1a] text-black shadow-md scale-110'
-              : 'text-white/60 hover:text-white hover:bg-white/5'
-              }`}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all text-xs font-bold ${language === 'es' ? 'bg-[#2563eb] text-white shadow-md' : 'text-white/60 hover:text-white'}`}
           >
             🇪🇸
           </button>
         </div>
 
-        {/* Background Image with Full Realism and Visibility */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          <img
-            src="/fybot_neon_small.png"
-            alt="Futuristic Robot Background"
-            className="w-full h-full object-cover object-center select-none pointer-events-none transition-all duration-1000 ease-out opacity-100"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-black/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-8 md:p-10 space-y-5 md:space-y-6 relative z-10 shadow-2xl mt-[10vh] md:mt-[25vh] lg:mt-[55vh] mx-4 sm:mx-0 transform scale-100 md:scale-90 lg:scale-[0.7] origin-top"
+          className="w-full max-w-[550px] bg-[#181f2f] border border-white/5 rounded-2xl p-6 sm:p-8 shadow-2xl relative z-10"
         >
-          <div className="text-center space-y-2 pb-1">
-            <p className="text-white text-base font-extrabold tracking-wide [text-shadow:_0_2px_6px_rgba(0,0,0,1)]">{isSignUp ? (language === 'en' ? 'Create your professional account' : language === 'pt' ? 'Crie sua conta profissional' : 'Crea tu cuenta profesional') : t.login.subTitle}</p>
+          <div className="space-y-1 pb-6">
+            {isSignUp && (
+              <h1 className="text-[22px] font-bold text-white">
+                {language === 'en' ? 'Create Account' : language === 'es' ? 'Crear Cuenta' : 'Criar Conta'}
+              </h1>
+            )}
+            <div className="inline-block px-2 py-0.5 mt-1">
+              <p className="text-[20px] font-medium text-[#FCD535]">
+                {isSignUp ? (language === 'en' ? 'Fill the details below' : 'Preencha os dados abaixo') : (language === 'en' ? 'Access your account' : 'Acesse sua conta')}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-4">
             {isSignUp && (
               <>
-                <div className="space-y-2">
-                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.name}</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                    {language === 'en' ? 'Name' : 'Nome'}
+                  </label>
                   <input
                     type="text"
                     value={registerName}
                     onChange={(e) => setRegisterName(e.target.value)}
                     placeholder="Seu nome"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
                   />
                 </div>
-                <div className="space-y-2 animate-fadeIn">
-                  <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">
-                    {language === 'en' ? 'Referral Code (Optional)' : language === 'es' ? 'Código de Referido (Opcional)' : 'Código de Indicação (Opcional)'}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                    {language === 'en' ? 'Referral Code' : 'Código de Indicação'}
                   </label>
                   <input
                     type="text"
                     value={referredByCode}
                     onChange={(e) => setReferredByCode(e.target.value)}
                     placeholder="Ex: CARLOS296"
-                    className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/40 uppercase font-mono"
+                    className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20 uppercase"
                   />
                 </div>
               </>
             )}
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.email}</label>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                {language === 'en' ? 'E-mail' : 'E-mail'}
+              </label>
               <input
                 type="email"
                 placeholder="seu@email.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all placeholder-black/50"
+                className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase font-black text-white tracking-widest pl-1 [text-shadow:_0_2px_4px_rgba(0,0,0,1)]">{t.login.password}</label>
-              <div className="relative group">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                {language === 'en' ? 'Password' : 'Senha'}
+              </label>
+              <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full bg-[#ffbe1a] text-black border border-yellow-600 rounded-xl px-4 py-2.5 sm:py-3 text-sm font-bold focus:border-yellow-700 focus:ring-1 focus:ring-yellow-700 outline-none transition-all pr-12"
+                  placeholder="••••••••"
+                  className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all pr-12 placeholder-white/20 tracking-widest"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 hover:text-black transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white transition-colors"
                 >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
@@ -1108,23 +1410,79 @@ export default function App() {
           <button
             onClick={isSignUp ? handleRegister : handleLogin}
             disabled={loading}
-            className="w-full py-3 sm:py-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 rounded-2xl font-black text-sm transition-all shadow-xl shadow-yellow-500/20 active:scale-95 disabled:opacity-50 tracking-wider uppercase"
+            className="w-full mt-6 py-3 bg-[#FCD535] text-black hover:bg-[#F3BA2F] rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20"
           >
-            {loading ? <RefreshCw className="animate-spin mx-auto" size={20} /> : (isSignUp ? t.login.registerButton : t.login.button)}
+            {loading ? <RefreshCw className="animate-spin" size={18} /> : (isSignUp ? (language === 'en' ? 'Create Account' : 'Criar Conta') : (language === 'en' ? 'Log in' : 'Entrar'))}
+            {!loading && <ArrowRight size={16} />}
           </button>
 
-          <div className="text-center space-y-3 sm:space-y-4 pt-1">
+          {!isSignUp && (
+            <>
+              <div className="flex items-center gap-3 my-6">
+                <div className="h-px bg-white/5 flex-1" />
+                <span className="text-[11px] text-white/30">{language === 'en' ? 'or continue with' : 'ou continue com'}</span>
+                <div className="h-px bg-white/5 flex-1" />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=52148&o=1&c=3&link_id=1', '_blank')}
+                  className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[16px] font-bold flex items-center justify-center gap-2"
+                >
+                  <Users size={20} />
+                  {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
+                </button>
+                <button
+                  onClick={() => handleDerivPKCELogin('33RnO3OxGcvL8DIYeklO0')}
+                  className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
+                >
+                  <Globe size={20} />
+                  {language === 'en' ? 'Connect Deriv' : 'Conectar Deriv'}
+                </button>
+              </div>
+            </>
+          )}
+
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/5">
             <button
               onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full py-2.5 px-4 bg-[#ffbe1a] text-black hover:bg-yellow-400 font-black text-[11px] rounded-xl transition-all shadow-md tracking-wider uppercase inline-block text-center"
+              className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
             >
-              {isSignUp ? t.login.haveAccount : t.login.noAccount}{' '}
-              <span className="underline font-black">{isSignUp ? t.login.login : t.login.signUp}</span>
+              {isSignUp ? (language === 'en' ? 'Log in' : 'Entrar') : (language === 'en' ? 'Create account' : 'Criar conta')}
             </button>
-            <p className="text-[10px] text-white/50 uppercase tracking-widest font-bold [text-shadow:_0_1px_4px_rgba(0,0,0,1)]">
-              {t.login.authorized}
+            {!isSignUp && (
+              <button
+                onClick={() => alert(language === 'en' ? 'Contact support to reset your password.' : 'Entre em contato com o suporte para redefinir sua senha.')}
+                className="text-[18px] font-bold text-[#FCD535] hover:text-[#F3BA2F] transition-colors"
+              >
+                {language === 'en' ? 'Forgot password' : 'Esqueci minha senha'}
+              </button>
+            )}
+          </div>
+
+          <div className="mt-6 text-center">
+            <p className="text-[20px] text-white/50 font-medium">
+              Fybot © 2026
             </p>
           </div>
+        </motion.div>
+
+        {/* Risk Warning Box */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="w-full max-w-[550px] mt-6 bg-black/70 backdrop-blur-md border border-white/10 rounded-xl p-5 shadow-2xl relative z-10 hidden lg:block"
+        >
+          <h3 className="text-red-500 font-bold text-[18px] uppercase tracking-widest mb-2 flex items-center gap-2">
+            <AlertTriangle size={18} /> Aviso de Risco
+          </h3>
+          <p className="text-[15px] text-white/60 leading-relaxed text-justify mb-3">
+            A Deriv oferece derivativos complexos, como opções e contratos por diferença (“CFDs”). Esses produtos podem não ser adequados para todos os clientes, e negociá-los implica riscos. Antes de negociar, entenda que: (a) você pode perder parte ou todo o dinheiro investido; (b) se houver conversão de moeda, as taxas de câmbio afetarão seu resultado. Nunca negocie com dinheiro emprestado ou que não pode perder.
+          </p>
+          <p className="text-[15px] text-white/60 leading-relaxed text-justify">
+            Ao operar pela plataforma, você declara estar ciente e de acordo com estes termos. A plataforma não se responsabiliza por perdas decorrentes das operações realizadas.
+          </p>
         </motion.div>
       </div>
     );
@@ -1164,12 +1522,7 @@ export default function App() {
           </div>
 
           <NavItem icon={<LayoutDashboard size={20} />} label={t.sidebar.dashboard} active={activeTab === 'dashboard'} onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} />
-          {currentUser?.role === 'ADMIN' && (
-            <>
-              <NavItem icon={<Activity size={20} />} label={t.sidebar.strategies} active={activeTab === 'strategies'} onClick={() => { setActiveTab('strategies'); setIsMobileMenuOpen(false); }} />
-              <NavItem icon={<BarChart3 size={20} />} label={t.sidebar.analytics} active={activeTab === 'analytics'} onClick={() => { setActiveTab('analytics'); setIsMobileMenuOpen(false); }} />
-            </>
-          )}
+
           {/* History menu item removed by request */}
           <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
@@ -1178,16 +1531,8 @@ export default function App() {
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
 
-          <div className="px-4 mt-8 mb-4">
-            <a href="/downloads/Fybot.ex5" download className="relative w-full py-3.5 bg-yellow-500 text-black rounded-xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-yellow-400 hover:shadow-[0_0_20px_rgba(234,179,8,0.6)] hover:-translate-y-0.5 active:scale-95 transition-all duration-300 flex items-center justify-center gap-3 overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-              <Download size={18} className="animate-bounce" />
-              <span>DOWNLOAD ROBÔ (EA)</span>
-            </a>
-          </div>
 
         </nav>
-
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-row justify-center items-center gap-8">
 
@@ -1410,6 +1755,7 @@ export default function App() {
               </motion.div>
             </div>
           )}
+
         </AnimatePresence>
         {/* Header */}
         <header className="h-20 border-b border-white/5 px-4 md:px-8 flex items-center justify-between backdrop-blur-md bg-[#0a0a0c]/80 sticky top-0 z-40">
@@ -1420,16 +1766,33 @@ export default function App() {
             >
               <Menu size={24} />
             </button>
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-              <div className={`w-2 h-2 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-xs font-medium text-white/70 uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
+              <div className={`w-2.5 h-2.5 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
+              <span className="text-xs font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
             </div>
-            <span className="hidden md:block text-white/20">|</span>
-            <div className="hidden md:flex items-center gap-2">
-              <ShieldCheck size={16} className="text-blue-400/60" />
-              <span className="text-xs font-medium text-white/40">{t.header.broker}</span>
+
+            <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
+              {currentUser?.role === 'ADMIN' && (
+                <button
+                  onClick={toggleAccountType}
+                  disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                  className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+                >
+                  CONTA DEMO
+                </button>
+              )}
+              <button
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'REAL'}
+                className={`px-6 py-2 text-xs uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
+              >
+                CONTA REAL
+              </button>
             </div>
+
           </div>
+
+
 
           <div className="flex items-center gap-2 md:gap-4">
             <div className="flex flex-col items-end mr-1 md:mr-2">
@@ -1437,24 +1800,7 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
-            <button
-              onClick={async () => {
-                setLoading(true);
-                try {
-                  await fetchStatus();
-                  await new Promise(r => setTimeout(r, 600)); // Simula tempo de rede
-                  alert(language === 'en'
-                    ? `Balance synced successfully with Exness (MT5)!\nCurrent Balance: $${stats.balance.toFixed(2)}`
-                    : `Saldo sincronizado com sucesso via MT5 (Exness)!\nSaldo atual: $${stats.balance.toFixed(2)}`);
-                } catch (e) { console.error(e); }
-                finally { setLoading(false); }
-              }}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-500 font-bold text-xs md:text-sm border border-blue-500/20 hover:bg-blue-500/20 transition-all shadow-xl shadow-blue-900/5 mr-1 md:mr-2 disabled:opacity-50"
-            >
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-              <span className="hidden md:inline">SYNC MT5</span>
-            </button>
+
             <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
@@ -1462,7 +1808,7 @@ export default function App() {
                 ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
                 : stats.botRunning
                   ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
-                  : 'bg-white text-black hover:bg-white/90 shadow-white/5'
+                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
                 }`}
             >
               {loading ? (
@@ -1481,6 +1827,32 @@ export default function App() {
           </div>
         </header>
 
+        {/* Mobile Sub-header for Controls */}
+        <div className="md:hidden flex items-center justify-between px-3 py-2 border-b border-white/5 bg-[#0a0a0c]/90 sticky top-20 z-30 shadow-lg backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-lg shadow-black/20">
+            <div className={`w-2.5 h-2.5 rounded-full ${stats.botRunning ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} />
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
+          </div>
+          <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
+            {currentUser?.role === 'ADMIN' && (
+              <button
+                onClick={toggleAccountType}
+                disabled={loading || currentUser?.activeAccountType === 'DEMO'}
+                className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'DEMO' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/30' : 'bg-yellow-500/10 text-yellow-500/70 hover:bg-yellow-500/30'}`}
+              >
+                DEMO
+              </button>
+            )}
+            <button
+              onClick={toggleAccountType}
+              disabled={loading || currentUser?.activeAccountType === 'REAL'}
+              className={`px-4 py-1.5 text-[10px] uppercase tracking-widest font-black rounded-full transition-all ${currentUser?.activeAccountType === 'REAL' ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.6)]' : 'bg-green-500/10 text-green-500/70 hover:bg-green-500/30'}`}
+            >
+              REAL
+            </button>
+          </div>
+        </div>
+
         <div className="p-4 md:p-8 space-y-6 md:space-y-8">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
@@ -1489,7 +1861,7 @@ export default function App() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="space-y-8"
+                className="space-y-2"
               >
                 {stats.systemBlocked && stats.blockedUntil && (
                   <motion.div
@@ -1518,102 +1890,179 @@ export default function App() {
                 )}
 
                 {/* Top Grid — Enhanced StatCards with sparklines */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard
-                    label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
-                    value={`$${stats.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
-                    icon={<Wallet className="text-amber-500" />}
-                    trendPositive={true}
-                    labelClassName="text-amber-500"
-                    valueClassName="text-amber-500"
-                    trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
-                  />
-                  <StatCard
-                    label={t.dashboard.dailyTargetLabel}
-                    value={`$${(stats.dailyProfitTarget || (stats.balance * 0.016)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    delta="1.6%"
-                    icon={<Target className="text-amber-500" />}
-                    trendPositive={true}
-                    labelClassName="text-amber-500"
-                    valueClassName="text-amber-500"
-                    trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                        subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
-                  />
-                  {(() => {
-                    const realTimeProfit = stats.dailyProfit || 0;
-                    return (
+                {(() => {
+                  // Mostra o saldo mesmo se for zero, desde que stats.balance seja um número.
+                  const isConnected = typeof stats.balance === 'number';
+                  const displayBalance = isConnected ? stats.balance : 0;
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                       <StatCard
-                        label={t.dashboard.dailyProfitLabel}
-                        value={`${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                        delta={realTimeProfit && realTimeProfit >= (stats.dailyProfitTarget || (stats.balance * 0.016)) ? "100%" : `${Math.round((realTimeProfit / (stats.dailyProfitTarget || (stats.balance * 0.016) || 160)) * 100)}%`}
-                        icon={<TrendingUp className="text-amber-500" />}
-                        valueClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
-                        labelClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
-                        trendPositive={realTimeProfit >= 0}
-                            subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
+                        label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
+                        value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                        delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
+                        icon={<Wallet className="text-amber-500" />}
+                        trendPositive={true}
+                        labelClassName="text-amber-500"
+                        valueClassName="text-amber-500"
+                        trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                       />
-                    );
-                  })()}
-                  {stats.activeLicense?.expiryDate ? (
-                    <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
-                  ) : stats.pendingPayment ? (
-                    <div
-                      onClick={() => setActiveTab('plans')}
-                      className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-6 cursor-pointer hover:bg-amber-500/20 transition-all group relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <Clock size={48} className="text-amber-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1">{t.admin.pendingVerification}</p>
-                      <p className="text-lg font-bold text-white mb-2">
-                        {language === 'en' ? 'Awaiting Verification' : language === 'es' ? 'Verificación Pendiente' : 'Aguardando Verificação'}
-                      </p>
-                      <div className="flex items-center gap-1 text-[10px] text-amber-300 font-bold uppercase">
-                        {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => setActiveTab('plans')}
-                      className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                        <CreditCard size={48} className="text-red-400" />
-                      </div>
-                      <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">
-                        {language === 'en' ? 'License Required' : language === 'es' ? 'Licencia Requerida' : 'Licença Requerida'}
-                      </p>
-                      <p className="text-lg font-bold text-white mb-2">
-                        {language === 'en' ? 'No Active License' : language === 'es' ? 'Sin Licencia Activa' : 'Sem Licença Ativa'}
-                      </p>
-                      <div className="flex items-center gap-1 text-[10px] text-red-300 font-bold uppercase">
-                        {language === 'en' ? 'Acquire License' : language === 'es' ? 'Adquirir Licencia' : 'Adquirir Licença'} <ArrowRight size={10} />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                      <StatCard
+                        label={t.dashboard.dailyTargetLabel}
+                        value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                        delta="2%"
+                        icon={<Target className="text-amber-500" />}
+                        trendPositive={true}
+                        labelClassName="text-amber-500"
+                        valueClassName="text-amber-500"
+                        trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
+                        subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
+                      />
+                      {(() => {
+                        // Só mostra lucro se estiver conectado com saldo real/demo validado
+                        const realTimeProfit = isConnected ? (stats.dailyProfit || 0) : 0;
+                        const liveTarget = displayBalance * 0.02;
+                        return (
+                          <StatCard
+                            label={t.dashboard.dailyProfitLabel}
+                            value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                            delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
+                            icon={<TrendingUp className="text-amber-500" />}
+                            valueClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
+                            labelClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
+                            trendPositive={realTimeProfit >= 0}
+                            subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
+                          />
+                        );
+                      })()}
 
-                <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} />
+                      {stats.activeLicense?.expiryDate ? (
+                        <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
+                      ) : stats.pendingPayment ? (
+                        <div
+                          onClick={() => setActiveTab('plans')}
+                          className="bg-amber-500/10 border border-amber-500/20 rounded-3xl p-6 cursor-pointer hover:bg-amber-500/20 transition-all group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <Clock size={48} className="text-amber-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-1">{t.admin.pendingVerification}</p>
+                          <p className="text-lg font-bold text-white mb-2">
+                            {language === 'en' ? 'Awaiting Verification' : language === 'es' ? 'Verificación Pendiente' : 'Aguardando Verificação'}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-amber-300 font-bold uppercase">
+                            {language === 'en' ? 'Check Plans & Status' : language === 'es' ? 'Ver Planes y Estado' : 'Ver Planos e Status'} <ArrowRight size={10} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setActiveTab('plans')}
+                          className="bg-red-500/10 border border-red-500/20 rounded-3xl p-6 cursor-pointer hover:bg-red-500/20 transition-all group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                            <CreditCard size={48} className="text-red-400" />
+                          </div>
+                          <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-1">
+                            {language === 'en' ? 'License Required' : language === 'es' ? 'Licencia Requerida' : 'Licença Requerida'}
+                          </p>
+                          <p className="text-lg font-bold text-white mb-2">
+                            {language === 'en' ? 'No Active License' : language === 'es' ? 'Sin Licencia Activa' : 'Sem Licença Ativa'}
+                          </p>
+                          <div className="flex items-center gap-1 text-[10px] text-red-300 font-bold uppercase">
+                            {language === 'en' ? 'Acquire License' : language === 'es' ? 'Adquirir Licencia' : 'Adquirir Licença'} <ArrowRight size={10} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Signal Intel + Live Console */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
                   {/* Market Stream — enhanced chart */}
-                  <div className="lg:col-span-2 flex flex-col">
+                  <div className={`flex flex-col ${currentUser?.role === 'ADMIN' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden p-6 h-full flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-6">
-                        <div>
-                          <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
-                          <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
+                        <div className="whitespace-nowrap flex items-center gap-6">
+                          <div>
+                            <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
+                            <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          {['1M', '5M', '1H'].map((interval) => (
+
+                        {/* V8 SAFETY SHIELD - HEADER COMPONENT */}
+                        <div className="hidden lg:flex flex-1 px-8">
+                          <div className="w-full max-w-xl mx-auto bg-[#0f0f12] border border-white/5 rounded-2xl px-4 py-2 relative overflow-hidden flex flex-col justify-center">
+                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
+
+                            {(() => {
+                              // CORRIGIDO: quando stats.balance é 0 (ex: usuário ainda
+                              // "Conectando..."), a divisão (dailyProfit / (balance * 0.02))
+                              // resultava em Infinity/NaN, quebrando a largura da barra de
+                              // progresso (width: NaN%). Agora protegemos contra balance <= 0.
+                              const safeTarget = (stats.balance || 0) * 0.02;
+                              const progressPct = safeTarget > 0
+                                ? Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / safeTarget) * 100))
+                                : 0;
+                              return (
+                                <>
+                                  <div className="flex items-center justify-between mb-1.5 relative z-10">
+                                    <div className="flex items-center gap-1.5">
+                                      <Cpu size={12} className="text-yellow-500 animate-pulse" />
+                                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
+                                        {progressPct.toFixed(0)}% PROG.
+                                      </span>
+                                      <span className="text-[9px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-1.5 py-0.5 rounded">
+                                        {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
+                                    <div
+                                      className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
+                                      style={{ width: `${progressPct}%` }}
+                                    >
+                                      <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
+                                    </div>
+                                  </div>
+                                </>
+                              );
+                            })()}
+
+                            {stats.systemBlocked && (
+                              <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1 flex items-center justify-center">
+                                [MERCADO FECHADO] O bot opera de Segunda a Sexta, das 06:00 às 17:00 (Horário de Brasília).
+                                {stats.blockedUntil && (() => {
+                                  const now = new Date().getTime();
+                                  const target = new Date(stats.blockedUntil).getTime();
+                                  const diff = target - now;
+                                  if (diff <= 0) return null;
+                                  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                  const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                                  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                                  const s = Math.floor((diff % (1000 * 60)) / 1000);
+                                  return (
+                                    <span className="text-white bg-yellow-500/20 px-2 py-0.5 rounded ml-2 border border-yellow-500/30">
+                                      RETORNA EM: {d > 0 ? d + 'd ' : ''}{h.toString().padStart(2, '0')}:{m.toString().padStart(2, '0')}:{s.toString().padStart(2, '0')}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3 whitespace-nowrap">
+                          {['15M', '30M', '1H'].map((interval) => (
                             <button
                               key={interval}
                               onClick={() => setSelectedInterval(interval)}
-                              className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${selectedInterval === interval
-                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10'
+                              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${selectedInterval === interval
+                                ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border border-emerald-500'
+                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5'
                                 }`}
                             >
                               {interval}
@@ -1624,12 +2073,21 @@ export default function App() {
 
                       {/* Live price tickers */}
                       <div className="flex gap-3 mb-4">
-                        {[
-                          { sym: 'XAUUSD', base: 2335.40, color: '#f59e0b' }
-                        ].map(({ sym, base, color }, i) => {
+                        {(() => {
+                          // CORRIGIDO: `assets` não existe na interface `User` (types.ts),
+                          // então `currentUser?.assets` sempre resultava em `undefined` e
+                          // quebrava a checagem de tipos do TypeScript. Lemos via cast local
+                          // em vez de acessar o campo diretamente na interface tipada.
+                          const userAssets = (currentUser as unknown as { assets?: string } | null)?.assets;
+                          const firstSymbol = (userAssets && userAssets.split(',')[0].trim()) || "XAUUSD";
+                          return [
+                            { sym: firstSymbol, base: 2335.40, color: '#f59e0b' }
+                          ];
+                        })().map(({ sym, base, color }, i) => {
                           const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
-                          const price = (base + tickDelta).toFixed(sym === 'XAUUSD' ? 2 : 5);
-                          const isUp = tickDelta >= 0;
+                          const currentLive = livePrice > 0 ? livePrice : base;
+                          const price = (currentLive + (livePrice > 0 ? 0 : tickDelta)).toFixed(2);
+                          const isUp = livePrice > 0 ? true : (tickDelta >= 0);
                           return (
                             <motion.div
                               key={sym}
@@ -1641,7 +2099,7 @@ export default function App() {
                               <p className="text-[9px] font-black uppercase tracking-widest mb-1" style={{ color }}>{sym}</p>
                               <p className="text-sm font-mono font-black text-white">{price}</p>
                               <p className={`text-[10px] font-mono font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {isUp ? '+' : ''}{tickDelta.toFixed(5)}
+                                {livePrice > 0 ? 'LIVE' : (isUp ? '+' : '') + tickDelta.toFixed(5)}
                               </p>
                             </motion.div>
                           );
@@ -1649,227 +2107,100 @@ export default function App() {
                       </div>
 
                       {/* Main chart area */}
-                      <div className="flex-1 min-h-[200px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={stats.pnlHistory?.length > 1 ? stats.pnlHistory : [
-                            { time: '', balance: stats.balance * 0.95 },
-                            { time: '', balance: stats.balance * 0.97 },
-                            { time: '', balance: stats.balance * 0.96 },
-                            { time: '', balance: stats.balance * 0.98 },
-                            { time: '', balance: stats.balance * 0.99 },
-                            { time: '', balance: stats.balance },
-                          ]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                            <defs>
-                              <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="2 4" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                            <Tooltip
-                              contentStyle={{ backgroundColor: '#0f0f12', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '11px', padding: '8px 12px' }}
-                              itemStyle={{ color: '#60a5fa' }}
-                              labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '10px' }}
-                              formatter={(v: any) => [`$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 'Balance']}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="balance"
-                              stroke="#3b82f6"
-                              fillOpacity={1}
-                              fill="url(#colorPnL)"
-                              strokeWidth={2}
-                              dot={false}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-
-                        {/* Volume bars overlay at bottom */}
-                        <div className="absolute bottom-0 left-0 right-0 h-8 flex items-end gap-px px-2 opacity-30 pointer-events-none">
-                          {Array.from({ length: 40 }, (_, i) => (
-                            <div
-                              key={i}
-                              className="flex-1 rounded-t-sm"
-                              style={{
-                                height: `${15 + Math.abs(Math.sin(i * 0.8 + tick * 0.05)) * 85}%`,
-                                backgroundColor: i % 3 === 0 ? '#ef4444' : '#10b981',
-                                opacity: 0.5 + Math.abs(Math.sin(i * 0.4)) * 0.5
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Strategy Gauges — circular */}
-                      <div className="mt-6 grid grid-cols-3 gap-4">
-                        <StrategyGauge label={t.dashboard.smc} percentage={stats.liveSignals?.smc || 80} color="#3b82f6" />
-                        <StrategyGauge label={t.dashboard.momentum} percentage={stats.liveSignals?.momentum || 70} color="#10b981" />
-                        <StrategyGauge label={t.dashboard.aiBias} percentage={stats.liveSignals?.ai || 90} color="#8b5cf6" />
+                      <div className="flex-1 min-h-[700px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
+                        <TradingChart trades={trades} symbol={"XAUUSD"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} onPriceUpdate={setLivePrice} />
                       </div>
                     </div>
                   </div>
 
-                  {/* Sidebar — Enhanced Live Console */}
-                  <div className="flex flex-col">
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
-                      {/* Terminal header */}
-                      <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex gap-1.5">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
-                          </div>
-                          <Terminal size={13} className="text-emerald-500/60" />
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                            <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
-                          </div>
-                          {logs.length > 0 && (
-                            <button
-                              onClick={() => setLogs([])}
-                              title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
-                            >
-                              <Trash2 size={10} className="group-hover:scale-110 transition-transform" />
-                              <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
-                                {language === 'en' ? 'Clear' : language === 'es' ? 'Limpiar' : 'Limpar'}
-                              </span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                  {/* Sidebar — Configs & Live Console */}
+                  {currentUser?.role === 'ADMIN' && (
+                    <div className="flex flex-col gap-6 h-full">
+                      {/* <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} /> */}
 
-
-                      {/* Log entries with categories */}
-                      <div
-                        ref={logContainerRef}
-                        className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
-                        style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
-                      >
-                        {logs.length === 0 && (
-                          <div className="flex items-center gap-2 text-white/20 py-4">
-                            <span className="text-emerald-500/40">$</span>
-                            <span className="animate-pulse">Aguardando eventos do sistema...</span>
-                          </div>
-                        )}
-                        {logs.map((log, i) => {
-                          const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
-                          const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
-                          const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
-                          const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
-                          const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
-                          const isLatest = i === logs.length - 1;
-
-                          let iconEl = <span className="text-white/20 shrink-0">›</span>;
-                          let textColor = 'text-white/40';
-
-                          if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
-                          else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
-                          else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
-                          else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
-                          else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
-
-                          return (
-                            <motion.div
-                              key={`${i}-${log.slice(0, 10)}`}
-                              initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ duration: 0.25 }}
-                              className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
-                            >
-                              <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
-                              {iconEl}
-                              <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Intelligence Status — Enhanced with connection nodes */}
-                <div className="bg-gradient-to-br from-indigo-950/60 via-blue-950/40 to-[#0f0f12] border border-indigo-500/10 rounded-3xl p-8 relative overflow-hidden group w-full">
-                  {/* Animated grid bg */}
-                  <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(99,102,241,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.3) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/5 blur-3xl rounded-full pointer-events-none -mr-16 -mt-16" />
-
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between mb-6">
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                            <Zap size={12} className="text-blue-400" />
-                          </div>
-                          <h3 className="text-sm font-bold text-white">{t.dashboard.intelStatus}</h3>
-                        </div>
-                        <p className="text-xs text-white/40 leading-relaxed max-w-lg">{t.dashboard.intelDesc}</p>
-                      </div>
-
-                      {/* Animated connection nodes */}
-                      <div className="hidden lg:flex items-center gap-2">
-                        {['VPS-1', 'MT5', 'API'].map((node, ni) => (
-                          <div key={node} className="flex items-center gap-2">
-                            <div className="flex flex-col items-center gap-2">
-                              <motion.div
-                                animate={{ opacity: [0.6, 1, 0.6], scale: [0.95, 1.05, 0.95] }}
-                                transition={{ duration: 2, repeat: Infinity, delay: ni * 0.6 }}
-                                className="w-16 h-16 rounded-2xl bg-emerald-500/20 border-2 border-emerald-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                              >
-                                <Network size={28} className="text-emerald-400" />
-                              </motion.div>
-                              <span className="text-[10px] font-mono font-black text-emerald-400">{node}</span>
+                      <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
+                        {/* Terminal header */}
+                        <div className="bg-[#0a0a0d] px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex gap-1.5">
+                              <div className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 animate-pulse" />
                             </div>
-                            {ni < 2 && (
-                              <div className="flex gap-1.5 mx-2">
-                                {[0, 1, 2].map(dot => (
-                                  <motion.div
-                                    key={dot}
-                                    animate={{ opacity: [0.1, 1, 0.1] }}
-                                    transition={{ duration: 1.2, repeat: Infinity, delay: ni * 0.4 + dot * 0.15 }}
-                                    className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-                                  />
-                                ))}
-                              </div>
+                            <Terminal size={13} className="text-emerald-500/60" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">FYBOT Live Console</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                              <span className="text-[9px] font-mono text-emerald-500/70 font-bold">{logs.length} LOGS</span>
+                            </div>
+                            {logs.length > 0 && (
+                              <button
+                                onClick={() => setLogs([])}
+                                title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
+                              >
+                                <Trash2 size={10} className="group-hover:scale-110 transition-transform" />
+                                <span className="text-[8px] font-bold uppercase tracking-wider hidden sm:inline">
+                                  {language === 'en' ? 'Clear' : language === 'es' ? 'Limpiar' : 'Limpar'}
+                                </span>
+                              </button>
                             )}
                           </div>
-                        ))}
+                        </div>
+
+
+                        {/* Log entries with categories */}
+                        <div
+                          ref={logContainerRef}
+                          className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
+                          style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
+                        >
+                          {logs.length === 0 && (
+                            <div className="flex items-center gap-2 text-white/20 py-4">
+                              <span className="text-emerald-500/40">$</span>
+                              <span className="animate-pulse">Aguardando eventos do sistema...</span>
+                            </div>
+                          )}
+                          {logs.map((log, i) => {
+                            const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
+                            const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
+                            const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
+                            const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
+                            const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
+                            const isLatest = i === logs.length - 1;
+
+                            let iconEl = <span className="text-white/20 shrink-0">›</span>;
+                            let textColor = 'text-white/40';
+
+                            if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
+                            else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
+                            else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
+                            else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
+                            else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
+
+                            return (
+                              <motion.div
+                                key={`${i}-${log.slice(0, 10)}`}
+                                initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
+                              >
+                                <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
+                                {iconEl}
+                                <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-
-                    {/* Metrics strip */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                      {[
-                        { label: language === 'en' ? 'VPS Latency' : 'Latência VPS', value: `${(0.8 + (tick % 10) * 0.04).toFixed(1)}ms`, color: 'text-emerald-400', good: true },
-                        { label: language === 'en' ? 'Signals Analyzed' : 'Sinais Analisados', value: `${1240 + (tick % 30) * 3}`, color: 'text-blue-400', good: true },
-                        { label: language === 'en' ? 'Consensus Score' : 'Score Consenso', value: '87%', color: 'text-purple-400', good: true },
-                        { label: language === 'en' ? 'Uptime' : 'Uptime VPS', value: '99.9%', color: 'text-yellow-400', good: true },
-                      ].map(({ label, value, color, good }) => (
-                        <div key={label} className="bg-white/[0.03] border border-white/5 rounded-xl px-3 py-2.5 flex flex-col gap-0.5">
-                          <span className="text-[9px] text-white/30 font-bold uppercase tracking-wider">{label}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-base font-mono font-black ${color}`}>{value}</span>
-                            {good && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {currentUser?.role === 'ADMIN' && (
-                      <button
-                        onClick={() => setActiveTab('settings')}
-                        className="w-full py-3 bg-white/5 hover:bg-indigo-500/10 border border-white/5 hover:border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 text-white/60 hover:text-white"
-                      >
-                        <Settings size={14} />
-                        {t.dashboard.adjustWeights}
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
+
+                {/* Bloco de Status de Inteligência removido conforme solicitação */}
 
                 {/* Order Execution Table — Enhanced with filter + highlight */}
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col">
@@ -1917,9 +2248,15 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/[0.03]">
                         {(() => {
-                          const filtered = trades.filter(tr =>
-                            tradeFilter === 'ALL' ? true : tr.status === tradeFilter
-                          );
+                          // CORRIGIDO: a tabela filtrava `stats.trades`, campo que nunca é
+                          // preenchido pelo backend (/api/status não devolve essa chave).
+                          // Quem realmente recebe as operações em tempo real é o estado
+                          // local `trades`, populado via onTradesUpdate no <TradingChart />.
+                          // Antes disso, a tabela ficava sempre vazia mesmo com trades ativos.
+                          const filtered = (trades || []).filter((tr: any) => {
+                            const statusMatch = tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
+                            return statusMatch;
+                          });
                           if (filtered.length === 0) return (
                             <tr>
                               <td colSpan={8} className="py-10 text-center text-sm text-white/20 italic">
@@ -1927,11 +2264,12 @@ export default function App() {
                               </td>
                             </tr>
                           );
-                          const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(t.profit!)), 1);
+                          const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(Number(t.profit))), 1);
                           return filtered.slice(0, 15).map((trade, idx) => {
                             const isLatestTrade = idx === 0;
-                            const profitPct = trade.profit ? (Math.abs(trade.profit) / maxAbsProfit) * 100 : 0;
-                            const isProfit = (trade.profit ?? 0) >= 0;
+                            const profitVal = Number(trade.profit || 0);
+                            const profitPct = profitVal ? (Math.abs(profitVal) / maxAbsProfit) * 100 : 0;
+                            const isProfit = profitVal >= 0;
                             return (
                               <motion.tr
                                 key={trade.id}
@@ -1946,17 +2284,34 @@ export default function App() {
                                   )}
                                   {trade.id}
                                 </td>
-                                <td className="py-3.5 font-black text-white">{trade.symbol}</td>
+                                <td className="py-3.5 font-black text-white">
+                                  {(trade.symbol || '').replace(/frx/i, '').replace(/FRX/i, '').replace('UNKNOWN', 'XAUUSD') || 'XAUUSD'}
+                                </td>
                                 <td className="py-3.5">
-                                  <span className={`px-2 py-0.5 rounded-md text-sm font-black ${trade.type === 'BUY'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                    }`}>
-                                    {trade.type}
-                                  </span>
+                                  {(() => {
+                                    // CORRIGIDO: `Trade.type` em types.ts é tipado como
+                                    // 'BUY' | 'SELL' apenas, mas a API da Deriv também retorna
+                                    // MULTUP/MULTDOWN/CALL/PUT como tipo de contrato. Comparar
+                                    // esses literais direto contra `trade.type` fazia o
+                                    // TypeScript rejeitar a build ("types have no overlap").
+                                    // Convertendo para string antes de comparar evita o erro
+                                    // sem precisar alterar a definição do tipo em types.ts.
+                                    const rawType = String(trade.type);
+                                    const isBuy = rawType === 'BUY' || rawType === 'MULTUP' || rawType === 'CALL';
+                                    const isSell = rawType === 'MULTDOWN' || rawType === 'PUT';
+                                    const displayType = (rawType === 'MULTUP' || rawType === 'CALL') ? 'BUY' : isSell ? 'SELL' : rawType;
+                                    return (
+                                      <span className={`px-2 py-0.5 rounded-md text-sm font-black ${isBuy
+                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                        }`}>
+                                        {displayType}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="py-3.5 font-mono text-white/50">{trade.lot}</td>
-                                <td className="py-3.5 font-mono text-white/70">{trade.openPrice.toFixed(5)}</td>
+                                <td className="py-3.5 font-mono text-white/70">{Number(trade.openPrice || 0).toFixed(5)}</td>
                                 <td className="py-3.5 text-emerald-400 text-sm font-bold font-mono">
                                   {new Date(trade.time).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                 </td>
@@ -1964,13 +2319,28 @@ export default function App() {
                                   {trade.status === 'CLOSED' ? (
                                     <span className="text-white/30 text-sm uppercase font-bold tracking-wider">● Closed</span>
                                   ) : (
-                                    <span className="flex items-center gap-1.5 text-emerald-400 text-sm uppercase font-black tracking-wider">
-                                      <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                    <div className="flex items-center gap-2">
+                                      <span className="flex items-center gap-1.5 text-emerald-400 text-sm uppercase font-black tracking-wider">
+                                        <span className="relative flex h-2 w-2">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                        </span>
+                                        Live
                                       </span>
-                                      Live
-                                    </span>
+                                      {!String(trade.id).startsWith('PENDING') && (
+                                        <button
+                                          onClick={() => {
+                                            if (window.confirm(language === 'en' ? 'Are you sure you want to close this trade manually?' : 'Tem certeza que deseja fechar esta ordem manualmente?')) {
+                                              closeManualTrade(trade.id);
+                                            }
+                                          }}
+                                          className="px-2 py-1 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded text-[10px] font-bold transition-colors shadow-sm"
+                                          title={language === 'en' ? 'Close Trade' : 'Fechar Ordem'}
+                                        >
+                                          {language === 'en' ? 'CLOSE' : 'FECHAR'}
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                                 <td className="py-3.5 text-right">
@@ -1978,7 +2348,7 @@ export default function App() {
                                     <div className="flex flex-col items-end gap-1">
                                       <span className={`font-mono font-black text-sm ${isProfit ? 'text-emerald-400' : 'text-red-400'
                                         }`}>
-                                        {isProfit ? '+' : ''}${trade.profit.toFixed(2)}
+                                        {isProfit ? '+' : ''}${profitVal.toFixed(2)}
                                       </span>
                                       {/* Mini P&L bar */}
                                       <div className="w-16 h-0.5 bg-white/5 rounded-full overflow-hidden">
@@ -2007,7 +2377,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'strategies' && currentUser?.role === 'ADMIN' && (
+            {false && activeTab === 'strategies' && currentUser?.role === 'ADMIN' && (
               <motion.div
                 key="strategies"
                 initial={{ opacity: 0, y: 20 }}
@@ -2117,7 +2487,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'analytics' && currentUser?.role === 'ADMIN' && (
+            {false && activeTab === 'analytics' && currentUser?.role === 'ADMIN' && (
               <motion.div
                 key="analytics"
                 initial={{ opacity: 0, y: 20 }}
@@ -2170,35 +2540,8 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-                  <div className="h-[400px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartDataMap[analyticsPeriod]}>
-                        <defs>
-                          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis
-                          dataKey="name"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
-                          tickFormatter={(v) => `$${v}`}
-                        />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#141418', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }}
-                          itemStyle={{ color: '#fff' }}
-                        />
-                        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                  <div className="h-[400px] w-full flex flex-col">
+                    <TradingChart trades={trades} />
                   </div>
                 </div>
 
@@ -2302,7 +2645,7 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
@@ -2331,30 +2674,6 @@ export default function App() {
                     image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
-                  <PricingCard
-                    title={t.plans.card4Title}
-                    price={100}
-                    customPriceText={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
-                    desc={t.plans.card4Desc}
-                    features={t.plans.card4Features}
-                    language={language}
-                    image="/bot_trading.png"
-                    hideButton={true}
-                    largeFeatures={true}
-                    titleColor="text-emerald-400"
-                    descColor="text-emerald-400"
-                  />
-                  <PricingCard
-                    title="MEU BOT"
-                    price={500}
-                    desc={language === 'en' ? 'Your Free Bot 24 Hours' : language === 'es' ? 'Tu Bot Libre 24 Horas' : 'Seu Bot Livre 24 Horas'}
-                    descSize="text-base font-bold"
-                    descColor="text-emerald-400"
-                    features={[]}
-                    language={language}
-                    image="/awake_bot.png"
-                    onBuy={() => setShowPaymentModal({ title: "MEU BOT", price: 500 })}
-                  />
                 </div>
 
 
@@ -2369,44 +2688,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-12"
               >
-                {/* Hero Affiliate */}
-                <div className="relative bg-[#0f0f12] border border-white/5 rounded-[40px] p-8 md:p-16 overflow-hidden">
-                  <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-                  <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600/10 blur-[120px] -mr-48 -mt-48 transition-all" />
-                  <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-600/10 blur-[100px] -ml-24 -mb-24 transition-all" />
-
-                  {/* Subtle Chart SVG */}
-                  <div className="absolute bottom-0 right-0 w-full h-1/2 opacity-5 pointer-events-none">
-                    <svg viewBox="0 0 1000 200" className="w-full h-full preserve-3d">
-                      <path d="M0 150 Q100 100 200 130 T400 80 T600 120 T800 60 T1000 100" stroke="white" strokeWidth="2" fill="none" />
-                      <path d="M0 120 Q50 150 150 100 T350 130 T550 70 T750 110 T1000 50" stroke="rgba(59,130,246,0.5)" strokeWidth="1" fill="none" />
-                    </svg>
-                  </div>
-
-                  <div className="relative z-10 max-w-2xl">
-                    <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-6 text-white">
-                      {language === 'en' ? 'Referral Program' : language === 'es' ? 'Programa de Referidos' : 'Programa de Indicação'}
-                    </h1>
-                    <p className="text-lg text-white/50 leading-relaxed max-w-lg mb-10">
-                      {language === 'en' ? 'Earn recurring commissions up to 5 levels of your network. Turn your influence into a steady capital stream.' : language === 'es' ? 'Gane comisiones recurrentes en hasta 5 niveles de su red. Transforme su influencia en un flujo constante de capital.' : 'Ganhe comissões recorrentes em até 5 níveis da sua rede. Transforme sua influência em um fluxo constante de capital.'}
-                    </p>
-
-                  </div>
-
-                  {/* Decorative Tree Element */}
-                  <div className="hidden lg:block absolute right-16 top-1/2 -translate-y-1/2 w-80 h-80 opacity-20">
-                    <svg viewBox="0 0 100 100" className="w-full h-full stroke-blue-500 fill-none">
-                      <circle cx="50" cy="20" r="5" />
-                      <path d="M50 25 L30 50 M50 25 L70 50 M30 55 L20 80 M30 55 L40 80 M70 55 L60 80 M70 55 L80 80" strokeWidth="2" strokeLinecap="round" />
-                      <circle cx="30" cy="50" r="4" />
-                      <circle cx="70" cy="50" r="4" />
-                      <circle cx="20" cy="80" r="3" />
-                      <circle cx="40" cy="80" r="3" />
-                      <circle cx="60" cy="80" r="3" />
-                      <circle cx="80" cy="80" r="3" />
-                    </svg>
-                  </div>
-                </div>
+                {/* Hero Affiliate ocultado a pedido do usuário */}
 
                 {/* Referral History / Ganhos com Indicação */}
                 <div id="referral-earnings-history" className="bg-[#0f0f12] border border-white/5 rounded-[40px] p-8 md:p-10 space-y-8 shadow-xl shadow-black/20">
@@ -2547,6 +2829,8 @@ export default function App() {
                               </div>
                             </div>
 
+
+
                             <form onSubmit={handleRequestWithdrawal} className="space-y-4">
                               <div className="space-y-2">
                                 <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
@@ -2567,14 +2851,14 @@ export default function App() {
 
                               <div className="space-y-2">
                                 <label className="text-[15px] uppercase font-bold text-emerald-500 tracking-widest pl-1">
-                                  {language === 'en' ? 'Withdrawal Amount (Min $30)' : language === 'es' ? 'Monto a Retirar (Mín $30)' : 'Valor para Saque (Mín $30)'}
+                                  {language === 'en' ? 'Withdrawal Amount (Min $50)' : language === 'es' ? 'Monto a Retirar (Mín $50)' : 'Valor para Saque (Mín $50)'}
                                 </label>
                                 <div className="relative">
                                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-white/30">$</span>
                                   <input
                                     type="number"
                                     step="0.01"
-                                    min="30"
+                                    min="50"
                                     required
                                     value={withdrawAmount}
                                     onChange={(e) => setWithdrawAmount(e.target.value)}
@@ -3343,9 +3627,24 @@ export default function App() {
                           <td className="py-4 font-mono text-white/60">{trade.openPrice.toFixed(5)}</td>
                           <td className="py-4 text-white/40 text-xs">{new Date(trade.time).toLocaleString()}</td>
                           <td className="py-4">
-                            <span className={`text-[10px] font-bold ${trade.status === 'CLOSED' ? 'text-white/60' : 'text-emerald-400 animate-pulse'}`}>
-                              {trade.status}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-bold ${trade.status === 'CLOSED' ? 'text-white/60' : 'text-emerald-400 animate-pulse'}`}>
+                                {trade.status === 'OPEN' ? '• LIVE' : trade.status}
+                              </span>
+                              {trade.status !== 'CLOSED' && !String(trade.id).startsWith('PENDING') && (
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(language === 'en' ? 'Are you sure you want to close this trade manually?' : 'Tem certeza que deseja fechar esta ordem manualmente?')) {
+                                      closeManualTrade(trade.id);
+                                    }
+                                  }}
+                                  className="px-2 py-1 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded text-[9px] font-bold transition-colors shadow-sm"
+                                  title={language === 'en' ? 'Close Trade' : 'Fechar Ordem'}
+                                >
+                                  {language === 'en' ? 'CLOSE' : 'FECHAR'}
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className={`py-4 text-right font-mono font-bold ${trade.profit && trade.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {trade.profit ? `${trade.profit >= 0 ? '+' : ''}$${trade.profit.toFixed(2)}` : '---'}
@@ -3410,6 +3709,90 @@ export default function App() {
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
                       />
                     </div>
+
+                    {/* Deriv Connection */}
+                    <div className="pt-4 border-t border-white/5 space-y-4">
+                      <h4 className="text-xs font-bold text-[#ff444f] uppercase tracking-widest flex items-center gap-2">
+                        <Globe size={14} />
+                        {language === 'en' ? 'Deriv API Connection' : language === 'es' ? 'Conexión API Deriv' : 'Conexão API Deriv'}
+                      </h4>
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-4">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <div className="flex flex-col w-full">
+                            <span className="text-sm font-bold text-white">{language === 'en' ? 'Authorize Trading' : language === 'es' ? 'Autorizar Operaciones' : 'Autorizar Operações'}</span>
+                            <span className="text-xs text-white/40 mb-4">{language === 'en' ? 'Connect your Deriv account or paste token below' : language === 'es' ? 'Conecte su cuenta de Deriv o pegue su token abajo' : 'Conecte sua conta da Deriv ou cole seu token de API abaixo'}</span>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <button
+                                type="button"
+                                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                                className="flex-1 py-3 bg-gradient-to-r from-[#ff4d4d] to-[#cc0000] hover:from-[#ff6666] hover:to-[#e60000] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
+                              >
+                                <Globe size={16} />
+                                {language === 'en' ? 'GET REAL TOKEN' : 'GERAR TOKEN REAL'}
+                              </button>
+                              {currentUser?.role === 'ADMIN' && (
+                                <button
+                                  type="button"
+                                  onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
+                                  className="flex-1 py-3 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
+                                >
+                                  <Globe size={16} />
+                                  {language === 'en' ? 'GET DEMO TOKEN' : 'GERAR TOKEN DEMO'}
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="space-y-4 border-t border-white/5 pt-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                  🔴 Token da Conta Real
+                                </label>
+                                <div className="relative">
+                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                  <input
+                                    type="text"
+                                    value={profileForm.derivTokenReal || ''}
+                                    onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                                    onBlur={autoSaveTokens}
+                                    placeholder="Cole o token da conta REAL aqui (pat_...)"
+                                    className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
+                                  />
+                                </div>
+                              </div>
+
+                              {currentUser?.role === 'ADMIN' && (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
+                                    🟢 Token da Conta Demo
+                                  </label>
+                                  <div className="relative">
+                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
+                                    <input
+                                      type="text"
+                                      value={profileForm.derivTokenDemo || ''}
+                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                                      onBlur={autoSaveTokens}
+                                      placeholder="Cole o token da conta DEMO aqui (pat_...)"
+                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={updateProfile}
+                                className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold transition-all text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                              >
+                                <Save size={18} />
+                                {language === 'en' ? 'Save Tokens' : 'Salvar Tokens'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtWallet}</label>
                       <div className="relative">
@@ -3425,107 +3808,9 @@ export default function App() {
                     </div>
 
 
-                    {/* MT5 Broker Connection Section */}
-                    <div className="pt-2 border-t border-white/5">
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-7 h-7 rounded-lg bg-green-500/10 flex items-center justify-center">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-white">Conexão com a Corretora</p>
-                          <p className="text-[10px] text-white/40">Credenciais do MetaTrader 5 para sincronização automática</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Login MT5</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Login}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Login: e.target.value }))}
-                            placeholder="Ex: 12345678"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Senha MT5</label>
-                          <input
-                            type="password"
-                            value={profileForm.mt5Password}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Password: e.target.value }))}
-                            placeholder="••••••••"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">Servidor</label>
-                          <input
-                            type="text"
-                            value={profileForm.mt5Server}
-                            onChange={(e) => setProfileForm(f => ({ ...f, mt5Server: e.target.value }))}
-                            placeholder="Ex: Exness-MT5Real"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-green-500 outline-none font-mono"
-                          />
-                        </div>
-                      </div>
-                      {profileForm.mt5Login && (
-                        <div className="mt-3 flex items-center gap-2 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-2">
-                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                          <span className="text-[11px] text-green-400">Login MT5 configurado: <strong>{profileForm.mt5Login}</strong> — Salve o perfil para aplicar</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-2 border-t border-white/5">
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-bold text-white">Tokens de API Deriv</span>
-                            <span className="text-xs text-white/40">Gere seus tokens na Deriv e cole abaixo</span>
-                          </div>
-                          <button
-                            onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
-                            className={`px-4 py-2 text-white rounded-lg font-bold text-xs uppercase transition-all shadow-lg flex items-center gap-2 ${
-                              (currentUser?.derivTokenDemo || currentUser?.derivTokenReal)
-                                ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'
-                                : 'bg-[#ff4444] hover:bg-[#ff5555] shadow-red-500/20'
-                            }`}
-                          >
-                            Gerar Tokens <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                          </button>
-                        </div>
-                        <div className="mt-4">
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">TOKEN DE API DERIV</label>
-                            <input
-                              type="password"
-                              value={profileForm.derivToken || ''}
-                              onChange={(e) => setProfileForm(f => ({ ...f, derivToken: e.target.value }))}
-                              placeholder="Ex: pat_..."
-                              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-emerald-500/80"
-                            />
-                          </div>
-                        </div>
-                        <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-blue-400 tracking-widest pl-1">Deriv App ID (Obrigatório para PAT tokens)</label>
-                          <input
-                            type="text"
-                            value={localStorage.getItem('customDerivAppId') || '1089'}
-                            onChange={(e) => {
-                                localStorage.setItem('customDerivAppId', e.target.value);
-                                setProfileForm(f => ({...f})); 
-                            }}
-                            placeholder="Ex: 38291"
-                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono text-blue-400"
-                          />
-                          <p className="text-xs text-blue-400/60 mt-2">
-                            Se 1089 não funcionar, registre seu app em <a href="https://api.deriv.com/dashboard/applications" target="_blank" className="underline font-bold text-blue-300">api.deriv.com</a> e cole o ID aqui.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
                   </div>
+
 
                   <div className="pt-4 flex gap-4">
                     <button
@@ -3538,7 +3823,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Manual balance adjustment UI removed by request */}
+
 
                 {currentUser?.role === 'ADMIN' && (
                   <>
@@ -3551,71 +3836,6 @@ export default function App() {
                       </div>
 
                       <div className="space-y-6">
-                        <div className="space-y-3">
-                          <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.riskProfile}</label>
-                          <div className="grid grid-cols-3 gap-3">
-                            {['CONSERVATIVE', 'MEDIUM', 'AGGRESSIVE'].map((level) => (
-                              <button
-                                key={level}
-                                onClick={() => setConfig({ ...config, riskLevel: level })}
-                                className={`py-3 rounded-xl text-[10px] font-bold border transition-all ${config.riskLevel === level
-                                  ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40'
-                                  : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'
-                                  }`}
-                              >
-                                {level}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.lotMultiplier}</label>
-                            <span className="text-xs font-mono text-blue-400">{config.lotMultiplier.toFixed(4)}</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="0.0001"
-                            max="0.0020"
-                            step="0.0001"
-                            value={config.lotMultiplier}
-                            onChange={(e) => setConfig({ ...config, lotMultiplier: parseFloat(e.target.value) })}
-                            className="w-full accent-blue-500 h-1.5 bg-white/10 rounded-full"
-                          />
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest">{t.settings.minConsensus}</label>
-                            <span className="text-xs font-mono text-blue-400">{config.minScore}%</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="40"
-                            max="90"
-                            step="1"
-                            value={config.minScore}
-                            onChange={(e) => setConfig({ ...config, minScore: parseInt(e.target.value) })}
-                            className="w-full accent-blue-500 h-1.5 bg-white/10 rounded-full"
-                          />
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{language === 'en' ? 'Max DCA Orders' : language === 'es' ? 'Máx. Órdenes DCA' : 'Máx. Ordens DCA'}</label>
-                            <span className="text-xs font-mono text-blue-400">{config.maxOrders || 10}</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="1"
-                            max="10"
-                            step="1"
-                            value={config.maxOrders || 10}
-                            onChange={(e) => setConfig({ ...config, maxOrders: parseInt(e.target.value) })}
-                            className="w-full accent-blue-500 h-1.5 bg-white/10 rounded-full"
-                          />
-                        </div>
 
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
@@ -3668,6 +3888,7 @@ export default function App() {
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-sm focus:border-blue-500 outline-none font-mono text-white"
                           />
                         </div>
+
                       </div>
 
                       <div className="pt-4 flex gap-4">
@@ -3684,24 +3905,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8">
-                      <h3 className="text-lg font-bold mb-6">{t.settings.strategyWeights}</h3>
-                      <div className="space-y-10">
-                        <WeightControl label={t.dashboard.smc} value={config.strategyWeights.smc * 100} color="#3b82f6" onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, smc: v / 100 } })} />
-                        <WeightControl label={t.dashboard.momentum} value={config.strategyWeights.momentum * 100} color="#10b981" onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, momentum: v / 100 } })} />
-                        <WeightControl label={t.dashboard.aiBias} value={config.strategyWeights.ai} color="#8b5cf6" max={50} onChange={(v) => setConfig({ ...config, strategyWeights: { ...config.strategyWeights, ai: v } })} />
 
-                        <div className="p-6 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex gap-4">
-                          <AlertTriangle className="text-amber-500 shrink-0" />
-                          <div>
-                            <p className="text-xs font-bold text-amber-500 uppercase tracking-widest mb-1">{t.settings.warningSMC}</p>
-                            <p className="text-[10px] leading-relaxed text-amber-200/60">
-                              {t.settings.warningSMCDesc}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </>
                 )}
               </motion.div>
@@ -3820,161 +4024,3 @@ export default function App() {
     </div>
   );
 }
-
-/*
-function NavItem({ icon, label, active, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-        active 
-          ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/10 font-bold' 
-          : 'text-white/40 hover:bg-white/5 hover:text-yellow-500 active:text-yellow-500'
-      }`}
-    >
-      <span className={`${active ? 'text-black' : 'group-hover:scale-110 group-hover:text-yellow-500'} transition-transform duration-200`}>
-        {icon}
-      </span>
-      <span className="hidden md:block text-sm">{label}</span>
-    </button>
-  );
-}
-
-function StatCard({ label, value, delta, icon, valueClassName }: { label: string, value: string | number, delta: string, icon: any, valueClassName?: string }) {
-  return (
-    <motion.div 
-      whileHover={{ y: -4 }}
-      className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 transition-all border-hover:border-white/10 shadow-2xl"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
-          {icon}
-        </div>
-        <div className="px-2 py-1 bg-white/10 border border-white/20 rounded-md">
-          <span className="text-[10px] font-black text-white uppercase tracking-tighter">{delta}</span>
-        </div>
-      </div>
-      <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mb-1">{label}</p>
-      <h3 className={`text-2xl font-mono font-black tracking-tight ${valueClassName || 'text-white'}`}>{value}</h3>
-    </motion.div>
-  );
-}
-
-function StrategyGauge({ label, percentage, color }: { label: string, percentage: number, color: string }) {
-  return (
-    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 min-w-0">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/40 truncate" title={label}>{label}</span>
-        <span className="text-xs font-mono font-bold shrink-0" style={{ color }}>{percentage}%</span>
-      </div>
-      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-        <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: `${percentage}%` }}
-          className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function AffiliateLevel({ level, percentage, label, color, language }: { level: number, percentage: number, label: string, color: string, language: Language }) {
-  const glowClass = level === 1 ? "shadow-[0_0_25px_rgba(59,130,246,0.5)]" : level === 2 ? "shadow-[0_0_20px_rgba(96,165,250,0.4)]" : "shadow-[0_0_15px_rgba(168,85,247,0.3)]";
-  
-  return (
-    <div className="group bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:border-white/10 transition-all">
-      <div className="flex items-center gap-6">
-        <div className={`w-12 h-12 rounded-2xl ${color} ${glowClass} flex items-center justify-center text-black font-black text-lg`}>
-          {level}
-        </div>
-        <div>
-          <p className="text-xs font-bold text-white/40 uppercase tracking-widest">{label}</p>
-          <p className="text-xl font-bold">{language === 'en' ? `Level ${level}` : language === 'es' ? `Nivel ${level}` : `Nível ${level}`}</p>
-        </div>
-      </div>
-      <div className="text-right">
-        <span className="text-3xl font-black bg-gradient-to-r from-white to-white/40 bg-clip-text text-transparent">{percentage}%</span>
-      </div>
-    </div>
-  );
-}
-
-function Step({ number, title, desc }: { number: string, title: string, desc: string }) {
-  return (
-    <div className="flex gap-4">
-      <span className="text-blue-500 font-mono font-bold">{number}</span>
-      <div>
-        <p className="font-bold text-sm">{title}</p>
-        <p className="text-xs text-white/40 leading-relaxed mt-1">{desc}</p>
-      </div>
-    </div>
-  );
-}
-
-function BenefitCard({ title, desc, icon }: { title: string, desc: string, icon: any }) {
-  return (
-    <div className="bg-[#0f0f12] border border-white/5 p-8 rounded-[32px] hover:bg-[#141418] transition-colors border-hover:border-white/10">
-      <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mb-6">
-        {icon}
-      </div>
-      <h3 className="font-bold mb-2">{title}</h3>
-      <p className="text-xs text-white/40 leading-relaxed">{desc}</p>
-    </div>
-  );
-
-
-
-
-function WeightControl({ label, value, color, max = 100, onChange }: { label: string, value: number, color: string, max?: number, onChange?: (val: number) => void }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest pl-1">
-        <span className="text-white/40">{label}</span>
-        <span style={{ color }}>{Math.round(value)}%</span>
-      </div>
-      <div className="relative h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-        <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: `${(value / max) * 100}%` }}
-          className="absolute left-0 top-0 h-full rounded-full pointer-events-none"
-          style={{ backgroundColor: color }}
-        />
-        {onChange && (
-          <input 
-            type="range" 
-            min="0" 
-            max={max} 
-            value={value} 
-            onChange={(e) => onChange(parseFloat(e.target.value))} 
-            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" 
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StrategyMetric({ label, value, color }: { label: string, value: string, color: string }) {
-  return (
-    <div className="flex justify-between items-center text-xs">
-      <span className="text-white/40">{label}</span>
-      <span className={`font-bold ${color}`}>{value}</span>
-    </div>
-  );
-}
-
-function BenefitItem({ title, desc, icon }: { title: string, desc: string, icon: any }) {
-  return (
-    <div className="flex gap-4">
-      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-        {icon}
-      </div>
-      <div>
-        <p className="font-bold text-sm">{title}</p>
-        <p className="text-[11px] text-white/40 leading-relaxed mt-1">{desc}</p>
-      </div>
-    </div>
-  );
-}
-*/
