@@ -1,11 +1,30 @@
 const { Client } = require('ssh2');
+
 const conn = new Client();
+
+console.log('Conectando ao VPS para buscar logs...');
+
 conn.on('ready', () => {
-  conn.exec(`pm2 logs fybot --lines 100 --nostream 2>&1`, (err, stream) => {
-    if (err) throw err;
-    stream
-      .on('data', d => process.stdout.write(d.toString()))
-      .stderr.on('data', d => process.stderr.write(d.toString()))
-      .on('close', () => conn.end());
-  });
-}).connect({ host: '209.97.163.75', port: 22, username: 'root', password: '1BJPkXYBRk2026@26H', readyTimeout: 20000 });
+    console.log('Conectado. Buscando pm2 logs...');
+    conn.exec('/usr/lib/node_modules/pm2/bin/pm2 logs fybot --lines 500 --nostream', (err, stream) => {
+        if (err) throw err;
+        let logs = '';
+        stream.on('close', () => {
+            console.log('\n--- LOGS DA VPS ---\n');
+            console.log(logs);
+            conn.end();
+        }).on('data', (data) => {
+            logs += data.toString();
+        }).stderr.on('data', (data) => {
+            logs += data.toString();
+        });
+    });
+}).on('error', (err) => {
+    console.log('Erro de SSH:', err);
+}).connect({
+    host: '209.97.163.75',
+    port: 22,
+    username: 'root',
+    password: '1BJPkXYBRk2026@26H',
+    readyTimeout: 30000
+});

@@ -30,15 +30,6 @@
   ],
   "licenses": [
     {
-      "id": "L1",
-      "userId": "1",
-      "key": "FY-PRO-99",
-      "type": "PRO",
-      "status": "UPGRADED",
-      "hwid": "BFEBFBFF000906E3",
-      "expiryDate": "2026-07-17T20:08:16.661Z"
-    },
-    {
       "id": "Lowxl",
       "userId": "1",
       "key": "131feb73-0bea-457d-bd15-e8fd9c6ae46a",
@@ -55,14 +46,6 @@
       "expiryDate": "2099-06-17T23:31:38.326Z"
     },
     {
-      "id": "Ly875",
-      "userId": "3",
-      "key": "22dfc06c-1f34-4bf0-bacf-97b7fb364335",
-      "type": "VITALICIO",
-      "status": "UPGRADED",
-      "expiryDate": "2099-12-31T23:59:59.999Z"
-    },
-    {
       "id": "Lxtvk",
       "userId": "3",
       "key": "2367bfaa-0694-43fb-b13f-840ee1127df4",
@@ -71,16 +54,7 @@
       "expiryDate": "2099-12-31T23:59:59.999Z"
     }
   ],
-  "payments": [
-    {
-      "id": "Posb4",
-      "userId": "1",
-      "amount": 500,
-      "method": "USDT BEP20",
-      "status": "APPROVED",
-      "hash": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
-    }
-  ],
+  "payments": [],
   "config": {
     "riskLevel": "MEDIUM",
     "lotMultiplier": 0.001,

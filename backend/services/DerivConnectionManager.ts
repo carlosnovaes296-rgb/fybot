@@ -39,15 +39,24 @@ export class DerivConnectionManager {
     lastLogTime?: number;
   }> = new Map();
 
-  // Níveis espaçados para suportar o TP longo de 0.50%: 0.20%, 0.40%, 0.60%, 0.80%, 1.20%
-  private static readonly DCA_RETRACEMENT_LEVELS = [0.0002, 0.0004, 0.0006, 0.0008, 0.0012];
+  // Níveis de recuo para DCA de reversão
+  private static readonly DCA_RETRACEMENT_LEVELS = [0.0006, 0.0010, 0.0015, 0.0020, 0.0025];
+  private static readonly DCA_TP_LEVELS = [0.0005, 0.0008, 0.0013, 0.0018, 0.0022];
   private static readonly MAX_DCA_ORDERS = 6;
 
+  private getUserState: (userId: string) => any;
+  public addUserLog: (userId: string, msg: string) => void;
+  private getUsers: () => any[];
+
   constructor(
-    private getUserState: (userId: string) => any,
-    public addUserLog: (userId: string, msg: string) => void,
-    private getUsers: () => any[]
-  ) { }
+    getUserState: (userId: string) => any,
+    addUserLog: (userId: string, msg: string) => void,
+    getUsers: () => any[]
+  ) { 
+    this.getUserState = getUserState;
+    this.addUserLog = addUserLog;
+    this.getUsers = getUsers;
+  }
 
   // NOVO (Requisito 4): define um lote manual fixo para o usuário. Passe null
   // (ou <= 0) para voltar ao modo automático (% da banca).
@@ -74,9 +83,13 @@ export class DerivConnectionManager {
     const user = this.getUsers().find(u => u.id === userId);
     if (!user) return;
 
-    const state = this.getUserState(userId);
-    const activeToken = user.activeAccountType === 'REAL' ? user.derivTokenReal : user.derivTokenDemo;
-    let tokenToUse = activeToken || user.derivToken;
+    const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
+    let tokenToUse = (activeToken || '').trim();
+
+    // Auto-correção para colar acidental de "pat_" duplo (ex: pat_pat_...)
+    while (tokenToUse.startsWith('pat_pat_')) {
+      tokenToUse = tokenToUse.replace(/^pat_pat_/, 'pat_');
+    }
 
     if (!tokenToUse) {
       this.addUserLog(userId, `⚠️ [SEM TOKEN] Nenhum token configurado para a conta ${user.activeAccountType}.`);
@@ -88,25 +101,63 @@ export class DerivConnectionManager {
     }
 
     const tokenStart = tokenToUse.substring(0, 8);
-    this.addUserLog(userId, `🔄 Iniciando conexão [Modo ${user.activeAccountType}] usando Token: ${tokenStart}...`);
+    this.addUserLog(userId, `🔄 Iniciando conexão [Modo ${user.activeAccountType}] usando Token PAT: ${tokenStart}...`);
 
-    const appId = "33TVM6cBQ9GfSjbwQHHdE";
-    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=PT`;
+    const appIdString = "33TVM6cBQ9GfSjbwQHHdE"; 
+    let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appIdString}&l=PT`;
     let needsAuthCommand = true;
+    const origin = "https://fybot.life";
+    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)";
+
     try {
-      const origin = "https://fybot.life";
       const BASE = "https://api.derivws.com/trading/v1";
 
-      const headers = {
-        'Authorization': `Bearer ${tokenToUse}`,
-        'Deriv-App-ID': appId,
+      const baseHeaders = {
+        'Deriv-App-ID': appIdString,
         'Origin': origin,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': userAgent
       };
 
-      this.addUserLog(userId, `📡 Identificando a conta na API V2...`);
-      const resContas = await fetch(`${BASE}/options/accounts`, { headers });
-      const contasData = await resContas.json();
+      this.addUserLog(userId, `📡 Identificando a conta na API V2 com Token PAT...`);
+      
+      let authHeader = tokenToUse.startsWith('Bearer ') ? tokenToUse : `Bearer ${tokenToUse}`;
+      let resContas = await fetch(`${BASE}/options/accounts`, { 
+        headers: { ...baseHeaders, 'Authorization': authHeader } 
+      });
+
+      let contasText = await resContas.text();
+
+      // Se der 401 com Bearer, tenta enviar o token PAT diretamente no cabeçalho Authorization
+      if (resContas.status === 401 || contasText.includes('Invalid')) {
+        authHeader = tokenToUse.replace(/^Bearer\s+/i, '');
+        this.addUserLog(userId, `🔄 Tentando autorização direta do Token PAT sem o prefixo Bearer...`);
+        resContas = await fetch(`${BASE}/options/accounts`, { 
+          headers: { ...baseHeaders, 'Authorization': authHeader } 
+        });
+        contasText = await resContas.text();
+      }
+      
+      let contasData: any;
+      try {
+        contasData = JSON.parse(contasText);
+      } catch (err) {
+        this.addUserLog(userId, `❌ [ERRO DE TOKEN DERIV] O Token configurado no painel é INVÁLIDO ou EXPIRADO. A Deriv respondeu: "${contasText.trim()}"`);
+        this.addUserLog(userId, `👉 Por favor, acesse o site da Deriv (Configurações -> API Token), crie um novo Token com permissões de Leitura e Negociação e cole nas Configurações do robô.`);
+        const stateOnFail = this.getUserState(userId);
+        if (stateOnFail) stateOnFail.botRunning = false;
+        this.stop(userId);
+        return;
+      }
+
+      if (resContas.status !== 200 || contasData.error) {
+        const msgErro = contasData.error?.message || contasText;
+        this.addUserLog(userId, `❌ [ERRO DE AUTENTICAÇÃO] A Deriv recusou o Token: ${msgErro}`);
+        const stateOnFail = this.getUserState(userId);
+        if (stateOnFail) stateOnFail.botRunning = false;
+        this.stop(userId);
+        return;
+      }
 
       const contasArray = contasData.accounts || contasData.data || contasData;
       if (Array.isArray(contasArray) && contasArray.length > 0) {
@@ -115,7 +166,7 @@ export class DerivConnectionManager {
         if (isDemo) {
           contaAlvo = contasArray.find((a: any) => {
             const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
-            return id.includes('VRT') || id.startsWith('VR');
+            return id.includes('VRT') || id.startsWith('VR') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
           });
           if (!contaAlvo) {
             contaAlvo = contasArray.find((a: any) => {
@@ -132,7 +183,7 @@ export class DerivConnectionManager {
 
         if (!contaAlvo) {
           this.addUserLog(userId, isDemo
-            ? "❌ [ERRO] Token da Conta DEMO Inválido! Crie o token no site da Deriv ENQUANTO estiver logado na sua conta VIRTUAL (VRT)."
+            ? "❌ [ERRO] Token da Conta DEMO Inválido! Crie o token no site da Deriv ENQUANTO estiver logado na sua conta VIRTUAL (VRT ou DOT)."
             : "❌ [ERRO] Conta Real não encontrada neste token.");
           const stateOnFail = this.getUserState(userId);
           if (stateOnFail) stateOnFail.botRunning = false;
@@ -149,46 +200,70 @@ export class DerivConnectionManager {
           const state = this.getUserState(userId);
           state.balance = bal;
           state.equity = bal;
-          this.addUserLog(userId, `💵 Saldo inicial capturado via API: $${bal}`);
         }
 
         if (!accountId) {
-          this.addUserLog(userId, `⚠️ Erro: Não foi possível extrair o ID da conta do objeto acima.`);
-          throw new Error("ACCOUNT_ID_MISSING: Não foi possível extrair o ID da conta retornada pela Deriv.");
+          throw new Error("ACCOUNT_ID_MISSING");
         }
 
         this.addUserLog(userId, `📡 Solicitando URL Segura (OTP) para a conta ${accountId}...`);
-        const resOtp = await fetch(`${BASE}/options/accounts/${accountId}/otp`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({})
-        });
-        const otpData = await resOtp.json();
+        const BASE_OTP = 'https://api.derivws.com/trading/v1';
+        
+        let magicUrl = '';
+        try {
+          const resOtp = await fetch(`${BASE_OTP}/options/accounts/${accountId}/otp`, {
+            method: 'POST',
+            headers: { 
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+              'Deriv-App-ID': appIdString,
+              'Origin': origin,
+              'User-Agent': userAgent
+            },
+            body: JSON.stringify({
+              client_id: appIdString,
+              token: tokenToUse
+            })
+          });
+          
+          const respText = await resOtp.text();
+          this.addUserLog(userId, `📡 Resp OTP (${resOtp.status}): ${respText.substring(0, 200)}`);
+          try {
+              const otpData = JSON.parse(respText);
+              if (otpData.error) {
+                  this.addUserLog(userId, `⚠️ Erro V2 OTP: ${otpData.error.message || JSON.stringify(otpData.error)}`);
+              }
+              magicUrl = otpData.ws_url || otpData.websocket_url || otpData.url || (otpData.data && (otpData.data.ws_url || otpData.data.url));
+          } catch(e: any) {
+              this.addUserLog(userId, `⚠️ Falha ao parsear OTP JSON: ${e.message}`);
+          }
+        } catch (otpErr: any) {
+          console.error("Erro OTP", otpErr);
+        }
 
-        const urlSegura = otpData?.data?.url || otpData.ws_url || otpData.websocket_url || otpData.url;
-        if (urlSegura) {
-          wsUrl = urlSegura;
+        if (magicUrl) {
+          wsUrl = magicUrl;
           needsAuthCommand = false;
-          this.addUserLog(userId, `🎉 URL Mágica Autenticada gerada! Conectando...`);
+          this.addUserLog(userId, `🚀 Conectando via Rota Segura OTP V2!`);
         } else {
-          this.addUserLog(userId, `⚠️ Erro ao gerar OTP. Detalhes: ${JSON.stringify(otpData)}`);
+          this.addUserLog(userId, `🔄 Conectando via WebSocket V3 Padrão...`);
         }
       } else {
-        this.addUserLog(userId, `⚠️ Falha ao listar contas: ${JSON.stringify(contasData)}`);
+        throw new Error('Nenhuma conta encontrada na API V2');
       }
+
     } catch (e: any) {
       if (typeof e?.message === 'string' && e.message.startsWith('ACCOUNT_ID_MISSING')) {
-        this.addUserLog(userId, `⚠️ Não foi possível identificar a conta (sem ID reconhecível), caindo para o Fallback V3.`);
+        this.addUserLog(userId, `⚠️ Não foi possível identificar a conta, caindo para Fallback V3.`);
       } else {
         this.addUserLog(userId, `⚠️ Erro de rede na V2, caindo para o Fallback V3: ${e.message}`);
       }
     }
-    // ---------------------------------
 
     const ws = new NodeWebSocket(wsUrl, {
       headers: {
-        'Origin': 'https://fybot.life',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
+        'Origin': origin,
+        'User-Agent': userAgent
       }
     });
 
@@ -199,7 +274,7 @@ export class DerivConnectionManager {
     if (!this.pendingTpQueue.has(userId)) this.pendingTpQueue.set(userId, []);
     let pingInterval: NodeJS.Timeout;
     let portfolioInterval: NodeJS.Timeout;
-
+    
     ws.on('open', () => {
       this.addUserLog(userId, `✅ [WS] Conectado à Deriv!`);
 
@@ -226,14 +301,6 @@ export class DerivConnectionManager {
       }
     });
 
-    // ⚠️ CORREÇÃO CRÍTICA: todo o processamento de mensagem agora está dentro
-    // de um try/catch. Antes, um JSON.parse ou qualquer erro inesperado aqui
-    // dentro (ex: mensagem truncada/corrompida vinda da Deriv, campo undefined
-    // sendo acessado, etc.) virava uma exceção NÃO TRATADA dentro do callback
-    // de evento do WebSocket. Isso derruba o processo Node inteiro (crash),
-    // que é exatamente o que causa o "502 Bad Gateway" do nginx quando você dá
-    // F5: o nginx tenta repassar a requisição pro backend e o backend não está
-    // mais rodando (ou está no meio de um restart do processo).
     ws.on('message', (msg: any) => {
       try {
         const data = JSON.parse(msg.toString());
@@ -355,18 +422,19 @@ export class DerivConnectionManager {
               trade.openPrice = contract.entry_spot || contract.current_spot || 0;
             }
 
-            // NOVO: Verificação inteligente de encerramento do dia (Smart Close / Sacrifício)
-            if (state.dailyTarget && state.dailyTarget > 0 && state.dailyProfit >= state.dailyTarget) {
+            // NOVO: Verificação inteligente de encerramento do dia (Trava Pós-Meta)
+            if (state.dailyProfit >= state.dailyTarget) {
               const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
               if (openTrades.length > 0) {
                 const floatingPnL = openTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-                // Verifica se a perda flutuante é menor que 5% do lucro do dia, OU se o flutuante está positivo
-                if ((floatingPnL < 0 && Math.abs(floatingPnL) < (state.dailyProfit * 0.05)) || floatingPnL >= 0) {
+                // Se o prejuízo flutuante somado de todas as ordens abertas atingir 5% do Lucro Obtido no Dia
+                const maxAllowedLoss = -(state.dailyProfit * 0.05);
+                
+                if (floatingPnL <= maxAllowedLoss) {
                   const now = Date.now();
                   if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
                     state.lastSmartCloseTime = now;
-                    const isLoss = floatingPnL < 0;
-                    this.addUserLog(userId, `🏆 [SAQUE INTELIGENTE] Meta diária atingida! O flutuante atual ($${floatingPnL.toFixed(2)}) ${isLoss ? 'é menor que 5% do ganho do dia' : 'está positivo'}. Fechando todas as ordens abertas imediatamente para encerrar o expediente!`);
+                    this.addUserLog(userId, `🏆 [TRAVA DE PROTEÇÃO] A meta do dia foi batida, mas o mercado virou! O prejuízo aberto atingiu 5% do lucro diário ($${floatingPnL.toFixed(2)}). Cortando todas as posições a mercado por segurança!`);
                     openTrades.forEach((t: any) => {
                       this.closeTrade(userId, String(t.id));
                     });
@@ -383,36 +451,43 @@ export class DerivConnectionManager {
                 this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
               }
             } else {
-              // Requisito 7 & 5: Break-Even (+1 ATR) e Trailing Stop (1 ATR)
-              if (!this.userPeakProfits.has(userId)) this.userPeakProfits.set(userId, {});
-              const peaks = this.userPeakProfits.get(userId)!;
-              if (!peaks[contractId]) peaks[contractId] = 0;
-
-              const numProfit = Number(profit || 0);
-              const atrProfitUSD = trade.atrProfitUSD || 1.0; 
-
-              if (numProfit > peaks[contractId]) {
-                peaks[contractId] = numProfit;
-              }
-
-              // Break-Even (+1 ATR atingido)
-              if (numProfit >= atrProfitUSD && !trade.beSet) {
-                 trade.beSet = true;
-                 this.addUserLog(userId, `🛡️ [BREAK-EVEN] Lucro atingiu +1 ATR ($${numProfit.toFixed(2)}). Posição protegida!`);
-              }
-
-              // Fechamento no zero a zero se recuar após BE
-              if (trade.beSet && numProfit < 0.10) {
-                 this.addUserLog(userId, `🛡️ [BREAK-EVEN ACIONADO] O preço recuou. Fechando ordem para proteger o capital no 0x0.`);
+              // Proteção de Violinada (Stop Loss de PnL: -10% do valor da ordem)
+              const stakeAmount = Number(trade.lot || 0); 
+              const violinadaLimit = -(stakeAmount * 0.10); // 10% do valor da ordem
+              if (stakeAmount > 0 && profit <= violinadaLimit) {
+                 this.addUserLog(userId, `🚨 [VIOLINADA] A ordem ${contractId} atingiu -10% do valor da entrada. Fechando imediatamente por segurança!`);
                  ws.send(JSON.stringify({ sell: contractId, price: 0 }));
-                 trade.status = 'CLOSED'; // Evitar spam
-              }
-
-              // Trailing Stop de 1 ATR após Break-Even (distância do topo alcançado)
-              if (trade.beSet && numProfit < (peaks[contractId] - atrProfitUSD)) {
-                 this.addUserLog(userId, `🏃 [TRAILING STOP] Recuo de 1 ATR detectado do topo ($${peaks[contractId].toFixed(2)} -> $${numProfit.toFixed(2)}). Fechando ordem com lucro!`);
-                 ws.send(JSON.stringify({ sell: contractId, price: 0 }));
-                 trade.status = 'CLOSED'; // Evitar spam
+                 trade.status = 'CLOSED';
+              } else {
+                 // DCA Lógica (só ativada se a ordem ainda não violinou)
+                 const dcaState = this.userDcaState.get(userId);
+                 if (dcaState && dcaState.ordersOpened < DerivConnectionManager.MAX_DCA_ORDERS) {
+                    const currentPrice = contract.current_spot || contract.entry_spot;
+                    if (currentPrice) {
+                       const priceDiffPct = (currentPrice - dcaState.anchorPrice) / dcaState.anchorPrice;
+                       // Se o preço for contra nós
+                       const isAgainstUs = dcaState.direction === 'BUY' ? priceDiffPct < 0 : priceDiffPct > 0;
+                       
+                       if (isAgainstUs) {
+                          const dropMagnitude = Math.abs(priceDiffPct);
+                          // Level index é dcaState.ordersOpened - 1
+                          const targetDrop = DerivConnectionManager.DCA_RETRACEMENT_LEVELS[dcaState.ordersOpened - 1];
+                          
+                          if (dropMagnitude >= targetDrop) {
+                             dcaState.ordersOpened++;
+                             this.userDcaState.set(userId, dcaState);
+                             
+                             const targetTpDist = DerivConnectionManager.DCA_TP_LEVELS[dcaState.ordersOpened - 2];
+                             
+                             const fakeTpPrice = dcaState.direction === 'BUY' ? currentPrice * (1 + targetTpDist) : currentPrice * (1 - targetTpDist);
+                             
+                             this.addUserLog(userId, `📉 [DCA ATIVADO] Preço recuou -${(dropMagnitude*100).toFixed(2)}%. Abrindo Ordem ${dcaState.ordersOpened} / ${DerivConnectionManager.MAX_DCA_ORDERS} (TP: ${(targetTpDist*100).toFixed(2)}%)`);
+                             
+                             this.placeOrder(userId, state, dcaState.direction, currentPrice, fakeTpPrice, 0);
+                          }
+                       }
+                    }
+                 }
               }
             }
           }
@@ -563,24 +638,29 @@ export class DerivConnectionManager {
 
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
 
-    // Bloqueio de Meta Diária e Limite de Perda Diária
-    const balance = state.balance > 0 ? state.balance : 1000;
-    const dailyTarget = balance * 0.05; // 5% de meta
-    const dailyLossLimit = -(balance * 0.06); // 6% de perda máxima
+    // Bloqueio de Meta Diária de 3%
+    if (!state.initialBalance) state.initialBalance = state.balance > 0 ? state.balance : 1000;
+    const dailyTarget = state.initialBalance * 0.03; // 3% de meta
 
     if (state.dailyProfit >= dailyTarget) {
-      this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${dailyTarget.toFixed(2)}) atingida. O robô não abrirá novas ordens hoje.`);
+      this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${dailyTarget.toFixed(2)}) atingida. O robô parou de enviar novas ordens.`);
       return;
     }
 
-    if (state.dailyProfit <= dailyLossLimit) {
-      this.addUserLog(userId, `🛑 [LIMITE DE PERDA] Perda diária atingida ($${state.dailyProfit.toFixed(2)}). O robô parou para proteger a banca.`);
+    if (openTradesCount >= DerivConnectionManager.MAX_DCA_ORDERS) {
+      this.addUserLog(userId, `⚠️ [LIMITE ORDENS] Máximo de ${DerivConnectionManager.MAX_DCA_ORDERS} ordens simultâneas atingido.`);
       return;
     }
 
-    if (openTradesCount >= 3) {
-      this.addUserLog(userId, `⚠️ [LIMITE ORDENS] Máximo de 3 ordens simultâneas atingido.`);
-      return;
+    // Inicializar estado DCA
+    if (openTradesCount === 0) {
+       this.userDcaState.set(userId, {
+         direction: direction,
+         anchorPrice: price,
+         ordersOpened: 1,
+         tpDistancePct: 0.0004,
+         slDistancePct: 0.10 // Violinada
+       });
     }
 
     const ws = this.userSockets.get(userId);
@@ -601,43 +681,29 @@ export class DerivConnectionManager {
     const manualStake = this.manualStakes.get(userId);
     const multiplierValue = 100;
     
-    // Risco fixo de 1.5% da banca por operação
-    const riskAmountUSD = balance * 0.015;
-    
-    // Distância do preço até o SL (2 ATR) e até o TP (3 ATR)
-    const slDistancePct = Math.abs((engineSl - price) / price);
-    const tpDistancePct = Math.abs((engineTp - price) / price);
-    
-    // 1 ATR em Pct é metade da distância do SL
-    const atrDistancePct = slDistancePct / 2;
+    // DCA Limpo: mesmo valor para todas as ordens (zero martingale)
+    // Se não tem lote manual configurado no painel, usar 1% da banca (conservador)
+    let finalStake = manualStake && manualStake > 0 ? manualStake : parseFloat((balance * 0.01).toFixed(2));
+    if (finalStake < 1.0) finalStake = 1.0; // Mínimo absoluto na Deriv
 
-    // Stake 100% inteligente (Ignora o valor manual do painel)
-    let dynamicStake = parseFloat((riskAmountUSD / (multiplierValue * slDistancePct)).toFixed(2));
-      
-    if (dynamicStake < 1.0) dynamicStake = 1.0; // Mínimo absoluto na Deriv
+    const tpDistancePct = Math.abs((engineTp - price) / price);
+    let tpAmount = parseFloat((tpDistancePct * finalStake * multiplierValue).toFixed(2));
+    if (tpAmount < 0.10) tpAmount = 0.10; // Mínimo da corretora
 
     const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
-    let tpAmount = parseFloat((tpDistancePct * dynamicStake * multiplierValue).toFixed(2));
-    let slAmount = parseFloat((slDistancePct * dynamicStake * multiplierValue).toFixed(2));
-
-    if (tpAmount < 0.10) tpAmount = 0.10;
-    if (slAmount < 0.10) slAmount = 0.10;
-    if (slAmount > dynamicStake) slAmount = dynamicStake;
-
     ws.send(JSON.stringify({
       buy: 1,
-      price: dynamicStake,
+      price: finalStake,
       parameters: {
-        amount: dynamicStake,
+        amount: finalStake,
         basis: "stake",
         contract_type: contractType,
         currency: "USD",
         multiplier: multiplierValue,
         underlying_symbol: "frxXAUUSD",
         limit_order: {
-          take_profit: tpAmount,
-          stop_loss: slAmount
+          take_profit: tpAmount
         }
       }
     }));
@@ -645,7 +711,7 @@ export class DerivConnectionManager {
     const realTrade = {
       id: "PENDING_" + Date.now() + Math.random().toString().slice(2, 6),
       symbol: "frxXAUUSD",
-      lot: dynamicStake,
+      lot: finalStake,
       type: direction,
       openPrice: price,
       time: new Date().toISOString(),
@@ -653,7 +719,7 @@ export class DerivConnectionManager {
       profit: 0,
       tp: engineTp,
       sl: engineSl,
-      atrProfitUSD: atrDistancePct * dynamicStake * multiplierValue,
+      atrProfitUSD: 0,
       beSet: false
     };
     state.trades.unshift(realTrade);

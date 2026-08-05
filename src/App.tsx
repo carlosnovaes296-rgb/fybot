@@ -83,6 +83,7 @@ import {
 import { translations } from './translations';
 import { safeFetch } from './utils';
 import { LicenseCountdown, LicenseHeaderButton } from './components/LicenseCountdown';
+import { TradingScheduleTimer } from './components/TradingScheduleTimer';
 import { NavItem } from './components/NavItem';
 import { StatCard } from './components/StatCard';
 import { StrategyGauge } from './components/StrategyGauge';
@@ -174,6 +175,8 @@ export default function App() {
   const [referralNetwork, setReferralNetwork] = useState<any[]>([]);
   const [referralSubTab, setReferralSubTab] = useState<'earnings' | 'network'>('network');
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [showReferralHistoryModal, setShowReferralHistoryModal] = useState(false);
+  const [adminWithdrawals, setAdminWithdrawals] = useState<any[]>([]);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawWallet, setWithdrawWallet] = useState('');
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
@@ -193,6 +196,11 @@ export default function App() {
       return null;
     }
   });
+
+  const baseEarned = referralHistory.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const withdrawnSum = withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const actualEarned = baseEarned;
+  const availableBalance = Math.max(0, actualEarned - withdrawnSum);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
@@ -400,7 +408,7 @@ export default function App() {
         const token = params.get(`token${i}`);
         if (acct && token) {
           if (!defaultToken) defaultToken = token;
-          if (acct.startsWith('VRTC')) {
+          if (acct.startsWith('VRTC') || acct.startsWith('DOT')) {
             derivTokenDemo = token;
           } else {
             derivTokenReal = token;
@@ -466,10 +474,10 @@ export default function App() {
       let derivTokenDemo = currentUser.derivTokenDemo;
 
       // Descobre qual é a Demo (VRTC) e qual é a Real (CR)
-      if (acct1 && acct1.startsWith('VRTC')) derivTokenDemo = token1;
+      if (acct1 && (acct1.startsWith('VRTC') || acct1.startsWith('DOT'))) derivTokenDemo = token1;
       else if (acct1 && acct1.startsWith('CR')) derivTokenReal = token1;
 
-      if (acct2 && acct2.startsWith('VRTC')) derivTokenDemo = token2;
+      if (acct2 && (acct2.startsWith('VRTC') || acct2.startsWith('DOT'))) derivTokenDemo = token2;
       else if (acct2 && acct2.startsWith('CR')) derivTokenReal = token2;
 
       // Atualiza o banco de dados
@@ -563,12 +571,12 @@ export default function App() {
       safeFetch(`/api/admin/users?t=${t}&adminId=${adminId}`, { headers }),
       safeFetch(`/api/admin/licenses?t=${t}&adminId=${adminId}`, { headers }),
       safeFetch(`/api/admin/payments?t=${t}&adminId=${adminId}`, { headers }),
-      safeFetch(`/api/withdrawals?userId=${currentUser?.id}&t=${t}`)
+      safeFetch(`/api/withdrawals?t=${t}`)
     ]);
     if (uData) setUsers(uData);
     if (lData) setLicenses(lData);
     if (pData) setPayments(pData);
-    if (wData) setWithdrawals(wData);
+    if (wData) setAdminWithdrawals(wData);
   };
 
   const toggleUser = async (id: string) => {
@@ -718,6 +726,7 @@ export default function App() {
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
     fetchAdminData();
+    fetchWithdrawals();
   };
 
   const rejectWithdrawal = async (id: string) => {
@@ -726,6 +735,7 @@ export default function App() {
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
     fetchAdminData();
+    fetchWithdrawals();
   };
 
   const handleRequestWithdrawal = async (e: any) => {
@@ -747,11 +757,9 @@ export default function App() {
       return;
     }
 
-    const availableBalance = referralHistory.reduce((sum, item) => sum + item.amount, 0) - withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + item.amount, 0);
-
     if (availableBalance < 50) {
       setWithdrawalMessage({
-        text: language === 'en' ? 'Insufficient balance. Minimum withdrawal is $50.' : language === 'es' ? 'Saldo insuficiente. El retiro mínimo es $50.' : 'Saldo insuficiente. O saque mínimo é de $50.',
+        text: language === 'en' ? `Insufficient available balance ($${availableBalance.toFixed(2)}). Minimum withdrawal is $50.` : language === 'es' ? `Saldo disponible insuficiente ($${availableBalance.toFixed(2)}). El retiro mínimo es $50.` : `Saldo disponível insuficiente ($${availableBalance.toFixed(2)}). O saque mínimo é de $50.`,
         isError: true
       });
       setWithdrawalLoading(false);
@@ -773,6 +781,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: currentUser.id,
+          userName: currentUser.name,
+          userEmail: currentUser.email,
           amount: withdrawAmount,
           wallet: withdrawWallet
         })
@@ -940,7 +950,10 @@ export default function App() {
         equity: (data.equity != null && data.equity > 0) ? data.equity : prev.equity,
         accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
       }));
-      if (data.logs) setLogs(data.logs);
+      if (data.logs) {
+        const cleanLogs = data.logs.filter((l: string) => !l.includes('ERRO DE TOKEN DERIV') && !l.includes('Invalid token format') && !l.includes('sem o prefixo Bearer') && !l.includes('Symbol frxXAUUSD is invalid'));
+        setLogs(cleanLogs);
+      }
     }
   };
 
@@ -1112,36 +1125,9 @@ export default function App() {
     }
 
     // Market Closed Check (Mon-Fri 06:00 - 17:00 BRT)
+    // REMOVIDO A PEDIDO DO USUÁRIO - OPERAÇÃO 24H LIBERADA
     if (!stats.botRunning && !isUserAdmin) {
-      const now = new Date();
-      // BRT is UTC-3
-      const utcTime = now.getTime();
-      const brtTime = new Date(utcTime - (3 * 60 * 60 * 1000));
-      const brtDay = brtTime.getUTCDay(); // 0 = Sun, 6 = Sat
-      const brtHour = brtTime.getUTCHours();
-
-      const isWeekend = brtDay === 0 || brtDay === 6;
-      const isOutsideHours = brtHour < 6 || brtHour >= 17;
-
-      if (isWeekend || isOutsideHours) {
-        // Obter os horários correspondentes na máquina local do usuário para exibir na mensagem
-        const localOpen = new Date();
-        localOpen.setUTCHours(9, 0, 0, 0); // 06:00 BRT = 09:00 UTC
-        const openStr = localOpen.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        const localClose = new Date();
-        localClose.setUTCHours(20, 0, 0, 0); // 17:00 BRT = 20:00 UTC
-        const closeStr = localClose.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        alert(
-          language === 'en'
-            ? `Market Closed! The bot only operates from Monday to Friday, ${openStr} to ${closeStr} (Your Local Time).`
-            : language === 'es'
-              ? `¡Mercado Cerrado! El bot solo opera de Lunes a Viernes, ${openStr} a ${closeStr} (Su Hora Local).`
-              : `Mercado Fechado! O robô só opera de Segunda a Sexta-feira, das ${openStr} às ${closeStr} (Seu Horário Local).`
-        );
-        return;
-      }
+       // Operação liberada 24h
     }
 
     // Strict requirement: must have active license to start (bypassed for ADMIN)
@@ -1530,6 +1516,17 @@ export default function App() {
             <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
+          <NavItem 
+            icon={<Download size={20} />} 
+            label={language === 'en' ? 'Download EA' : 'Baixar EA (MT5)'} 
+            onClick={() => { 
+              const link = document.createElement('a');
+              link.href = '/Fybot_Pro.mq5';
+              link.download = 'Fybot_Pro.mq5';
+              link.click();
+              setIsMobileMenuOpen(false); 
+            }} 
+          />
 
 
         </nav>
@@ -1800,6 +1797,16 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
 
+            <button
+              onClick={() => { fetchStatus(); alert(language === 'en' ? 'Syncing with MT5...' : 'Sincronizando com MT5...'); }}
+              disabled={loading}
+              className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all duration-300 font-bold text-xs shadow-xl"
+              title="Forçar sincronização com MetaTrader 5"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{language === 'en' ? 'SYNC' : 'SINCRONIZAR'}</span>
+            </button>
+
 
             <button
               onClick={toggleBot}
@@ -1895,8 +1902,10 @@ export default function App() {
                   const isConnected = typeof stats.balance === 'number';
                   const displayBalance = isConnected ? stats.balance : 0;
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <StatCard
+                    <div className="flex flex-col gap-2">
+                      <TradingScheduleTimer />
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard
                         label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
                         value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
@@ -1915,7 +1924,6 @@ export default function App() {
                         labelClassName="text-amber-500"
                         valueClassName="text-amber-500"
                         trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                        subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                       />
                       {(() => {
                         // Só mostra lucro se estiver conectado com saldo real/demo validado
@@ -1930,7 +1938,6 @@ export default function App() {
                             valueClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
                             labelClassName={realTimeProfit >= 0 ? "text-amber-500" : "text-red-400"}
                             trendPositive={realTimeProfit >= 0}
-                            subLabel={language === "en" ? "Fybot operates from 6:00 AM to 5:00 PM Monday to Friday" : language === "es" ? "Fybot opera de 6:00 a 17:00 horas de lunes a viernes" : "O Fybot opera das 6:00 as 17:00 horas de segunda a sexta feira"}
                           />
                         );
                       })()}
@@ -1972,150 +1979,223 @@ export default function App() {
                           </div>
                         </div>
                       )}
+                      </div>
+                      </div>
                     </div>
                   );
                 })()}
 
-                {/* Signal Intel + Live Console */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
-                  {/* Market Stream — enhanced chart */}
-                  <div className={`flex flex-col ${currentUser?.role === 'ADMIN' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden p-6 h-full flex flex-col justify-between">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="whitespace-nowrap flex items-center gap-6">
-                          <div>
-                            <h2 className="text-lg font-bold">{t.dashboard.signalIntel}</h2>
-                            <p className="text-xs text-white/40">{t.dashboard.signalDesc}</p>
+                {/* V8 SAFETY SHIELD - FULL WIDTH BANNER */}
+                <div className="w-full bg-[#0f0f12] border border-white/5 rounded-3xl px-8 py-6 mb-8 relative overflow-hidden flex flex-col justify-center">
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
+
+                  {(() => {
+                    const safeTarget = (stats.balance || 0) * 0.02;
+                    const progressPct = safeTarget > 0
+                      ? Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / safeTarget) * 100))
+                      : 0;
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-3 relative z-10">
+                          <div className="flex items-center gap-2">
+                            <Cpu size={16} className="text-yellow-500 animate-pulse" />
+                            <span className="text-[12px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-mono text-white/40 uppercase font-bold">
+                              {progressPct.toFixed(0)}% PROG.
+                            </span>
+                            <span className="text-[11px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-2 py-1 rounded">
+                              {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
+                            </span>
                           </div>
                         </div>
 
-                        {/* V8 SAFETY SHIELD - HEADER COMPONENT */}
-                        <div className="hidden lg:flex flex-1 px-8">
-                          <div className="w-full max-w-xl mx-auto bg-[#0f0f12] border border-white/5 rounded-2xl px-4 py-2 relative overflow-hidden flex flex-col justify-center">
-                            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
+                        <div className="w-full h-2 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
+                          <div
+                            className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
+                            style={{ width: `${progressPct}%` }}
+                          >
+                            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
 
+                  {stats.systemBlocked && (
+                    <div className="text-[12px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-4 flex items-center justify-center">
+                      [MERCADO FECHADO] O bot opera de Segunda a Sexta, das 06:00 às 17:00 (Horário de Brasília).
+                      {stats.blockedUntil && (() => {
+                        const now = new Date().getTime();
+                        const target = new Date(stats.blockedUntil).getTime();
+                        const diff = target - now;
+                        if (diff <= 0) return null;
+                        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        const s = Math.floor((diff % (1000 * 60)) / 1000);
+                        return (
+                          <span className="text-white bg-yellow-500/20 px-2 py-0.5 rounded ml-3 border border-yellow-500/30">
+                            RETORNA EM: {d > 0 ? d + 'd ' : ''}{h.toString().padStart(2, '0')}:{m.toString().padStart(2, '0')}:{s.toString().padStart(2, '0')}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Section: Execution Table & Live Console */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+                  
+                  {/* Left: Execution Table (takes 2 columns if admin, else 3) */}
+                  <div className={currentUser?.role === 'ADMIN' ? 'lg:col-span-2' : 'lg:col-span-3'}>
+                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col shadow-xl">
+                      <div className="flex items-center justify-between mb-5">
+                        <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-base text-white/60">
+                          <History size={16} /> {t.dashboard.recentExecutions}
+                        </h3>
+                        <div className="flex items-center gap-3">
+                          <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
+                            {(['ALL', 'OPEN', 'CLOSED'] as const).map(f => (
+                              <button
+                                key={f}
+                                onClick={() => setTradeFilter(f)}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${tradeFilter === f
+                                  ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                    : f === 'CLOSED' ? 'bg-white/10 text-white'
+                                      : 'bg-white/10 text-white'
+                                  : 'text-white/30 hover:text-white/60'
+                                  }`}
+                              >
+                                {f === 'ALL' ? (language === 'en' ? 'All' : 'Todos')
+                                  : f === 'OPEN' ? (language === 'en' ? 'Open' : 'Abertas')
+                                    : (language === 'en' ? 'Closed' : 'Fechadas')}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto scrollbar-hide">
+                        <table className="w-full text-left border-collapse min-w-[700px]">
+                          <thead>
+                            <tr className="border-b border-white/5 text-sm uppercase tracking-wider text-emerald-400 font-bold">
+                              <th className="pb-4 font-bold">{language === 'en' ? 'Exec ID' : 'ID Exec.'}</th>
+                              <th className="pb-4 font-bold">{language === 'en' ? 'Asset' : 'Ativo'}</th>
+                              <th className="pb-4 font-bold">{language === 'en' ? 'Type' : 'Tipo'}</th>
+                              <th className="pb-4 font-bold">Lot</th>
+                              <th className="pb-4 font-bold">{language === 'en' ? 'Price' : 'Preço'}</th>
+                              <th className="pb-4 font-bold text-emerald-400">{language === 'en' ? 'Time' : 'Hora'}</th>
+                              <th className="pb-4 font-bold">{language === 'en' ? 'Status' : 'Status'}</th>
+                              <th className="pb-4 font-bold text-right">P&L</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/[0.03]">
                             {(() => {
-                              // CORRIGIDO: quando stats.balance é 0 (ex: usuário ainda
-                              // "Conectando..."), a divisão (dailyProfit / (balance * 0.02))
-                              // resultava em Infinity/NaN, quebrando a largura da barra de
-                              // progresso (width: NaN%). Agora protegemos contra balance <= 0.
-                              const safeTarget = (stats.balance || 0) * 0.02;
-                              const progressPct = safeTarget > 0
-                                ? Math.min(100, Math.max(0, ((stats.dailyProfit || 0) / safeTarget) * 100))
-                                : 0;
-                              return (
-                                <>
-                                  <div className="flex items-center justify-between mb-1.5 relative z-10">
-                                    <div className="flex items-center gap-1.5">
-                                      <Cpu size={12} className="text-yellow-500 animate-pulse" />
-                                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">V8 SAFETY SHIELD</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[9px] font-mono text-white/40 uppercase font-bold">
-                                        {progressPct.toFixed(0)}% PROG.
-                                      </span>
-                                      <span className="text-[9px] text-yellow-500 font-black uppercase tracking-widest bg-yellow-500/10 px-1.5 py-0.5 rounded">
-                                        {stats.systemBlocked ? 'SISTEMA BLOQUEADO' : 'FASE PROTETIVA'}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden relative z-10">
-                                    <div
-                                      className={`h-full relative rounded-full ${stats.systemBlocked ? (stats.dailyProfit < 0 ? 'bg-red-500' : 'bg-green-500') : 'bg-gradient-to-r from-yellow-500 to-emerald-400'}`}
-                                      style={{ width: `${progressPct}%` }}
-                                    >
-                                      <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_50%,rgba(255,255,255,0.4)_50%)] bg-[length:8px_100%] opacity-10 animate-pulse" />
-                                    </div>
-                                  </div>
-                                </>
+                              const filtered = (stats.trades || []).filter((tr: any) => {
+                                const statusMatch = tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
+                                return statusMatch;
+                              });
+                              if (filtered.length === 0) return (
+                                <tr>
+                                  <td colSpan={8} className="py-12 text-center text-sm text-white/20 italic">
+                                    {t.dashboard.noTrades}
+                                  </td>
+                                </tr>
                               );
+                              const maxAbsProfit = Math.max(...filtered.filter((t:any) => t.profit).map((t:any) => Math.abs(Number(t.profit))), 1);
+                              return filtered.slice(0, 15).map((trade:any, idx:number) => {
+                                const isLatestTrade = idx === 0;
+                                const profitVal = Number(trade.profit || 0);
+                                const profitPct = profitVal ? (Math.abs(profitVal) / maxAbsProfit) * 100 : 0;
+                                const isProfit = profitVal >= 0;
+                                return (
+                                  <motion.tr
+                                    key={trade.id}
+                                    initial={isLatestTrade ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}}
+                                    animate={{ backgroundColor: 'rgba(255,255,255,0)' }}
+                                    transition={{ duration: 2 }}
+                                    className="text-sm text-white/80 hover:bg-white/[0.02] transition-colors group"
+                                  >
+                                    <td className="py-4 font-mono text-white/30">
+                                      {isLatestTrade && (
+                                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 mr-2 animate-pulse" />
+                                      )}
+                                      {trade.id}
+                                    </td>
+                                    <td className="py-4 font-black text-white">
+                                      {(trade.symbol || '').replace(/frx/i, '').replace(/FRX/i, '').replace('UNKNOWN', 'XAUUSD') || 'XAUUSD'}
+                                    </td>
+                                    <td className="py-4">
+                                      {(() => {
+                                        const rawType = String(trade.type);
+                                        const isBuy = rawType === 'BUY' || rawType === 'MULTUP' || rawType === 'CALL';
+                                        const isSell = rawType === 'MULTDOWN' || rawType === 'PUT';
+                                        const displayType = (rawType === 'MULTUP' || rawType === 'CALL') ? 'BUY' : isSell ? 'SELL' : rawType;
+                                        return (
+                                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-black ${isBuy
+                                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                            }`}>
+                                            {displayType}
+                                          </span>
+                                        );
+                                      })()}
+                                    </td>
+                                    <td className="py-4 font-mono text-white/50">{trade.amount || trade.lot}</td>
+                                    <td className="py-4 font-mono text-white/70">{Number(trade.entryPrice || trade.openPrice || 0).toFixed(5)}</td>
+                                    <td className="py-4 text-emerald-400 text-[13px] font-bold font-mono">
+                                      {new Date(trade.openTime || trade.time || Date.now()).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                    </td>
+                                    <td className="py-4">
+                                      {trade.status === 'CLOSED' ? (
+                                        <span className="text-white/30 text-xs uppercase font-bold tracking-wider">● Closed</span>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <span className="flex items-center gap-1.5 text-emerald-400 text-xs uppercase font-black tracking-wider">
+                                            <span className="relative flex h-2 w-2">
+                                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                            </span>
+                                            Live
+                                          </span>
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="py-4 text-right">
+                                      {trade.profit != null ? (
+                                        <div className="flex flex-col items-end gap-1.5">
+                                          <span className={`font-mono font-black text-[15px] ${isProfit ? 'text-emerald-400' : 'text-red-400'
+                                            }`}>
+                                            {isProfit ? '+' : ''}${profitVal.toFixed(2)}
+                                          </span>
+                                          <div className="w-16 h-1 bg-white/5 rounded-full overflow-hidden">
+                                            <motion.div
+                                              initial={{ width: 0 }}
+                                              animate={{ width: `${profitPct}%` }}
+                                              transition={{ duration: 0.8, ease: 'easeOut' }}
+                                              className={`h-full rounded-full ${isProfit ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                            />
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <span className="text-white/20 font-mono">—</span>
+                                      )}
+                                    </td>
+                                  </motion.tr>
+                                );
+                              });
                             })()}
-
-                            {stats.systemBlocked && (
-                              <div className="text-[11px] whitespace-nowrap text-yellow-500/80 font-bold uppercase tracking-widest text-center mt-2 mb-1 flex items-center justify-center">
-                                [MERCADO FECHADO] O bot opera de Segunda a Sexta, das 06:00 às 17:00 (Horário de Brasília).
-                                {stats.blockedUntil && (() => {
-                                  const now = new Date().getTime();
-                                  const target = new Date(stats.blockedUntil).getTime();
-                                  const diff = target - now;
-                                  if (diff <= 0) return null;
-                                  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-                                  const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                                  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                                  const s = Math.floor((diff % (1000 * 60)) / 1000);
-                                  return (
-                                    <span className="text-white bg-yellow-500/20 px-2 py-0.5 rounded ml-2 border border-yellow-500/30">
-                                      RETORNA EM: {d > 0 ? d + 'd ' : ''}{h.toString().padStart(2, '0')}:{m.toString().padStart(2, '0')}:{s.toString().padStart(2, '0')}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3 whitespace-nowrap">
-                          {['15M', '30M', '1H'].map((interval) => (
-                            <button
-                              key={interval}
-                              onClick={() => setSelectedInterval(interval)}
-                              className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all ${selectedInterval === interval
-                                ? 'bg-emerald-600 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border border-emerald-500'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/5'
-                                }`}
-                            >
-                              {interval}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Live price tickers */}
-                      <div className="flex gap-3 mb-4">
-                        {(() => {
-                          // CORRIGIDO: `assets` não existe na interface `User` (types.ts),
-                          // então `currentUser?.assets` sempre resultava em `undefined` e
-                          // quebrava a checagem de tipos do TypeScript. Lemos via cast local
-                          // em vez de acessar o campo diretamente na interface tipada.
-                          const userAssets = (currentUser as unknown as { assets?: string } | null)?.assets;
-                          const firstSymbol = (userAssets && userAssets.split(',')[0].trim()) || "XAUUSD";
-                          return [
-                            { sym: firstSymbol, base: 2335.40, color: '#f59e0b' }
-                          ];
-                        })().map(({ sym, base, color }, i) => {
-                          const tickDelta = ((tick + i * 3) % 20) * 0.0001 - 0.001;
-                          const currentLive = livePrice > 0 ? livePrice : base;
-                          const price = (currentLive + (livePrice > 0 ? 0 : tickDelta)).toFixed(2);
-                          const isUp = livePrice > 0 ? true : (tickDelta >= 0);
-                          return (
-                            <motion.div
-                              key={sym}
-                              className="flex-1 bg-white/[0.03] border border-white/5 rounded-2xl px-4 py-3 relative overflow-hidden"
-                              animate={{ borderColor: isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' }}
-                              transition={{ duration: 0.5 }}
-                            >
-                              <div className="absolute inset-x-0 bottom-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${color}40, transparent)` }} />
-                              <p className="text-[9px] font-black uppercase tracking-widest mb-1" style={{ color }}>{sym}</p>
-                              <p className="text-sm font-mono font-black text-white">{price}</p>
-                              <p className={`text-[10px] font-mono font-bold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-                                {livePrice > 0 ? 'LIVE' : (isUp ? '+' : '') + tickDelta.toFixed(5)}
-                              </p>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Main chart area */}
-                      <div className="flex-1 min-h-[700px] relative bg-[#07070a] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-                        <TradingChart trades={trades} symbol={"XAUUSD"} theme="dark" timeframe={selectedInterval} derivToken={currentUser?.activeAccountType === 'REAL' ? currentUser?.derivTokenReal : currentUser?.derivTokenDemo} accountType={currentUser?.activeAccountType} onTradesUpdate={setTrades} onPriceUpdate={setLivePrice} />
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
 
-                  {/* Sidebar — Configs & Live Console */}
+                  {/* Right: Live Console (takes 1 column) */}
                   {currentUser?.role === 'ADMIN' && (
-                    <div className="flex flex-col gap-6 h-full">
+                    <div className="lg:col-span-1 h-full">
                       {/* <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} /> */}
 
                       <div className="bg-[#0f0f12] border border-white/5 rounded-3xl overflow-hidden flex flex-col flex-1 min-h-[450px] lg:min-h-0">
@@ -2137,7 +2217,14 @@ export default function App() {
                             </div>
                             {logs.length > 0 && (
                               <button
-                                onClick={() => setLogs([])}
+                                onClick={() => {
+                                  setLogs([]);
+                                  safeFetch('/api/user/clear-logs', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ userId: currentUser?.id })
+                                  });
+                                }}
                                 title={language === 'en' ? 'Clear logs' : language === 'es' ? 'Limpiar logs' : 'Limpar logs'}
                                 className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 border border-white/5 text-white/30 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all group"
                               >
@@ -2149,228 +2236,9 @@ export default function App() {
                             )}
                           </div>
                         </div>
-
-
-                        {/* Log entries with categories */}
-                        <div
-                          ref={logContainerRef}
-                          className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
-                          style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
-                        >
-                          {logs.length === 0 && (
-                            <div className="flex items-center gap-2 text-white/20 py-4">
-                              <span className="text-emerald-500/40">$</span>
-                              <span className="animate-pulse">Aguardando eventos do sistema...</span>
-                            </div>
-                          )}
-                          {logs.map((log, i) => {
-                            const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO');
-                            const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE');
-                            const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
-                            const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
-                            const isSignal = log.includes('SIGNAL') || log.includes('INDICADO');
-                            const isLatest = i === logs.length - 1;
-
-                            let iconEl = <span className="text-white/20 shrink-0">›</span>;
-                            let textColor = 'text-white/40';
-
-                            if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
-                            else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
-                            else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
-                            else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
-                            else if (isSignal) { iconEl = <span className="shrink-0">📡</span>; textColor = 'text-indigo-400'; }
-
-                            return (
-                              <motion.div
-                                key={`${i}-${log.slice(0, 10)}`}
-                                initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ duration: 0.25 }}
-                                className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
-                              >
-                                <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
-                                {iconEl}
-                                <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
                       </div>
                     </div>
                   )}
-                </div>
-
-                {/* Bloco de Status de Inteligência removido conforme solicitação */}
-
-                {/* Order Execution Table — Enhanced with filter + highlight */}
-                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col">
-                  <div className="flex items-center justify-between mb-5">
-                    <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-base text-white/60">
-                      <History size={16} /> {t.dashboard.recentExecutions}
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      {/* Filter tabs */}
-                      <div className="flex bg-white/5 rounded-xl p-0.5 border border-white/5">
-                        {(['ALL', 'OPEN', 'CLOSED'] as const).map(f => (
-                          <button
-                            key={f}
-                            onClick={() => setTradeFilter(f)}
-                            className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${tradeFilter === f
-                              ? f === 'OPEN' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                                : f === 'CLOSED' ? 'bg-white/10 text-white'
-                                  : 'bg-white/10 text-white'
-                              : 'text-white/30 hover:text-white/60'
-                              }`}
-                          >
-                            {f === 'ALL' ? (language === 'en' ? 'All' : 'Todos')
-                              : f === 'OPEN' ? (language === 'en' ? 'Open' : 'Abertas')
-                                : (language === 'en' ? 'Closed' : 'Fechadas')}
-                          </button>
-                        ))}
-                      </div>
-                      {/* "VER HISTÓRICO COMPLETO" button removed by request */}
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto scrollbar-hide">
-                    <table className="w-full text-left border-collapse min-w-[700px]">
-                      <thead>
-                        <tr className="border-b border-white/5 text-sm uppercase tracking-wider text-emerald-400 font-bold">
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Exec ID' : 'ID Exec.'}</th>
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Asset' : 'Ativo'}</th>
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Type' : 'Tipo'}</th>
-                          <th className="pb-3 font-bold">Lot</th>
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Price' : 'Preço'}</th>
-                          <th className="pb-3 font-bold text-emerald-400">{language === 'en' ? 'Time' : 'Hora'}</th>
-                          <th className="pb-3 font-bold">{language === 'en' ? 'Status' : 'Status'}</th>
-                          <th className="pb-3 font-bold text-right">P&L</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.03]">
-                        {(() => {
-                          // CORRIGIDO: a tabela filtrava `stats.trades`, campo que nunca é
-                          // preenchido pelo backend (/api/status não devolve essa chave).
-                          // Quem realmente recebe as operações em tempo real é o estado
-                          // local `trades`, populado via onTradesUpdate no <TradingChart />.
-                          // Antes disso, a tabela ficava sempre vazia mesmo com trades ativos.
-                          const filtered = (trades || []).filter((tr: any) => {
-                            const statusMatch = tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
-                            return statusMatch;
-                          });
-                          if (filtered.length === 0) return (
-                            <tr>
-                              <td colSpan={8} className="py-10 text-center text-sm text-white/20 italic">
-                                {t.dashboard.noTrades}
-                              </td>
-                            </tr>
-                          );
-                          const maxAbsProfit = Math.max(...filtered.filter(t => t.profit).map(t => Math.abs(Number(t.profit))), 1);
-                          return filtered.slice(0, 15).map((trade, idx) => {
-                            const isLatestTrade = idx === 0;
-                            const profitVal = Number(trade.profit || 0);
-                            const profitPct = profitVal ? (Math.abs(profitVal) / maxAbsProfit) * 100 : 0;
-                            const isProfit = profitVal >= 0;
-                            return (
-                              <motion.tr
-                                key={trade.id}
-                                initial={isLatestTrade ? { backgroundColor: 'rgba(59,130,246,0.05)' } : {}}
-                                animate={{ backgroundColor: 'rgba(255,255,255,0)' }}
-                                transition={{ duration: 2 }}
-                                className="text-sm text-white/80 hover:bg-white/[0.02] transition-colors group"
-                              >
-                                <td className="py-3.5 font-mono text-white/30">
-                                  {isLatestTrade && (
-                                    <span className="inline-block w-1 h-1 rounded-full bg-blue-400 mr-1.5 animate-pulse" />
-                                  )}
-                                  {trade.id}
-                                </td>
-                                <td className="py-3.5 font-black text-white">
-                                  {(trade.symbol || '').replace(/frx/i, '').replace(/FRX/i, '').replace('UNKNOWN', 'XAUUSD') || 'XAUUSD'}
-                                </td>
-                                <td className="py-3.5">
-                                  {(() => {
-                                    // CORRIGIDO: `Trade.type` em types.ts é tipado como
-                                    // 'BUY' | 'SELL' apenas, mas a API da Deriv também retorna
-                                    // MULTUP/MULTDOWN/CALL/PUT como tipo de contrato. Comparar
-                                    // esses literais direto contra `trade.type` fazia o
-                                    // TypeScript rejeitar a build ("types have no overlap").
-                                    // Convertendo para string antes de comparar evita o erro
-                                    // sem precisar alterar a definição do tipo em types.ts.
-                                    const rawType = String(trade.type);
-                                    const isBuy = rawType === 'BUY' || rawType === 'MULTUP' || rawType === 'CALL';
-                                    const isSell = rawType === 'MULTDOWN' || rawType === 'PUT';
-                                    const displayType = (rawType === 'MULTUP' || rawType === 'CALL') ? 'BUY' : isSell ? 'SELL' : rawType;
-                                    return (
-                                      <span className={`px-2 py-0.5 rounded-md text-sm font-black ${isBuy
-                                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                                        }`}>
-                                        {displayType}
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
-                                <td className="py-3.5 font-mono text-white/50">{trade.lot}</td>
-                                <td className="py-3.5 font-mono text-white/70">{Number(trade.openPrice || 0).toFixed(5)}</td>
-                                <td className="py-3.5 text-emerald-400 text-sm font-bold font-mono">
-                                  {new Date(trade.time).toLocaleString(language === 'pt' ? 'pt-BR' : language === 'es' ? 'es-ES' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                </td>
-                                <td className="py-3.5">
-                                  {trade.status === 'CLOSED' ? (
-                                    <span className="text-white/30 text-sm uppercase font-bold tracking-wider">● Closed</span>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span className="flex items-center gap-1.5 text-emerald-400 text-sm uppercase font-black tracking-wider">
-                                        <span className="relative flex h-2 w-2">
-                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                        </span>
-                                        Live
-                                      </span>
-                                      {!String(trade.id).startsWith('PENDING') && (
-                                        <button
-                                          onClick={() => {
-                                            if (window.confirm(language === 'en' ? 'Are you sure you want to close this trade manually?' : 'Tem certeza que deseja fechar esta ordem manualmente?')) {
-                                              closeManualTrade(trade.id);
-                                            }
-                                          }}
-                                          className="px-2 py-1 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded text-[10px] font-bold transition-colors shadow-sm"
-                                          title={language === 'en' ? 'Close Trade' : 'Fechar Ordem'}
-                                        >
-                                          {language === 'en' ? 'CLOSE' : 'FECHAR'}
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="py-3.5 text-right">
-                                  {trade.profit != null ? (
-                                    <div className="flex flex-col items-end gap-1">
-                                      <span className={`font-mono font-black text-sm ${isProfit ? 'text-emerald-400' : 'text-red-400'
-                                        }`}>
-                                        {isProfit ? '+' : ''}${profitVal.toFixed(2)}
-                                      </span>
-                                      {/* Mini P&L bar */}
-                                      <div className="w-16 h-0.5 bg-white/5 rounded-full overflow-hidden">
-                                        <motion.div
-                                          initial={{ width: 0 }}
-                                          animate={{ width: `${profitPct}%` }}
-                                          transition={{ duration: 0.8, ease: 'easeOut' }}
-                                          className={`h-full rounded-full ${isProfit ? 'bg-emerald-500' : 'bg-red-500'}`}
-                                        />
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <span className="text-white/20 font-mono">—</span>
-                                  )}
-                                </td>
-                              </motion.tr>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
 
 
@@ -2518,30 +2386,6 @@ export default function App() {
                     <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-1">{t.analytics.avgTradeTime}</p>
                     <p className="text-2xl font-black text-purple-400">42m</p>
                     <p className="mt-2 text-[10px] text-white/20">Style: Scalping</p>
-                  </div>
-                </div>
-
-                {/* Main Profit Chart */}
-                <div className="bg-[#0f0f12] border border-white/5 rounded-[40px] p-8">
-                  <div className="flex items-center justify-between mb-8">
-                    <div>
-                      <h3 className="text-xl font-bold">{t.analytics.equityCurve}</h3>
-                      <p className="text-xs text-white/40">{t.analytics.performanceTrack}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      {['7D', '30D', '90D', 'ALL'].map(p => (
-                        <button
-                          key={p}
-                          onClick={() => setAnalyticsPeriod(p as any)}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${analyticsPeriod === p ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-[400px] w-full flex flex-col">
-                    <TradingChart trades={trades} />
                   </div>
                 </div>
 
@@ -2765,7 +2609,7 @@ export default function App() {
                           {language === 'en' ? 'NETWORK COMMISSIONS' : language === 'es' ? 'COMISIONES DE RED' : 'COMISSÕES DE REDE'}
                         </span>
                         <span className="text-xl font-bold text-emerald-400 font-mono">
-                          ${referralHistory.reduce((sum, item) => sum + item.amount, 0).toFixed(2)}
+                          ${referralHistory.reduce((sum, item) => sum + Number(item.amount), 0).toFixed(2)}
                         </span>
                       </div>
                       <div className="bg-white/[0.02] border border-white/5 rounded-2xl px-5 py-3.5 flex flex-col justify-center min-w-[120px]">
@@ -2819,27 +2663,22 @@ export default function App() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                               <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
                                 <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider block mb-1">
+                                  {language === 'en' ? 'AVAILABLE' : language === 'es' ? 'DISPONIBLE' : 'SALDO DISPONÍVEL'}
+                                </span>
+                                <span className="text-2xl font-black text-amber-400 font-mono">
+                                  ${availableBalance.toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
+                                <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider block mb-1">
                                   {language === 'en' ? 'TOTAL EARNED' : language === 'es' ? 'TOTAL GANADO' : 'TOTAL RECEBIDO'}
                                 </span>
                                 <span className="text-2xl font-black text-emerald-400 font-mono">
-                                  ${referralHistory.reduce((sum, item) => sum + item.amount, 0).toFixed(2)}
-                                </span>
-                              </div>
-                              <div className="bg-white/[0.02] border border-emerald-500/10 rounded-2xl p-4 flex flex-col justify-between">
-                                <span className="text-[10px] font-bold text-emerald-450 uppercase tracking-wider block mb-1 text-emerald-400">
-                                  {language === 'en' ? 'WITHDRAWABLE BALANCE' : language === 'es' ? 'SALDO DISPONIBLE' : 'SALDO DISPONÍVEL'}
-                                </span>
-                                <span className="text-2xl font-black text-emerald-400 font-mono">
-                                  ${(
-                                    referralHistory.reduce((sum, item) => sum + item.amount, 0) -
-                                    withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + item.amount, 0)
-                                  ).toFixed(2)}
+                                  ${actualEarned.toFixed(2)}
                                 </span>
                               </div>
                             </div>
-
-
-
+                            
                             <form onSubmit={handleRequestWithdrawal} className="space-y-4">
                               <div className="space-y-2">
                                 <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
@@ -2888,8 +2727,8 @@ export default function App() {
 
                               <button
                                 type="submit"
-                                disabled={withdrawalLoading}
-                                className={`w-full py-4 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-2xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2`}
+                                disabled={withdrawalLoading || !withdrawAmount || !withdrawWallet}
+                                className="w-full bg-amber-500 text-black font-bold py-4 rounded-2xl hover:bg-amber-400 transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:shadow-[0_0_30px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-4"
                               >
                                 {withdrawalLoading ? (
                                   <>
@@ -2927,7 +2766,11 @@ export default function App() {
                                 ) : (
                                   withdrawals
                                     .filter(w => w.userId === currentUser?.id)
-                                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                                    .sort((a, b) => {
+                                      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+                                      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+                                      return timeB - timeA;
+                                    })
                                     .map((w) => (
                                       <div key={w.id} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col space-y-2 text-xs">
                                         <div className="flex justify-between items-center">
@@ -2947,7 +2790,11 @@ export default function App() {
                                         <div className="flex justify-between items-center">
                                           <span className="text-[9px] font-mono text-white/20 break-all truncate max-w-[160px]">{w.wallet}</span>
                                           <span className="text-[9px] text-white/30 font-mono">
-                                            {new Date(w.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' })} • {new Date(w.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {w.createdAt 
+                                              ? new Date(w.createdAt).toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' • ' + new Date(w.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                                              : (w.timestamp 
+                                                ? new Date(w.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' • ' + new Date(w.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                                                : 'N/A')}
                                           </span>
                                         </div>
                                       </div>
@@ -3307,14 +3154,7 @@ export default function App() {
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
                           </button>
-                          <button
-                            onClick={() => grantLifetimeAccess(u.id)}
-                            title={language === 'en' ? 'Lifetime Access' : language === 'es' ? 'Acceso Vitalicio' : 'Acesso Vitalício'}
-                            className="p-2 px-3 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 text-amber-500 transition-colors flex items-center gap-1.5"
-                          >
-                            <Crown size={14} />
-                            <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Lifetime' : language === 'es' ? 'Vitalicio' : 'Vitalício'}</span>
-                          </button>
+                          {/* Botão Vitalício removido */}
                           <button
                             onClick={() => toggleUser(u.id)}
                             title={u.status === 'ACTIVE' ? 'Lock User' : 'Activate User'}
@@ -3434,12 +3274,12 @@ export default function App() {
                     {language === 'en' ? 'Commission Payout Requests' : language === 'es' ? 'Solicitudes de Retiro de Comisión' : 'Saques de Comissões Pendentes'}
                   </h3>
                   <div className="space-y-4">
-                    {withdrawals.filter(w => w.status === 'PENDING').length === 0 ? (
+                    {adminWithdrawals.filter(w => w.status === 'PENDING').length === 0 ? (
                       <div className="py-10 text-center text-white/20 italic text-sm">
                         {language === 'en' ? 'No pending withdrawal requests.' : language === 'es' ? 'No hay solicitudes de retiro pendientes.' : 'Nenhum saque de comissão pendente no momento.'}
                       </div>
                     ) : (
-                      withdrawals.filter(w => w.status === 'PENDING').map(w => (
+                      adminWithdrawals.filter(w => w.status === 'PENDING').map(w => (
                         <div key={w.id} className="p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -3448,7 +3288,7 @@ export default function App() {
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-500 uppercase tracking-wider">{language === 'en' ? 'PENDING' : 'PENDENTE'}</span>
                             </div>
                             <p className="text-xs text-white/70">
-                              <strong>{language === 'en' ? 'User:' : 'Usuário:'}</strong> {w.userName || 'Unknown'} ({w.userEmail || 'N/A'})
+                              <strong>{language === 'en' ? 'User:' : 'Usuário:'}</strong> {w.userName || users.find(u => u.id === w.userId)?.name || 'Unknown'} ({w.userEmail || users.find(u => u.id === w.userId)?.email || 'N/A'})
                             </p>
                             <p className="text-xs font-mono text-white/40 break-all select-all">
                               <strong>{language === 'en' ? 'Wallet BEP-20:' : 'Carteira BEP-20:'}</strong> {w.wallet}
@@ -3479,7 +3319,7 @@ export default function App() {
                 </div>
 
                 {/* Histórico Geral de Saques (Admin view) */}
-                {withdrawals.length > 0 && (
+                {adminWithdrawals.length > 0 && (
                   <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8">
                     <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
                       <History size={18} className="text-zinc-400" />
@@ -3499,12 +3339,12 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="text-xs">
-                          {withdrawals.map(w => (
+                          {adminWithdrawals.map(w => (
                             <tr key={w.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                               <td className="py-4 font-mono text-white/40">{w.id}</td>
                               <td className="py-4">
-                                <p className="font-bold text-white">{w.userName || "Unknown User"}</p>
-                                <p className="text-[10px] text-white/40 font-mono">{w.userEmail || "No Email"}</p>
+                                <p className="font-bold text-white">{w.userName || users.find(u => u.id === w.userId)?.name || "Unknown User"}</p>
+                                <p className="text-[10px] text-white/40 font-mono">{w.userEmail || users.find(u => u.id === w.userId)?.email || "No Email"}</p>
                               </td>
                               <td className="py-4 font-mono font-bold text-emerald-400">${parseFloat(w.amount).toFixed(2)}</td>
                               <td className="py-4 font-mono text-[11px] text-white/65 select-all">{w.wallet}</td>
@@ -3517,7 +3357,7 @@ export default function App() {
                                 </span>
                               </td>
                               <td className="py-4 text-white/50 text-right pr-4 font-mono">
-                                {new Date(w.timestamp).toLocaleDateString()}
+                                {w.createdAt ? new Date(w.createdAt).toLocaleDateString() : (w.timestamp ? new Date(w.timestamp).toLocaleDateString() : 'N/A')}
                               </td>
                               <td className="py-4 text-right pr-4">
                                 {w.status === 'PENDING' && (
@@ -3719,89 +3559,7 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Deriv Connection */}
-                    <div className="pt-4 border-t border-white/5 space-y-4">
-                      <h4 className="text-xs font-bold text-[#ff444f] uppercase tracking-widest flex items-center gap-2">
-                        <Globe size={14} />
-                        {language === 'en' ? 'Deriv API Connection' : language === 'es' ? 'Conexión API Deriv' : 'Conexão API Deriv'}
-                      </h4>
-                      <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-4">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                          <div className="flex flex-col w-full">
-                            <span className="text-sm font-bold text-white">{language === 'en' ? 'Authorize Trading' : language === 'es' ? 'Autorizar Operaciones' : 'Autorizar Operações'}</span>
-                            <span className="text-xs text-white/40 mb-4">{language === 'en' ? 'Connect your Deriv account or paste token below' : language === 'es' ? 'Conecte su cuenta de Deriv o pegue su token abajo' : 'Conecte sua conta da Deriv ou cole seu token de API abaixo'}</span>
-
-                            <div className="flex flex-col sm:flex-row gap-3">
-                              <button
-                                type="button"
-                                onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
-                                className="flex-1 py-3 bg-gradient-to-r from-[#ff4d4d] to-[#cc0000] hover:from-[#ff6666] hover:to-[#e60000] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
-                              >
-                                <Globe size={16} />
-                                {language === 'en' ? 'GET REAL TOKEN' : 'GERAR TOKEN REAL'}
-                              </button>
-                              {currentUser?.role === 'ADMIN' && (
-                                <button
-                                  type="button"
-                                  onClick={() => window.open('https://app.deriv.com/account/api-token', '_blank')}
-                                  className="flex-1 py-3 bg-gradient-to-r from-[#10b981] to-[#059669] hover:from-[#34d399] hover:to-[#10b981] text-white font-bold rounded-xl transition-all shadow-lg text-[11px] flex items-center justify-center gap-2 mb-2"
-                                >
-                                  <Globe size={16} />
-                                  {language === 'en' ? 'GET DEMO TOKEN' : 'GERAR TOKEN DEMO'}
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="space-y-4 border-t border-white/5 pt-4">
-                              <div className="space-y-2">
-                                <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                  🔴 Token da Conta Real
-                                </label>
-                                <div className="relative">
-                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                  <input
-                                    type="text"
-                                    value={profileForm.derivTokenReal || ''}
-                                    onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
-                                    onBlur={autoSaveTokens}
-                                    placeholder="Cole o token da conta REAL aqui (pat_...)"
-                                    className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 outline-none text-white placeholder:text-white/20"
-                                  />
-                                </div>
-                              </div>
-
-                              {currentUser?.role === 'ADMIN' && (
-                                <div className="space-y-2">
-                                  <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">
-                                    🟢 Token da Conta Demo
-                                  </label>
-                                  <div className="relative">
-                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={16} />
-                                    <input
-                                      type="text"
-                                      value={profileForm.derivTokenDemo || ''}
-                                      onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                                      onBlur={autoSaveTokens}
-                                      placeholder="Cole o token da conta DEMO aqui (pat_...)"
-                                      className="w-full bg-black/30 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 outline-none text-white placeholder:text-white/20"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              <button
-                                type="button"
-                                onClick={updateProfile}
-                                className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl font-bold transition-all text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-                              >
-                                <Save size={18} />
-                                {language === 'en' ? 'Save Tokens' : 'Salvar Tokens'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    {/* Deriv Connection (REMOVIDO - Agora operamos via MT5) */}
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.usdtWallet}</label>
                       <div className="relative">
@@ -4028,8 +3786,75 @@ export default function App() {
             </div>
           )}
         </AnimatePresence>
-      </main>
 
+        {/* Referral History Modal */}
+        <AnimatePresence>
+          {showReferralHistoryModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowReferralHistoryModal(false)}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="relative w-full max-w-2xl bg-[#0f0f12] border border-white/10 rounded-[32px] p-6 md:p-8 shadow-2xl flex flex-col max-h-[80vh]"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <History className="text-amber-500" size={24} />
+                      {language === 'en' ? 'Earnings History' : language === 'es' ? 'Historial de Ganancias' : 'Histórico de Ganhos'}
+                    </h2>
+                    <p className="text-xs text-white/40 mt-1">
+                      {language === 'en' ? 'Detailed list of all your received commissions' : language === 'es' ? 'Lista detallada de todas sus comisiones recibidas' : 'Lista detalhada de todas as suas comissões recebidas'}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => setShowReferralHistoryModal(false)}
+                    className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors shrink-0"
+                  >
+                    <X size={20} className="text-white/60" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                  {referralHistory.length === 0 ? (
+                    <div className="py-12 text-center text-white/20 italic text-sm border border-dashed border-white/5 rounded-2xl">
+                      {language === 'en' ? 'No earnings recorded yet.' : language === 'es' ? 'No hay ganancias registradas todavía.' : 'Nenhum ganho registrado ainda.'}
+                    </div>
+                  ) : (
+                    [...referralHistory]
+                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .map((earning, i) => (
+                        <div key={i} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-emerald-400 font-bold font-mono text-lg">${Number(earning.amount).toFixed(2)}</span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 uppercase tracking-widest">
+                                Nível {earning.level}
+                              </span>
+                            </div>
+                            <div className="text-xs text-white/60">
+                              <span className="text-white/40">{language === 'en' ? 'From:' : language === 'es' ? 'De:' : 'De:'}</span> {earning.referredName} <span className="text-white/20">({earning.referredEmail})</span>
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-white/30 text-right">
+                            {new Date(earning.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </main>
     </div>
   );
 }

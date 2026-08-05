@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, ISeriesApi, CandlestickSeries, Time } from 'lightweight-charts';
+import { createChart, ColorType, ISeriesApi, Time } from 'lightweight-charts';
 import { Trade } from '../types';
 
 interface TradingChartProps {
@@ -43,7 +43,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
       }
     });
 
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    const candlestickSeries = chart.addCandlestickSeries({
       upColor: '#10b981',
       downColor: '#ef4444',
       borderVisible: false,
@@ -81,7 +81,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades, symbol = 'XA
     const granularity = granularityMap[timeframe] || 60;
 
     const connectWS = () => {
-      ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+      ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=33TxY3I7FXDKJMpuS6uIC&l=PT');
       
       ws.onopen = () => {
         // Conexão oficial de produção para o mercado de Ouro real

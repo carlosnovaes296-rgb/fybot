@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export default {
-    // App ID para OAuth (PKCE) - foi criado com redirect URL configurado
     appId: process.env.DERIV_OAUTH_APP_ID || "33TVM6cBQ9GfSjbwQHHdE",
     // App ID para REST/OTP API
     otpAppId: process.env.DERIV_APP_ID || "33TVM6cBQ9GfSjbwQHHdE",

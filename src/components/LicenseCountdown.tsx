@@ -6,8 +6,27 @@ import { Stats } from '../types';
 // divergência entre os componentes que precisam dessa checagem.
 const LIFETIME_YEAR_THRESHOLD = 2090;
 
+/**
+ * Normaliza uma expiryDate para um objeto Date confiável.
+ */
+function parseExpiryDate(expiryDate: string): Date | null {
+  if (!expiryDate) return null;
+
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(expiryDate.trim());
+  const parsed = isDateOnly
+    ? new Date(`${expiryDate.trim()}T23:59:59`)
+    : new Date(expiryDate);
+
+  if (isNaN(parsed.getTime())) {
+    console.error(`[LicenseCountdown] expiryDate inválida recebida: "${expiryDate}"`);
+    return null;
+  }
+
+  return parsed;
+}
+
 function isLifetimeLicense(expiryDate: string): boolean {
-  return new Date(expiryDate).getFullYear() > LIFETIME_YEAR_THRESHOLD;
+  return false;
 }
 
 async function copyToClipboard(text: string): Promise<void> {
@@ -46,9 +65,27 @@ function TimeUnit({ value, label }: TimeUnitProps) {
   );
 }
 
+interface DashboardTranslations {
+  dashboard?: {
+    remaining?: string;
+    expired?: string;
+    activeLicense?: string;
+    licenseExpires?: string;
+    days?: string;
+    hrs?: string;
+    min?: string;
+    sec?: string;
+    status?: string;
+    active?: string;
+  };
+  plans?: {
+    lifetime?: string;
+  };
+}
+
 interface CompactCountdownProps {
   expiryDate: string;
-  t: any;
+  t: DashboardTranslations;
 }
 
 export function CompactCountdown({ expiryDate, t }: CompactCountdownProps) {
@@ -62,7 +99,10 @@ export function CompactCountdown({ expiryDate, t }: CompactCountdownProps) {
     }
 
     const calculateTimeLeft = () => {
-      const difference = +new Date(expiryDate) - +new Date();
+      const parsed = parseExpiryDate(expiryDate);
+      if (!parsed) return t.dashboard?.expired ?? 'DATA INVÁLIDA';
+
+      const difference = +parsed - +new Date();
       if (difference > 0) {
         const d = Math.floor(difference / (1000 * 60 * 60 * 24));
         const h = Math.floor((difference / (1000 * 60 * 60)) % 24);
@@ -84,12 +124,13 @@ export function CompactCountdown({ expiryDate, t }: CompactCountdownProps) {
 
 interface LicenseCountdownProps {
   expiryDate: string;
-  t: any;
+  t: DashboardTranslations;
   licenseKey?: string;
 }
 
 export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdownProps) {
   const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
+  const [isInvalidDate, setIsInvalidDate] = useState(false);
 
   const isLifetime = isLifetimeLicense(expiryDate);
 
@@ -97,7 +138,14 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
     if (isLifetime) return;
 
     const calculateTimeLeft = () => {
-      const difference = +new Date(expiryDate) - +new Date();
+      const parsed = parseExpiryDate(expiryDate);
+      if (!parsed) {
+        setIsInvalidDate(true);
+        return null;
+      }
+      setIsInvalidDate(false);
+
+      const difference = +parsed - +new Date();
       if (difference > 0) {
         return {
           d: Math.floor(difference / (1000 * 60 * 60 * 24)),
@@ -130,14 +178,11 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
           <ShieldCheck size={12} className="text-white" /> {isLifetime ? 'STATUS DA LICENÇA' : t.dashboard?.licenseExpires}
         </p>
 
-        {isLifetime ? (
-          <div className="py-4 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-2xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(245,158,11,0.15)] relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-white/20 blur-2xl transform rotate-45 pointer-events-none" />
-            <ShieldCheck size={28} className="text-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" />
-            <div>
-              <p className="text-xl font-black text-amber-400 uppercase tracking-widest leading-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">ACESSO VITALÍCIO</p>
-              <p className="text-[9px] font-bold text-amber-500/80 uppercase tracking-widest mt-1">Líder Institucional Pro</p>
-            </div>
+        {isInvalidDate ? (
+          <div className="py-2">
+            <span className="text-xs font-bold text-red-500 uppercase tracking-widest">
+              DATA DE VENCIMENTO INVÁLIDA
+            </span>
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-2">
@@ -187,7 +232,7 @@ export function LicenseCountdown({ expiryDate, t, licenseKey }: LicenseCountdown
 
 interface LicenseHeaderButtonProps {
   stats: Stats;
-  t: any;
+  t: DashboardTranslations;
   onClick: () => void;
 }
 

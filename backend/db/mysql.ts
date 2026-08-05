@@ -96,7 +96,7 @@ export async function updateLicense(id: string, updates: any) {
 
 // Withdrawals
 export async function getWithdrawals() {
-    const [rows] = await pool.query('SELECT * FROM withdrawals');
+    const [rows] = await pool.query('SELECT * FROM withdrawals ORDER BY createdAt DESC, id DESC');
     return rows as any[];
 }
 export async function insertWithdrawal(w: any) {
@@ -112,7 +112,7 @@ export async function updateWithdrawal(id: string, status: string) {
 
 // Payments
 export async function getPayments() {
-    const [rows] = await pool.query('SELECT * FROM payments');
+    const [rows] = await pool.query('SELECT * FROM payments ORDER BY createdAt DESC, id DESC');
     return rows as any[];
 }
 export async function insertPayment(p: any) {
