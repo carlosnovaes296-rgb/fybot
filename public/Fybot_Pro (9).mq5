@@ -8,16 +8,20 @@
 
 #include <Trade\Trade.mqh>
 
-input string   InpLicenseKey = "";           // Token / E-mail da Licença Fybot
-input string   InpServerUrl = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
-input double   InpLotSize = 0.01;            // Lote Fixo (Stake)
-input double   InpMaxSLDollars = 10.0;       // Stop Loss Máximo por Ordem ($)
+input group "=== Licenciamento ==="
+input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
+input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
+
+input group "=== Configurações da Estratégia ==="
+input double   InpLotSize = 0.05;            // Lote Fixo (Stake)
+input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo por Ordem ($)
 input double   InpDailyTargetPct = 3.0;      // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
 
 CTrade         trade;
 double         initialBalance = 0;
+double         currentLotSize = 0.01;
 datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 
@@ -34,13 +38,34 @@ int            handleRsi14;
 //+------------------------------------------------------------------+
 int OnInit()
   {
+   if(InpLicenseKey == "")
+     {
+      Print("❌ ERRO: Chave de Licença não informada! O robô não pode ser iniciado.");
+      return(INIT_FAILED);
+     }
+
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpSlippage);
 
    initialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   
+   // --- Lote Dinâmico Baseado na Banca ---
+   if(initialBalance >= 500)
+     {
+      currentLotSize = 0.05;
+     }
+   else if(initialBalance >= 100)
+     {
+      currentLotSize = 0.01;
+     }
+   else
+     {
+      currentLotSize = InpLotSize; // Fallback
+     }
+     
    UpdateMidnightTime();
 
-   handleEma21 = iMA(_Symbol, PERIOD_H1, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleEma21 = iMA(_Symbol, PERIOD_M30, 21, 0, MODE_EMA, PRICE_CLOSE);
    handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
@@ -49,7 +74,6 @@ int OnInit()
       return(INIT_FAILED);
      }
 
-   EventSetTimer(60); // Chama OnTimer a cada 60 segundos
    Print("Fybot Pro EA Inicializado! Banca Inicial: $", DoubleToString(initialBalance, 2));
    return(INIT_SUCCEEDED);
   }
@@ -203,16 +227,16 @@ void OnTick()
 
             if(currentType == POSITION_TYPE_BUY)
               {
-               tpPrice = NormalizeDouble(executionPrice * (1.0 + tpDist), _Digits);
-               trade.Buy(InpLotSize, _Symbol, executionPrice, 0, tpPrice);
+               tpPrice = executionPrice * (1.0 + tpDist);
+               trade.Buy(currentLotSize, _Symbol, executionPrice, 0, tpPrice);
               }
             else
               {
-               tpPrice = NormalizeDouble(executionPrice * (1.0 - tpDist), _Digits);
-               trade.Sell(InpLotSize, _Symbol, executionPrice, 0, tpPrice);
+               tpPrice = executionPrice * (1.0 - tpDist);
+               trade.Sell(currentLotSize, _Symbol, executionPrice, 0, tpPrice);
               }
             
-            Print("📉 [DCA ATIVADO] Preço recuou. Abrindo Ordem ", openOrders + 1, " com TP: ", tpPrice);
+            Print("📉 [DCA ATIVADO] Preço recuou. Abrindo Ordem ", openOrders + 1);
            }
         }
      }
@@ -224,40 +248,38 @@ void OnTick()
      {
       // Verifica se é uma nova vela de M5
       datetime currentM5Time = iTime(_Symbol, PERIOD_M5, 0);
-      if(currentM5Time == 0) { Print("Aguardando carregar histórico M5..."); return; }
       if(currentM5Time == lastM5CandleTime) return; // Já avaliou essa vela
 
       double ema[1];
       double rsi[1];
       
-      if(CopyBuffer(handleEma21, 0, 1, 1, ema) <= 0) { Print("Aguardando carregar EMA..."); return; }
-      if(CopyBuffer(handleRsi14, 0, 1, 1, rsi) <= 0) { Print("Aguardando carregar RSI..."); return; }
+      if(CopyBuffer(handleEma21, 0, 1, 1, ema) <= 0) return;
+      if(CopyBuffer(handleRsi14, 0, 1, 1, rsi) <= 0) return;
 
-      double closeH1 = iClose(_Symbol, PERIOD_H1, 1);
-      if(closeH1 == 0) { Print("Aguardando carregar H1..."); return; }
+      double closeM30 = iClose(_Symbol, PERIOD_M30, 1);
       
       string trend = "LATERAL";
-      if(closeH1 > ema[0]) trend = "TREND_UP";
-      else if(closeH1 < ema[0]) trend = "TREND_DOWN";
+      if(closeM30 > ema[0]) trend = "TREND_UP";
+      else if(closeM30 < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] H1 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M30 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
 
       double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       double tpPrice = 0;
 
-      if(trend == "TREND_UP" && rsi[0] >= 50)
+      if(trend == "TREND_UP" && rsi[0] <= 35)
         {
-         tpPrice = NormalizeDouble(currentAsk + (currentAsk * 0.002), _Digits); // 0.2% a mais (Take Profit válido e seguro)
-         Print("🔥 Sinal Disparado: COMPRA! TP calculado: ", tpPrice);
-         trade.Buy(InpLotSize, _Symbol, currentAsk, 0, tpPrice);
+         tpPrice = currentAsk * (1.0 + 0.0004); // 0.04%
+         Print("🔥 Sinal Disparado: COMPRA (Fundo)! Lote: ", currentLotSize);
+         trade.Buy(currentLotSize, _Symbol, currentAsk, 0, tpPrice);
          lastM5CandleTime = currentM5Time; // Trava para não atirar na mesma vela
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
+      else if(trend == "TREND_DOWN" && rsi[0] >= 65)
         {
-         tpPrice = NormalizeDouble(currentBid - (currentBid * 0.002), _Digits); // 0.2% a menos (Take Profit válido e seguro)
-         Print("🔥 Sinal Disparado: VENDA! TP calculado: ", tpPrice);
-         trade.Sell(InpLotSize, _Symbol, currentBid, 0, tpPrice);
+         tpPrice = currentBid * (1.0 - 0.0004); // 0.04%
+         Print("🔥 Sinal Disparado: VENDA (Topo)! Lote: ", currentLotSize);
+         trade.Sell(currentLotSize, _Symbol, currentBid, 0, tpPrice);
          lastM5CandleTime = currentM5Time; // Trava para não atirar na mesma vela
         }
      }
@@ -276,71 +298,5 @@ void CloseAll()
          trade.PositionClose(ticket);
         }
      }
-  }
-
-//+------------------------------------------------------------------+
-//| Timer function (Webhook)                                         |
-//+------------------------------------------------------------------+
-void OnTimer()
-  {
-   if(InpLicenseKey == "" || InpServerUrl == "") return;
-   
-   double bal = AccountInfoDouble(ACCOUNT_BALANCE);
-   double eq = AccountInfoDouble(ACCOUNT_EQUITY);
-   double prof = GetDailyProfit();
-   int openOrders = 0;
-   double floatingPnL = 0;
-   
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-        {
-         openOrders++;
-         floatingPnL += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-        }
-     }
-     
-   string json = "{\"license\":\"" + InpLicenseKey + "\",\"balance\":" + DoubleToString(bal,2) + ",\"equity\":" + DoubleToString(eq,2) + ",\"daily_profit\":" + DoubleToString(prof,2) + ",\"open_orders\":" + IntegerToString(openOrders) + ",\"floating_pnl\":" + DoubleToString(floatingPnL,2);
-   
-   string tradesJson = ",\"trades\":[";
-   bool firstTrade = true;
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-        {
-         ulong ticket = PositionGetTicket(i);
-         string typeStr = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY) ? "buy" : "sell";
-         double volume = PositionGetDouble(POSITION_VOLUME);
-         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-         double pnl = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-         datetime time = (datetime)PositionGetInteger(POSITION_TIME);
-         
-         if(!firstTrade) tradesJson += ",";
-         tradesJson += "{";
-         tradesJson += "\"id\":\"" + IntegerToString(ticket) + "\",";
-         tradesJson += "\"symbol\":\"" + _Symbol + "\",";
-         tradesJson += "\"type\":\"" + typeStr + "\",";
-         tradesJson += "\"amount\":" + DoubleToString(volume, 2) + ",";
-         tradesJson += "\"entryPrice\":" + DoubleToString(openPrice, _Digits) + ",";
-         tradesJson += "\"profit\":" + DoubleToString(pnl, 2) + ",";
-         tradesJson += "\"status\":\"OPEN\",";
-         tradesJson += "\"openTime\":" + IntegerToString((long)time * 1000);
-         tradesJson += "}";
-         firstTrade = false;
-        }
-     }
-   tradesJson += "]";
-   json += tradesJson + "}";
-   char data[];
-   char result[];
-   string result_headers;
-   StringToCharArray(json, data, 0, StringLen(json), CP_UTF8);
-   
-   string headers = "Content-Type: application/json\r\n";
-   int res = WebRequest("POST", InpServerUrl, headers, 1000, data, result, result_headers);
-   
-   if(res != 200) {
-      Print("Erro ao enviar Webhook. Código: ", res);
-   }
   }
 //+------------------------------------------------------------------+

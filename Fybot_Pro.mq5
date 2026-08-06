@@ -8,14 +8,20 @@
 
 #include <Trade\Trade.mqh>
 
-input double   InpLotSize = 0.01;            // Lote Fixo (Stake)
-input double   InpMaxSLDollars = 10.0;       // Stop Loss Máximo por Ordem ($)
+input group "=== Licenciamento ==="
+input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
+input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
+
+input group "=== Configurações da Estratégia ==="
+input double   InpLotSize = 0.05;            // Lote Fixo (Stake)
+input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo por Ordem ($)
 input double   InpDailyTargetPct = 3.0;      // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
 
 CTrade         trade;
 double         initialBalance = 0;
+double         currentLotSize = 0.01;
 datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 
@@ -32,13 +38,38 @@ int            handleRsi14;
 //+------------------------------------------------------------------+
 int OnInit()
   {
+   if(InpLicenseKey == "")
+     {
+      Print("❌ ERRO: Chave de Licença não informada! O robô não pode ser iniciado.");
+      return(INIT_FAILED);
+     }
+
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpSlippage);
 
    initialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   
+   // --- Lote Dinâmico Baseado na Banca ---
+   if(initialBalance >= 500)
+     {
+      currentLotSize = 0.05;
+     }
+   else if(initialBalance >= 50)
+     {
+      currentLotSize = 0.03;
+     }
+   else
+     {
+      currentLotSize = InpLotSize; // Fallback
+     }
+     
+   EventSetTimer(5); // Inicia o timer para sincronizar com o site a cada 5 segundos
+
+   Print("✅ Fybot Pro [Sniper V2] Iniciado com Sucesso!");
+   
    UpdateMidnightTime();
 
-   handleEma21 = iMA(_Symbol, PERIOD_H1, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleEma21 = iMA(_Symbol, PERIOD_M30, 21, 0, MODE_EMA, PRICE_CLOSE);
    handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
@@ -201,12 +232,12 @@ void OnTick()
             if(currentType == POSITION_TYPE_BUY)
               {
                tpPrice = executionPrice * (1.0 + tpDist);
-               trade.Buy(InpLotSize, _Symbol, executionPrice, 0, tpPrice);
+               trade.Buy(currentLotSize, _Symbol, executionPrice, 0, tpPrice);
               }
             else
               {
                tpPrice = executionPrice * (1.0 - tpDist);
-               trade.Sell(InpLotSize, _Symbol, executionPrice, 0, tpPrice);
+               trade.Sell(currentLotSize, _Symbol, executionPrice, 0, tpPrice);
               }
             
             Print("📉 [DCA ATIVADO] Preço recuou. Abrindo Ordem ", openOrders + 1);
@@ -229,30 +260,30 @@ void OnTick()
       if(CopyBuffer(handleEma21, 0, 1, 1, ema) <= 0) return;
       if(CopyBuffer(handleRsi14, 0, 1, 1, rsi) <= 0) return;
 
-      double closeH1 = iClose(_Symbol, PERIOD_H1, 1);
+      double closeM30 = iClose(_Symbol, PERIOD_M30, 1);
       
       string trend = "LATERAL";
-      if(closeH1 > ema[0]) trend = "TREND_UP";
-      else if(closeH1 < ema[0]) trend = "TREND_DOWN";
+      if(closeM30 > ema[0]) trend = "TREND_UP";
+      else if(closeM30 < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] H1 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M30 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
 
       double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
       double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       double tpPrice = 0;
 
-      if(trend == "TREND_UP" && rsi[0] >= 50)
+      if(trend == "TREND_UP" && rsi[0] >= 65)
         {
          tpPrice = currentAsk * (1.0 + 0.0004); // 0.04%
-         Print("🔥 Sinal Disparado: COMPRA!");
-         trade.Buy(InpLotSize, _Symbol, currentAsk, 0, tpPrice);
+         Print("🔥 Sinal Disparado: COMPRA (Surfando a Alta)! Lote: ", currentLotSize);
+         trade.Buy(currentLotSize, _Symbol, currentAsk, 0, tpPrice);
          lastM5CandleTime = currentM5Time; // Trava para não atirar na mesma vela
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
+      else if(trend == "TREND_DOWN" && rsi[0] <= 35)
         {
          tpPrice = currentBid * (1.0 - 0.0004); // 0.04%
-         Print("🔥 Sinal Disparado: VENDA!");
-         trade.Sell(InpLotSize, _Symbol, currentBid, 0, tpPrice);
+         Print("🔥 Sinal Disparado: VENDA (Surfando a Queda)! Lote: ", currentLotSize);
+         trade.Sell(currentLotSize, _Symbol, currentBid, 0, tpPrice);
          lastM5CandleTime = currentM5Time; // Trava para não atirar na mesma vela
         }
      }
@@ -270,6 +301,89 @@ void CloseAll()
         {
          trade.PositionClose(ticket);
         }
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+  {
+   EventKillTimer();
+  }
+
+//+------------------------------------------------------------------+
+//| Timer function (Sincronismo com a Nuvem)                         |
+//+------------------------------------------------------------------+
+void OnTimer()
+  {
+   SyncWithServer();
+  }
+
+//+------------------------------------------------------------------+
+//| Sincronização com o Dashboard via WebHook                        |
+//+------------------------------------------------------------------+
+void SyncWithServer()
+  {
+   if(InpServerUrl == "" || InpLicenseKey == "") return;
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
+   
+   // Calcular lucro do dia (Simplificado pelo equity - initial, ou iterando history)
+   double daily_profit = equity - initialBalance;
+   
+   int open_orders = 0;
+   string trades_json = "[";
+   
+   for(int i=0; i<PositionsTotal(); i++)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+        {
+         if(open_orders > 0) trades_json += ",";
+         
+         double profit = PositionGetDouble(POSITION_PROFIT);
+         double volume = PositionGetDouble(POSITION_VOLUME);
+         double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
+         string symbol = PositionGetString(POSITION_SYMBOL);
+         long type_int = PositionGetInteger(POSITION_TYPE);
+         string type_str = (type_int == POSITION_TYPE_BUY) ? "buy" : "sell";
+         
+         trades_json += "{";
+         trades_json += "\"id\":\"" + IntegerToString(ticket) + "\",";
+         trades_json += "\"type\":\"" + type_str + "\",";
+         trades_json += "\"lot\":" + DoubleToString(volume, 2) + ",";
+         trades_json += "\"symbol\":\"" + symbol + "\",";
+         trades_json += "\"open_price\":" + DoubleToString(open_price, 5) + ",";
+         trades_json += "\"profit\":" + DoubleToString(profit, 2);
+         trades_json += "}";
+         open_orders++;
+        }
+     }
+   trades_json += "]";
+
+   string json = "{";
+   json += "\"license\":\"" + InpLicenseKey + "\",";
+   json += "\"balance\":" + DoubleToString(balance, 2) + ",";
+   json += "\"equity\":" + DoubleToString(equity, 2) + ",";
+   json += "\"daily_profit\":" + DoubleToString(daily_profit, 2) + ",";
+   json += "\"open_orders\":" + IntegerToString(open_orders) + ",";
+   json += "\"trades\":" + trades_json;
+   json += "}";
+
+   char post[], result[];
+   string result_headers;
+   string headers = "Content-Type: application/json\r\n";
+   
+   StringToCharArray(json, post, 0, WHOLE_ARRAY, CP_UTF8);
+   ArrayResize(post, ArraySize(post) - 1); // Remove o \0 do final da string
+   
+   int res = WebRequest("POST", InpServerUrl, headers, 5000, post, result, result_headers);
+   
+   if(res != 200)
+     {
+      // Print("⚠️ Falha ao sincronizar com a Nuvem. Código: ", res);
      }
   }
 //+------------------------------------------------------------------+

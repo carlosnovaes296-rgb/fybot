@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 import derivRouter from './backend/deriv/routes.ts';
 import session from 'express-session';
-import { DerivBotEngineEMA as DerivBotEngine } from './backend/services/DerivBotEngine.ts';
+// (API de Bot Deriv removida)
 import { DerivConnectionManager } from './backend/services/DerivConnectionManager.ts';
 dotenv.config();
 import * as dbHelper from './backend/db/mysql.ts';
@@ -57,43 +57,6 @@ async function startServer() {
   app.use('/api/deriv', derivRouter);
 
   let globalConnectionManager: DerivConnectionManager | null = null;
-
-  // INICIALIZA O NOVO MOTOR DE SINAIS (SMC / RSI / EMA)
-  const botEngine = new DerivBotEngine();
-  botEngine.riskProfile = 'AGGRESSIVE'; // Deixando agressivo para testes
-  botEngine.onSignal = (direction, price, reason, tp, sl) => {
-    console.log(`[SINAL GERADO] ${direction} @ ${price} -> ${reason}`);
-    if (globalConnectionManager) {
-      users.forEach(user => {
-         const state = getUserState(user.id);
-         if (state.botRunning) {
-             globalConnectionManager!.executeSignal(user.id, direction, price, reason, tp, sl);
-         }
-      });
-    }
-  };
-
-  botEngine.onRegimeChange = (regime) => {
-    console.log(`[REVERSÃO] Tendência principal mudou para: ${regime}`);
-    if (globalConnectionManager) {
-      users.forEach(user => {
-        const state = getUserState(user.id);
-        if (state.botRunning) {
-          globalConnectionManager!.handleRegimeChange(user.id, regime);
-        }
-      });
-    }
-  };
-
-  // Passando o logger para o botEngine poder avisar o que está lendo
-  botEngine.onLog = (msg) => {
-      users.forEach(user => {
-         const state = getUserState(user.id);
-         if (state.botRunning && globalConnectionManager) {
-             globalConnectionManager.addUserLog(user.id, msg);
-         }
-      });
-  };
 
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
@@ -284,7 +247,6 @@ async function startServer() {
           // Ensure botEngine native analysis is also started for this user
           const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
           if (activeToken && activeToken.startsWith('pat_')) {
-              // botEngine.connectWithToken(activeToken, true);
           }
       }
   });
@@ -748,7 +710,7 @@ async function startServer() {
 
   app.post('/api/config', (req, res) => {
     config = { ...config, ...req.body };
-    if (config.riskLevel) botEngine.riskProfile = config.riskLevel;
+    // config update logic for API bot removed
     addLog("⚙️ CONFIG UPDATED via Dashboard");
     saveDB();
     res.json({ success: true, config });
@@ -784,7 +746,7 @@ async function startServer() {
       if (user) {
           const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
           if (activeToken && activeToken.startsWith('pat_')) {
-              botEngine.connectWithToken(activeToken, true);
+              // API bot connect logic removed
           }
       }
       */
@@ -793,7 +755,7 @@ async function startServer() {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO PARADO - Modo de Segurança ativo.");
       if (globalConnectionManager) globalConnectionManager.stop(userId);
-      botEngine.disconnect();
+      // API bot disconnect logic removed
     }
     
     saveDB(); // <-- Added saveDB() to persist botRunning state!
@@ -1653,7 +1615,7 @@ async function startServer() {
   });
 
   // A rota /api/signal foi removida porque o MT5 não é mais utilizado.
-  // O motor de trading roda via DerivBotEngine conectado diretamente ao WebSocket da Deriv.
+  // O motor de trading roda via Expert Advisor (MT5) enviando webhooks para cá.
 
   // --- ROTAS QUE O FRONTEND ESPERA ---
 
