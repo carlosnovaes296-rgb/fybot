@@ -428,12 +428,10 @@ async function startServer() {
           "[SYS] Aguardando primeiro sincronismo de ordens (Ping 60s)..."
         ],
         trades: (() => {
-          const allTrades = [...(state.trades || [])].reverse();
+          const allTrades = [...(state.trades || [])].sort((a: any, b: any) => new Date(b.time || b.openTime || 0).getTime() - new Date(a.time || a.openTime || 0).getTime());
           const openTrades = allTrades.filter(t => t.status === 'OPEN');
           const closedTrades = allTrades.filter(t => t.status !== 'OPEN');
-          // Garantir que as ordens abertas sempre apareçam, preenchendo o resto com as fechadas mais recentes
-          const combined = [...openTrades, ...closedTrades].slice(0, 50);
-          return combined.sort((a, b) => new Date(b.time || b.openTime || 0).getTime() - new Date(a.time || a.openTime || 0).getTime());
+          return [...openTrades, ...closedTrades].slice(0, 50);
         })(),
         activeLicense,
         pendingPayment,

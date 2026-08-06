@@ -451,11 +451,11 @@ export class DerivConnectionManager {
                 this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
               }
             } else {
-              // Proteção de Violinada (Stop Loss de PnL: -10% do valor da ordem)
+              // Proteção de Violinada (Stop Loss de PnL: -20% do valor da ordem)
               const stakeAmount = Number(trade.lot || 0); 
-              const violinadaLimit = -(stakeAmount * 0.10); // 10% do valor da ordem
+              const violinadaLimit = -(stakeAmount * 0.20); // 20% do valor da ordem
               if (stakeAmount > 0 && profit <= violinadaLimit) {
-                 this.addUserLog(userId, `🚨 [VIOLINADA] A ordem ${contractId} atingiu -10% do valor da entrada. Fechando imediatamente por segurança!`);
+                 this.addUserLog(userId, `🚨 [VIOLINADA] A ordem ${contractId} atingiu -20% do valor da entrada. Fechando imediatamente por segurança!`);
                  ws.send(JSON.stringify({ sell: contractId, price: 0 }));
                  trade.status = 'CLOSED';
               } else {

@@ -61,16 +61,6 @@ import { motion, AnimatePresence } from 'motion/react';
 // import DailyTargetSystem from './components/DailyTargetSystem';
 
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
-
-import {
   User,
   ReferralEarning,
   License,
@@ -95,7 +85,6 @@ import { BenefitCard, BenefitItem } from './components/BenefitCard';
 import { PricingCard } from './components/PricingCard';
 import { ConnectDeriv } from './components/ConnectDeriv';
 import { Trophy, ChevronDown, PlayCircle, LogIn, ChevronLeft, Check, MessageSquare, Plus, Shield, LayoutGrid, AlertCircle, ArrowUpRight, ArrowDownRight, Smartphone, Info } from 'lucide-react';
-import { TradingChart } from './components/TradingChart';
 
 // --- PKCE Auth Helpers ---
 function generateCodeVerifier() {
@@ -1980,11 +1969,9 @@ export default function App() {
                         </div>
                       )}
                       </div>
-                      </div>
                     </div>
                   );
                 })()}
-
                 {/* V8 SAFETY SHIELD - FULL WIDTH BANNER */}
                 <div className="w-full bg-[#0f0f12] border border-white/5 rounded-3xl px-8 py-6 mb-8 relative overflow-hidden flex flex-col justify-center">
                   <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,var(--tw-gradient-stops))] from-yellow-500/[0.03] via-transparent to-transparent pointer-events-none" />
@@ -2235,6 +2222,51 @@ export default function App() {
                               </button>
                             )}
                           </div>
+                        </div>
+
+                        {/* Log entries with categories */}
+                        <div
+                          ref={logContainerRef}
+                          className="flex-1 p-4 font-mono text-[10.5px] leading-relaxed space-y-1 overflow-y-auto scrollbar-hide"
+                          style={{ background: 'linear-gradient(180deg, #080810 0%, #0a0a0f 100%)' }}
+                        >
+                          {logs.length === 0 && (
+                            <div className="flex items-center gap-2 text-white/20 py-4">
+                              <span className="text-emerald-500/40">$</span>
+                              <span className="animate-pulse">Aguardando eventos do sistema...</span>
+                            </div>
+                          )}
+                          {logs.map((log, i) => {
+                            const isGain = log.includes('✅') || log.includes('CLOSED') || log.includes('META') || log.includes('COMISSÃO') || log.includes('LUCRO');
+                            const isLoss = log.includes('❌') || log.includes('PERDA') || log.includes('LIMITE') || log.includes('PREJUÍZO');
+                            const isSystem = log.includes('⚙️') || log.includes('CONFIG') || log.includes('STARTED') || log.includes('STOPPED');
+                            const isLock = log.includes('🔒') || log.includes('BLOQUEADO') || log.includes('BLOCKED');
+                            const isSignal = log.includes('SIGNAL') || log.includes('INDICADO') || log.includes('🚀');
+                            const isLatest = i === logs.length - 1;
+
+                            let iconEl = <span className="text-white/20 shrink-0">›</span>;
+                            let textColor = 'text-white/40';
+
+                            if (isGain) { iconEl = <span className="shrink-0">✅</span>; textColor = 'text-emerald-400'; }
+                            else if (isLoss) { iconEl = <span className="shrink-0">❌</span>; textColor = 'text-red-400'; }
+                            else if (isLock) { iconEl = <span className="shrink-0">🔒</span>; textColor = 'text-yellow-400'; }
+                            else if (isSystem) { iconEl = <span className="shrink-0">⚙️</span>; textColor = 'text-blue-400'; }
+                            else if (isSignal) { iconEl = <span className="shrink-0">🚀</span>; textColor = 'text-indigo-400'; }
+
+                            return (
+                              <motion.div
+                                key={`${i}-${log.slice(0, 10)}`}
+                                initial={isLatest ? { opacity: 0, x: -8 } : { opacity: 1 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className={`flex gap-2 py-0.5 ${isLatest ? 'bg-white/[0.025] -mx-1 px-1 rounded' : ''}`}
+                              >
+                                <span className="text-white/15 shrink-0 font-mono text-[9px] pt-px">[{String(i).padStart(2, '0')}]</span>
+                                {iconEl}
+                                <span className={`flex-1 break-words ${textColor} ${isLatest ? 'font-medium' : ''}`}>{log}</span>
+                              </motion.div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -3480,19 +3512,6 @@ export default function App() {
                               <span className={`text-[10px] font-bold ${trade.status === 'CLOSED' ? 'text-white/60' : 'text-emerald-400 animate-pulse'}`}>
                                 {trade.status === 'OPEN' ? '• LIVE' : trade.status}
                               </span>
-                              {trade.status !== 'CLOSED' && !String(trade.id).startsWith('PENDING') && (
-                                <button
-                                  onClick={() => {
-                                    if (window.confirm(language === 'en' ? 'Are you sure you want to close this trade manually?' : 'Tem certeza que deseja fechar esta ordem manualmente?')) {
-                                      closeManualTrade(trade.id);
-                                    }
-                                  }}
-                                  className="px-2 py-1 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded text-[9px] font-bold transition-colors shadow-sm"
-                                  title={language === 'en' ? 'Close Trade' : 'Fechar Ordem'}
-                                >
-                                  {language === 'en' ? 'CLOSE' : 'FECHAR'}
-                                </button>
-                              )}
                             </div>
                           </td>
                           <td className={`py-4 text-right font-mono font-bold ${trade.profit && trade.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>

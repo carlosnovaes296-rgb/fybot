@@ -76,7 +76,9 @@ conn.on('ready', () => {
                 if (data.toString().includes('built in')) {
                     console.log(data.toString().trim());
                 }
-             }).stderr.on('data', (data) => {});
+             }).stderr.on('data', (data) => {
+                 console.log('🚨 ERRO NO BUILD DA VPS:', data.toString());
+             });
            });
         }
     };
