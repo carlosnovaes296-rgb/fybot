@@ -16,6 +16,7 @@ input group "=== Configurações da Estratégia ==="
 input double   InpLotSize = 0.05;            // Lote (Ignorado, travado em 0.01)
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
 input double   InpTakeProfitPct = 0.04;      // Alvo de Lucro Inicial (TP % - 0.04)
+input double   InpStopLossPct   = 10.0;      // Stop Loss Físico na Tela (SL %)
 input double   InpDailyTargetPct = 3.0;      // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
@@ -50,8 +51,19 @@ int OnInit()
 
    initialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
    
-   // --- Lote cravado e travado ---
-   currentLotSize = 0.01;
+   // --- Lote Dinâmico Baseado na Banca ---
+   if(initialBalance >= 500)
+     {
+      currentLotSize = 0.05;
+     }
+   else if(initialBalance >= 50)
+     {
+      currentLotSize = 0.03;
+     }
+   else
+     {
+      currentLotSize = InpLotSize; // Fallback
+     }
      
    EventSetTimer(5); // Inicia o timer para sincronizar com o site a cada 5 segundos
 
@@ -124,13 +136,6 @@ void OnTick()
    double firstOrderPrice = 0;
    long currentType = -1; // 0 = Buy, 1 = Sell
 
-   double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-   double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-   double spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * _Point;
-   if (spread == 0) spread = (currentAsk - currentBid);
-   double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
-   if (minStopDist < spread * 2) minStopDist = spread * 2;
-
    // Verifica Violinada (SL em Dólares) e calcula o estado atual
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
@@ -159,7 +164,32 @@ void OnTick()
            }
         }
      }
-
+      // -------------------------------------------------------------
+      // REGRA DA VIOLINADA: Trava de 10% sobre o valor (Margem) da Ordem
+      // -------------------------------------------------------------
+      double totalOrderMargin = 0;
+      for(int i = 0; i < PositionsTotal(); i++)
+        {
+         if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber && PositionGetString(POSITION_SYMBOL) == _Symbol)
+           {
+            double lot = PositionGetDouble(POSITION_VOLUME);
+            double margin = 0;
+            ENUM_POSITION_TYPE pType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+            ENUM_ORDER_TYPE oType = (pType == POSITION_TYPE_BUY) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+            if(OrderCalcMargin(oType, _Symbol, lot, PositionGetDouble(POSITION_PRICE_OPEN), margin))
+               totalOrderMargin += margin;
+           }
+        }
+      
+      // Stop Loss de 10% sobre o valor usado pelas ordens
+      double violinadaLoss = -(totalOrderMargin * 0.10); 
+      
+      if(floatingPnL <= violinadaLoss && violinadaLoss < 0)
+        {
+         Print("🛑 [VIOLINADA] Prejuízo atingiu 10% do valor da margem da ordem ($", DoubleToString(floatingPnL, 2), "). Fechando por segurança!");
+         CloseAll();
+         return;
+        }
    // Varredura para encontrar a Ordem "Âncora" (Primeira ordem)
    if(openOrders > 0)
      {
@@ -185,7 +215,9 @@ void OnTick()
    // -------------------------------------------------------------
    if(openOrders > 0 && openOrders < 4)
      {
-
+      double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      
       double priceDiffPct = 0;
       bool isAgainstUs = false;
       double executionPrice = 0;
@@ -215,10 +247,7 @@ void OnTick()
 
              if(currentType == POSITION_TYPE_BUY)
                {
-                double targetDist = executionPrice * tpDist;
-                if(targetDist <= minStopDist) targetDist = minStopDist + (_Point * 20);
-                tpPrice = executionPrice + targetDist;
-                
+                tpPrice = executionPrice * (1.0 + tpDist);
                 if(trade.Buy(currentLotSize, _Symbol, executionPrice, 0, 0)) {
                    Print("🛡️ [DCA V2] Ordem de COMPRA #", openOrders + 1, " aberta!");
                    UpdateAllPositionsTP(tpPrice);
@@ -226,10 +255,7 @@ void OnTick()
                }
              else
                {
-                double targetDist = executionPrice * tpDist;
-                if(targetDist <= minStopDist) targetDist = minStopDist + (_Point * 20);
-                tpPrice = executionPrice - targetDist;
-                
+                tpPrice = executionPrice * (1.0 - tpDist);
                 if(trade.Sell(currentLotSize, _Symbol, executionPrice, 0, 0)) {
                    Print("🛡️ [DCA V2] Ordem de VENDA #", openOrders + 1, " aberta!");
                    UpdateAllPositionsTP(tpPrice);
@@ -264,18 +290,25 @@ void OnTick()
 
       Print("🧠 [Sniper V2] M30 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
 
+      double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
       double tpPrice = 0;
+
+      double spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * _Point;
+      if (spread == 0) spread = (currentAsk - currentBid);
+      
+      double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+      if (minStopDist < spread * 2) minStopDist = spread * 2;
 
 
       double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
       
-      double internalSLPct = 0.30; // Stop Loss Fixo em 0.30%
-      double slDist = currentAsk * (internalSLPct / 100.0);
+      double slDist = currentAsk * (InpStopLossPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
-      // --- Lógica de Retração Inteligente (Pullback) ---
-      if(trend == "TREND_UP" && rsi[0] <= 45)
+      // --- Lógica de Segurança Restaurada (Com RSI) ---
+      if(trend == "TREND_UP" && rsi[0] >= 55)
         {
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, 0, 0)) {
             Print("🔥 Sinal Disparado: COMPRA (Segura)! Lote: ", currentLotSize);
@@ -290,7 +323,7 @@ void OnTick()
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
          }
         }
-      else if(trend == "TREND_DOWN" && rsi[0] >= 55)
+      else if(trend == "TREND_DOWN" && rsi[0] <= 45)
         {
          if(trade.Sell(currentLotSize, _Symbol, currentBid, 0, 0)) {
             Print("🔥 Sinal Disparado: VENDA (Segura)! Lote: ", currentLotSize);

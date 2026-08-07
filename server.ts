@@ -1322,12 +1322,14 @@ async function startServer() {
       // Encontra a licença e o usuário correspondente
       let license = licenses.find(l => l.key === licenseKey);
       
-      // MASTER KEY BYPASS (Garante que o admin sempre tenha acesso, mesmo se o banco de dados falhar)
-      if (licenseKey.startsWith('ADMIN-')) {
-          const extractedUserId = licenseKey.replace('ADMIN-', '');
-          license = { key: licenseKey, userId: extractedUserId, status: 'ACTIVE' };
-      } else if (licenseKey === 'FY-PRO-JCNETO' || licenseKey === 'ADMIN-MASTER-KEY' || licenseKey === '1' || licenseKey === 'admin@admin.com') {
-          license = { key: licenseKey, userId: '1', status: 'ACTIVE' };
+      // MASTER KEY BYPASS (Garante que o admin sempre tenha acesso)
+      if (!license) {
+          if (licenseKey.startsWith('ADMIN-')) {
+              const extractedUserId = licenseKey.replace('ADMIN-', '');
+              license = { key: licenseKey, userId: extractedUserId, status: 'ACTIVE' };
+          } else if (licenseKey === 'FY-PRO-JCNETO' || licenseKey === 'ADMIN-MASTER-KEY' || licenseKey === '1' || licenseKey === 'admin@admin.com') {
+              license = { key: licenseKey, userId: '1', status: 'ACTIVE' };
+          }
       }
 
       if (!license || !license.userId) {
