@@ -8,11 +8,17 @@
 
 #include <Trade\Trade.mqh>
 
+enum ENUM_STRATEGY_MODE
+  {
+   MODE_DCA = 0,     // DCA Institucional (Até 4 Ordens, SL 0.30%)
+   MODE_SCALPER = 1  // 1x1 Scalper Puro (Sem DCA, SL 0.05%)
+  };
 input group "=== Licenciamento ==="
 input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
 input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
 
 input group "=== Configurações da Estratégia ==="
+input ENUM_STRATEGY_MODE InpStrategyMode = MODE_DCA; // Modo de Operação
 input double   InpLotSize = 0.05;            // Lote (Ignorado, travado em 0.01)
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
 input double   InpTakeProfitPct = 0.04;      // Alvo de Lucro Inicial (TP % - 0.04)
@@ -59,8 +65,8 @@ int OnInit()
    
    UpdateMidnightTime();
 
-   handleEma21 = iMA(_Symbol, PERIOD_M30, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
+   handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleRsi14 = iRSI(_Symbol, PERIOD_M1, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
      {
@@ -183,7 +189,7 @@ void OnTick()
    // -------------------------------------------------------------
    // MÁQUINA DE DCA (Máximo Absoluto de 4 Ordens)
    // -------------------------------------------------------------
-   if(openOrders > 0 && openOrders < 4)
+   if(InpStrategyMode == MODE_DCA && openOrders > 0 && openOrders < 4)
      {
 
       double priceDiffPct = 0;
@@ -246,8 +252,8 @@ void OnTick()
    // -------------------------------------------------------------
    if(openOrders == 0)
      {
-      // Verifica se é uma nova vela de M5
-      datetime currentM5Time = iTime(_Symbol, PERIOD_M5, 0);
+      // Verifica se é uma nova vela de M1
+      datetime currentM5Time = iTime(_Symbol, PERIOD_M1, 0);
       if(currentM5Time == lastM5CandleTime) return; // Já avaliou essa vela
 
       double ema[1];
@@ -256,13 +262,13 @@ void OnTick()
       if(CopyBuffer(handleEma21, 0, 1, 1, ema) <= 0) return;
       if(CopyBuffer(handleRsi14, 0, 1, 1, rsi) <= 0) return;
 
-      double closeM30 = iClose(_Symbol, PERIOD_M30, 1);
+      double closeM30 = iClose(_Symbol, PERIOD_M15, 1);
       
       string trend = "LATERAL";
       if(closeM30 > ema[0]) trend = "TREND_UP";
       else if(closeM30 < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M30 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M1): ", DoubleToString(rsi[0], 1));
 
       double tpPrice = 0;
 
@@ -271,6 +277,11 @@ void OnTick()
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
       
       double internalSLPct = 0.30; // Stop Loss Fixo em 0.30%
+      if(InpStrategyMode == MODE_SCALPER)
+        {
+         internalSLPct = 0.05; // No modo Scalper o SL é curtinho (0.05%)
+        }
+        
       double slDist = currentAsk * (internalSLPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
