@@ -638,9 +638,9 @@ export class DerivConnectionManager {
 
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
 
-    // Bloqueio de Meta Diária de 3%
+    // Bloqueio de Meta Diária de 4%
     if (!state.initialBalance) state.initialBalance = state.balance > 0 ? state.balance : 1000;
-    const dailyTarget = state.initialBalance * 0.03; // 3% de meta
+    const dailyTarget = state.initialBalance * 0.04; // 4% de meta
 
     if (state.dailyProfit >= dailyTarget) {
       this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${dailyTarget.toFixed(2)}) atingida. O robô parou de enviar novas ordens.`);

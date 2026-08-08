@@ -347,13 +347,23 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // SEMPRE força a meta para 2% do saldo base
-      const targetPercent = 0.02;
+      // SEMPRE força a meta para 4% do saldo base
+      const targetPercent = 0.04;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
-      // LÓGICA DA JANELA DE OPERAÇÕES
-      if (!isTradingWindowOpen()) {
+      const openTradesCount = (state.trades || []).filter((t: any) => t.status === 'OPEN').length;
+
+      // LÓGICA DA JANELA DE OPERAÇÕES E META DIÁRIA
+      if (state.dailyProfit >= state.dailyProfitTarget && openTradesCount === 0) {
+         if (!state.systemBlocked) {
+             state.systemBlocked = true;
+             state.blockedUntil = getNextSessionStart();
+             addUserLog(userId as string, "🏆 Parabéns volte amanhã hoje sua meta foi concluída com sucesso.");
+             if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+             state.botRunning = false;
+         }
+      } else if (!isTradingWindowOpen()) {
          if (!state.systemBlocked) {
              state.systemBlocked = true;
              state.blockedUntil = getNextSessionStart();
@@ -661,6 +671,7 @@ async function startServer() {
         if (pType.includes('BÁSICA') || pType.includes('BASIC')) addDays = 30;
         else if (pType === 'PRO' || pType.includes('PRO')) addDays = 60;
         if (pType.includes('INSTITUCIONAL') || pType.includes('PARTNER')) addDays = 90;
+        if (pType.includes('SNIPER')) addDays = 120;
         if (pType.includes('BOT PRO') || pType.includes('ENTERPRISE') || pType.includes('180')) addDays = 180;
         if (pType.includes('LIFETIME') || pType.includes('VITALÍCIO') || pType.includes('VITALICIO')) addDays = 36500;
         existingLicense.expiryDate = new Date(baseDate.getTime() + addDays * 24 * 60 * 60 * 1000).toISOString();
@@ -670,6 +681,7 @@ async function startServer() {
         if (pType.includes('BÁSICA') || pType.includes('BASIC')) addDays = 30;
         else if (pType === 'PRO' || pType.includes('PRO')) addDays = 60;
         if (pType.includes('INSTITUCIONAL') || pType.includes('PARTNER')) addDays = 90;
+        if (pType.includes('SNIPER')) addDays = 120;
         if (pType.includes('BOT PRO') || pType.includes('ENTERPRISE') || pType.includes('180')) addDays = 180;
         if (pType.includes('LIFETIME') || pType.includes('VITALÍCIO') || pType.includes('VITALICIO')) addDays = 36500;
         licenses.push({

@@ -129,6 +129,9 @@ export const translations = {
       card5Title: "Bot Pro License",
       card5Desc: "Access to the bot for 180 days.",
       card5Features: ["180 Days License"],
+      card6Title: "SNIPER 1X1",
+      card6Desc: "120 Days Duration.",
+      card6Features: ["120 Days Duration", "Trade 24 hours a day and profit up to 10% daily on your balance"],
       period: "DAYS"
     },
     installation: {
@@ -307,6 +310,9 @@ export const translations = {
       card5Title: "Licença Bot Pro",
       card5Desc: "Acesso ao robô para 180 dias.",
       card5Features: ["Licença de 180 dias"],
+      card6Title: "SNIPER 1X1",
+      card6Desc: "Duração 120 dias.",
+      card6Features: ["Duração 120 dias", "Opere 24 horas por dia e lucre ate 10% dia em sua banca"],
       period: "DIAS"
     },
     installation: {
@@ -485,6 +491,9 @@ export const translations = {
       card5Title: "Licencia Bot Pro",
       card5Desc: "Acceso al bot por 180 días.",
       card5Features: ["Licencia de 180 días"],
+      card6Title: "SNIPER 1X1",
+      card6Desc: "Duración 120 días.",
+      card6Features: ["Duración 120 días", "Opere 24 horas al día y gane hasta un 10% diario en su saldo"],
       period: "DÍAS"
     },
     installation: {

@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
-//|                                                   Fybot_Pro.mq5 |
-//|                                        Institucional DCA Sniper |
+//|                                                Fybot_Sniper.mq5 |
+//|                                           1x1 Scalper Dinâmico   |
 //+------------------------------------------------------------------+
-#property copyright "Fybot Pro"
+#property copyright "Fybot Sniper"
 #property link      "https://fybot.life"
 #property version   "2.00"
 
@@ -24,8 +24,8 @@ input string   InpLicenseKey = "";                                // Token / E-m
 input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
 
 input group "=== Configurações da Estratégia ==="
-ENUM_STRATEGY_MODE InpStrategyMode = MODE_DCA; // Travado no modo DCA Institucional
-input ENUM_LOT_MODE      InpLotMode = LOT_FIXED;     // Gerenciamento de Lote
+ENUM_STRATEGY_MODE InpStrategyMode = MODE_SCALPER; // Travado no modo Scalper
+input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
 input double             InpRiskPct = 2.0;           // Risco da Banca (%) - Se Dinâmico
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
 input double   InpTakeProfitPct = 0.04;      // Alvo de Lucro Inicial (TP % - 0.04)
@@ -35,7 +35,7 @@ input int      InpSlippage = 10;             // Slippage Máximo
 
 CTrade         trade;
 double         initialBalance = 0;
-double         currentLotSize = 0.01; // LOTE FIXADO E TRAVADO EM 0.01 CONFORME REGRA
+double         currentLotSize = 0.01; 
 datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 
@@ -65,7 +65,7 @@ int OnInit()
      
    EventSetTimer(5); // Inicia o timer para sincronizar com o site a cada 5 segundos
 
-   Print("✅ Fybot Pro [Sniper V2] Iniciado com Sucesso!");
+   Print("✅ Fybot Sniper [1x1 Dinâmico] Iniciado com Sucesso!");
    
    UpdateMidnightTime();
 
@@ -78,7 +78,7 @@ int OnInit()
       return(INIT_FAILED);
      }
 
-   Print("Fybot Pro EA Inicializado! Banca Inicial: $", DoubleToString(initialBalance, 2));
+   Print("Fybot Sniper EA Inicializado! Banca Inicial: $", DoubleToString(initialBalance, 2));
    return(INIT_SUCCEEDED);
   }
 

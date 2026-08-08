@@ -22,7 +22,7 @@ export interface PricingCardProps {
 
 export function PricingCard({ title, price, recommended, desc, features, language, image, hideButton, largeFeatures, customPriceText, priceSubtext, titleColor, descColor, descSize, onBuy, isVip }: PricingCardProps) {
   return (
-    <div className={`relative flex flex-col p-8 rounded-[40px] border transition-all ${
+    <div className={`relative flex flex-col h-full p-8 rounded-[40px] border transition-all ${
       isVip
         ? 'bg-[#14141d] border-[#f59e0b]/50 shadow-[0_0_50px_rgba(245,158,11,0.15)] ring-1 ring-[#f59e0b]/50'
         : recommended 
@@ -36,21 +36,14 @@ export function PricingCard({ title, price, recommended, desc, features, languag
       )}
       
       {image && (
-        <div className="mb-8 rounded-2xl overflow-hidden border border-white/5 relative h-48 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
-          {isVip && (
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 text-[#f59e0b] drop-shadow-[0_2px_10px_rgba(245,158,11,0.5)]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
-              </svg>
-            </div>
-          )}
-          <img src={image} alt={title} className="w-full h-full object-cover brightness-110" />
+        <div className={`mb-8 rounded-2xl overflow-hidden border ${isVip ? 'border-[#f59e0b]/30 shadow-[0_0_30px_rgba(245,158,11,0.2)]' : 'border-white/5 shadow-[0_0_30px_rgba(59,130,246,0.15)]'} relative aspect-[4/3] bg-black flex items-center justify-center p-4`}>
+          <img src={image} alt={title} className="max-w-full max-h-full object-contain brightness-110 scale-[0.85]" />
         </div>
       )}
 
       <div className="mb-8">
         {title && <h3 className={`text-xl font-bold ${titleColor || ''}`}>{title}</h3>}
-        <p className={`${descSize || 'text-xs'} mt-2 ${descColor || 'text-white/40'}`}>{desc}</p>
+        {desc && <p className={`${descSize || 'text-xs'} mt-2 ${descColor || 'text-white/40'}`}>{desc}</p>}
       </div>
 
       <div className="mb-8">
@@ -59,7 +52,7 @@ export function PricingCard({ title, price, recommended, desc, features, languag
             {customPriceText ? (
               <span className={`text-4xl font-black ${isVip ? 'text-[#f59e0b]' : 'text-blue-400'}`}>{customPriceText}</span>
             ) : (
-              <span className="text-4xl font-black">${price}</span>
+              <span className={`text-4xl font-black ${isVip ? 'text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : ''}`}>${price}</span>
             )}
           </div>
           {priceSubtext && (
@@ -82,7 +75,7 @@ export function PricingCard({ title, price, recommended, desc, features, languag
           onClick={onBuy}
           className={`w-full py-5 rounded-2xl font-black text-sm transition-all active:scale-95 ${
           isVip
-            ? 'bg-[#f59e0b] text-black hover:bg-[#d97706] shadow-xl shadow-[#f59e0b]/20'
+            ? 'bg-gradient-to-b from-[#f59e0b]/30 to-[#f59e0b]/5 border border-[#f59e0b]/50 text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.5)] hover:from-[#f59e0b]/40 hover:to-[#f59e0b]/10 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
             : recommended 
             ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-xl shadow-blue-900/20' 
             : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'

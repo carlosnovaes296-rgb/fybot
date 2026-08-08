@@ -13,12 +13,15 @@ const filesToUpload = [
     { local: './src/components/TradingScheduleTimer.tsx', remote: '/root/fybot/src/components/TradingScheduleTimer.tsx' },
     { local: './DerivBotEngineEMA.ts', remote: '/root/fybot/DerivBotEngineEMA.ts' },
     { local: './Fybot_Pro.mq5', remote: '/root/fybot/public/Fybot_Pro.mq5' },
-    { local: './src/components/LicenseCountdown.tsx', remote: '/root/fybot/src/components/LicenseCountdown.tsx' }
+    { local: './src/components/LicenseCountdown.tsx', remote: '/root/fybot/src/components/LicenseCountdown.tsx' },
+    { local: './src/translations.ts', remote: '/root/fybot/src/translations.ts' },
+    { local: './public/snaper1x1.png.png', remote: '/root/fybot/public/snaper1x1.png.png' },
+    { local: './Fybot_Sniper.mq5', remote: '/root/fybot/public/Fybot_Sniper.mq5' }
 ];
 
 conn.on('ready', () => {
   console.log('✅ Conectado ao servidor VPS.');
-  console.log('📤 Enviando todos os 10 arquivos corrigidos (Modo Fila Indiana para não travar a VPS)...');
+  console.log('📤 Enviando todos os 13 arquivos corrigidos (Modo Fila Indiana para não travar a VPS)...');
   
   conn.sftp((err, sftp) => {
     if (err) throw err;

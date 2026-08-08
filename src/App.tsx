@@ -1516,6 +1516,19 @@ export default function App() {
               setIsMobileMenuOpen(false); 
             }} 
           />
+          {(currentUser?.role === 'ADMIN' || licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE' && l.planType?.toUpperCase().includes('SNIPER')) || (stats?.activeLicense?.status === 'ACTIVE' && stats?.activeLicense?.planType?.toUpperCase().includes('SNIPER'))) && (
+            <NavItem 
+              icon={<Download size={20} color="#FFD700" />} 
+              label={language === 'en' ? 'Download SNIPER' : 'Baixar SNIPER'} 
+              onClick={() => { 
+                const link = document.createElement('a');
+                link.href = '/Fybot_Sniper.mq5';
+                link.download = 'Fybot_Sniper.mq5';
+                link.click();
+                setIsMobileMenuOpen(false); 
+              }} 
+            />
+          )}
 
 
         </nav>
@@ -1873,7 +1886,7 @@ export default function App() {
                     <p className="text-sm opacity-60 mb-6 max-w-lg mx-auto">
                       {stats.dailyProfit < 0
                         ? 'O limite máximo de perda diária foi atingido. O sistema foi bloqueado para proteger o restante do seu capital. As operações retornarão na próxima sessão.'
-                        : 'O robô atingiu a sua meta configurada e está protegendo o seu capital. As operações automáticas retornarão na próxima janela institucional.'}
+                        : 'Parabéns volte amanhã hoje sua meta foi concluída com sucesso.'}
                     </p>
 
                     <div className={`inline-flex flex-col items-center bg-black/40 border ${stats.dailyProfit < 0 ? 'border-red-500/10' : 'border-yellow-500/10'} rounded-2xl px-10 py-6`}>
@@ -1895,7 +1908,8 @@ export default function App() {
                       <TradingScheduleTimer />
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard
-                        label={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
+                        label=""
+                        subLabel={`${t.dashboard.balance.replace(' (REAL / DEMO)', '').replace(' (CONTA REAL / DEMO)', '')} - ${stats.accountType === 'REAL' ? 'CONTA REAL' : stats.accountType === 'DEMO' ? 'CONTA DEMO' : 'OFFLINE'}`}
                         value={isConnected ? `$${displayBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta={language === "en" ? "Progressive" : language === "es" ? "Progresivo" : "Progressiva"}
                         icon={<Wallet className="text-amber-500" />}
@@ -1905,7 +1919,7 @@ export default function App() {
                         trend={stats.pnlHistory?.slice(-12).map((p: any) => p.balance) || [10000, 10100, 10080, 10250, 10400, 10350, 10580, 10720, 10690, 10850, 11000, 11200]}
                       />
                       <StatCard
-                        label={t.dashboard.dailyTargetLabel}
+                        label=""
                         value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                         delta="2%"
                         icon={<Target className="text-amber-500" />}
@@ -1913,6 +1927,7 @@ export default function App() {
                         labelClassName="text-amber-500"
                         valueClassName="text-amber-500"
                         trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
+                        subLabel="Projeção de ganho diário 3.5%"
                       />
                       {(() => {
                         // Só mostra lucro se estiver conectado com saldo real/demo validado
@@ -1920,7 +1935,8 @@ export default function App() {
                         const liveTarget = displayBalance * 0.02;
                         return (
                           <StatCard
-                            label={t.dashboard.dailyProfitLabel}
+                            label=""
+                            subLabel={t.dashboard.dailyProfitLabel}
                             value={isConnected ? `${realTimeProfit >= 0 ? '+' : '-'}$${Math.abs(realTimeProfit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
                             delta={realTimeProfit && realTimeProfit >= liveTarget ? "100%" : `${liveTarget > 0 ? Math.round((realTimeProfit / liveTarget) * 100) : 0}%`}
                             icon={<TrendingUp className="text-amber-500" />}
@@ -2521,11 +2537,10 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-8 max-w-[1600px] mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-8 max-w-[1600px] mx-auto">
                   <PricingCard
                     title={t.plans.card1Title}
                     price={10}
-                    desc={t.plans.card1Desc}
                     features={t.plans.card1Features}
                     language={language}
                     image="/fybot-logo.png.png"
@@ -2535,7 +2550,6 @@ export default function App() {
                     title={t.plans.card2Title}
                     price={20}
                     recommended
-                    desc={t.plans.card2Desc}
                     features={t.plans.card2Features}
                     language={language}
                     image="/fybot-logo.png.png"
@@ -2544,20 +2558,22 @@ export default function App() {
                   <PricingCard
                     title={t.plans.card3Title}
                     price={50}
-                    desc={t.plans.card3Desc}
                     features={t.plans.card3Features}
                     language={language}
                     image="/fybot-logo.png.png"
                     onBuy={() => setShowPaymentModal({ title: t.plans.card3Title, price: 50 })}
                   />
+
                   <PricingCard
-                    title={t.plans.card5Title}
-                    price={100}
-                    desc={t.plans.card5Desc}
-                    features={t.plans.card5Features}
+                    title={t.plans.card6Title || "SNIPER 1X1"}
+                    price={150}
+                    desc={t.plans.card6Desc || "120 Days Duration."}
+                    features={t.plans.card6Features || ["120 Days Duration"]}
                     language={language}
-                    image="/fybot-logo.png.png"
-                    onBuy={() => setShowPaymentModal({ title: t.plans.card5Title, price: 100 })}
+                    image="/snaper1x1.png.png"
+                    isVip={true}
+                    titleColor="text-[#f59e0b] drop-shadow-[0_0_10px_rgba(245,158,11,0.6)]"
+                    onBuy={() => setShowPaymentModal({ title: t.plans.card6Title || "SNIPER 1X1", price: 150, planType: "SNIPER" })}
                   />
                 </div>
 
