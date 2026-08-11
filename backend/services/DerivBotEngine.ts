@@ -25,7 +25,7 @@ export class DerivBotEngineEMA {
     private candlesM1: Candle[] = [];
 
     // Periodos da estrategia (Sniper M1)
-    private readonly EMA_TREND = 100;   // Filtro Macro de Tendência
+    private readonly EMA_TREND = 21;    // M1
     private readonly RSI_PERIOD = 14;   // M1
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
@@ -342,7 +342,7 @@ export class DerivBotEngineEMA {
         let reason = '';
 
         // Sniper Mean Reversion / Pullback Logic
-        // Em M1, usamos RSI 40 e 60 com EMA 100 para pegar pullbacks frequentes e seguros
+        // Em M1, usamos RSI 40 e 60 com EMA 21 para pegar pullbacks frequentes e seguros
         if (
             trend === 'TREND_UP' &&
             currentRsi <= 40
