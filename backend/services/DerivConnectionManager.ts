@@ -455,6 +455,7 @@ export class DerivConnectionManager {
   public stop(userId: string) {
     const ws = this.userSockets.get(userId);
     if (ws) {
+      ws.removeAllListeners('close');
       ws.close();
       this.userSockets.delete(userId);
       this.addUserLog(userId, `⏸️ Conexão WS encerrada.`);
