@@ -5,7 +5,7 @@ export interface PricingCardProps {
   title: string;
   price: number;
   recommended?: boolean;
-  desc: string;
+  desc?: string;
   features: string[];
   language: Language;
   image?: string;
@@ -52,7 +52,7 @@ export function PricingCard({ title, price, recommended, desc, features, languag
             {customPriceText ? (
               <span className={`text-4xl font-black ${isVip ? 'text-[#f59e0b]' : 'text-blue-400'}`}>{customPriceText}</span>
             ) : (
-              <span className={`text-4xl font-black ${isVip ? 'text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : ''}`}>${price}</span>
+              <span className={`text-4xl font-black ${isVip ? 'text-[#f59e0b] drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]' : ''}`}>$ {price}</span>
             )}
           </div>
           {priceSubtext && (

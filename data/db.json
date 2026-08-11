@@ -7,8 +7,8 @@
       "password": "password123",
       "status": "ACTIVE",
       "role": "ADMIN",
-      "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
-      "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "wallet": "0x2940eebf2be0d3425a9bea02c10135b8fe69be62",
+      "paymentWallet": "0x2940eebf2be0d3425a9bea02c10135b8fe69be62",
       "referralCode": "CARLOS296",
       "createdAt": "2026-05-18T20:08:16.660Z",
       "mt5Login": "196478549",
@@ -22,8 +22,8 @@
       "password": "password123",
       "status": "ACTIVE",
       "role": "ADMIN",
-      "wallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
-      "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+      "wallet": "0x2940eebf2be0d3425a9bea02c10135b8fe69be62",
+      "paymentWallet": "0x2940eebf2be0d3425a9bea02c10135b8fe69be62",
       "referralCode": "CARLOS296C",
       "createdAt": "2026-05-20T20:08:16.661Z"
     }
@@ -67,7 +67,7 @@
       "momentum": 0.3,
       "ai": 0.2
     },
-    "paymentWallet": "0x883a831511a1b71b4920cd32d3694ecef432b585",
+    "paymentWallet": "0x2940eebf2be0d3425a9bea02c10135b8fe69be62",
     "allowBuy": true,
     "allowSell": true
   },

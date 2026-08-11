@@ -30,9 +30,9 @@ export async function getUserByEmail(email: string) {
 }
 export async function insertUser(user: any) {
     await pool.query(
-        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, createdAt) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [user.id, user.name, user.email, user.password, user.wallet || '', user.paymentWallet || '', user.status || 'PENDING', user.role || 'USER', user.referredBy || '', user.derivToken || '', user.derivTokenDemo || '', user.derivTokenReal || '', user.activeAccountType || 'DEMO', new Date(user.createdAt || Date.now())]
+        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, referralCode, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, createdAt) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [user.id, user.name, user.email, user.password, user.wallet || '', user.paymentWallet || '', user.status || 'PENDING', user.role || 'USER', user.referredBy || '', user.referralCode || '', user.derivToken || '', user.derivTokenDemo || '', user.derivTokenReal || '', user.activeAccountType || 'DEMO', new Date(user.createdAt || Date.now())]
     );
 }
 export async function updateUser(id: string, updates: any) {
@@ -40,11 +40,11 @@ export async function updateUser(id: string, updates: any) {
     // We use REPLACE INTO or INSERT ... ON DUPLICATE KEY UPDATE.
     // For simplicity, since the memory object has everything, we can just insert it.
     await pool.query(
-        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, createdAt) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, referralCode, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, createdAt) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE 
-         name=VALUES(name), password=VALUES(password), wallet=VALUES(wallet), paymentWallet=VALUES(paymentWallet), status=VALUES(status), role=VALUES(role), derivToken=VALUES(derivToken), derivTokenDemo=VALUES(derivTokenDemo), derivTokenReal=VALUES(derivTokenReal), activeAccountType=VALUES(activeAccountType)`,
-        [updates.id, updates.name, updates.email, updates.password, updates.wallet || '', updates.paymentWallet || '', updates.status || 'PENDING', updates.role || 'USER', updates.referredBy || '', updates.derivToken || '', updates.derivTokenDemo || '', updates.derivTokenReal || '', updates.activeAccountType || 'DEMO', new Date(updates.createdAt || Date.now())]
+         name=VALUES(name), password=VALUES(password), wallet=VALUES(wallet), paymentWallet=VALUES(paymentWallet), status=VALUES(status), role=VALUES(role), referralCode=VALUES(referralCode), referredBy=VALUES(referredBy), derivToken=VALUES(derivToken), derivTokenDemo=VALUES(derivTokenDemo), derivTokenReal=VALUES(derivTokenReal), activeAccountType=VALUES(activeAccountType)`,
+        [updates.id, updates.name, updates.email, updates.password, updates.wallet || '', updates.paymentWallet || '', updates.status || 'PENDING', updates.role || 'USER', updates.referredBy || '', updates.referralCode || '', updates.derivToken || '', updates.derivTokenDemo || '', updates.derivTokenReal || '', updates.activeAccountType || 'DEMO', new Date(updates.createdAt || Date.now())]
     );
 }
 export async function deleteUser(id: string) {
@@ -93,6 +93,9 @@ export async function updateLicense(id: string, updates: any) {
     const setClause = keys.map(k => `${k} = ?`).join(', ');
     await pool.query(`UPDATE licenses SET ${setClause} WHERE id = ?`, [...values, id]);
 }
+export async function deleteLicense(id: string) {
+    await pool.query('DELETE FROM licenses WHERE id = ?', [id]);
+}
 
 // Withdrawals
 export async function getWithdrawals() {
@@ -108,6 +111,9 @@ export async function insertWithdrawal(w: any) {
 }
 export async function updateWithdrawal(id: string, status: string) {
     await pool.query(`UPDATE withdrawals SET status = ? WHERE id = ?`, [status, id]);
+}
+export async function deleteWithdrawal(id: string) {
+    await pool.query('DELETE FROM withdrawals WHERE id = ?', [id]);
 }
 
 // Payments
@@ -125,6 +131,10 @@ export async function insertPayment(p: any) {
 export async function updatePayment(id: string, status: string) {
     await pool.query(`UPDATE payments SET status = ? WHERE id = ?`, [status, id]);
 }
+export async function deletePayment(id: string) {
+    await pool.query('DELETE FROM payments WHERE id = ?', [id]);
+}
+
 
 // Trade Settings
 export async function getTradeSettings(userId: string) {

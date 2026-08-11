@@ -4,6 +4,7 @@ const fs = require('fs');
 const conn = new Client();
 
 const filesToUpload = [
+    { local: './backend/db/mysql.ts', remote: '/root/fybot/backend/db/mysql.ts' },
     { local: './backend/services/DerivConnectionManager.ts', remote: '/root/fybot/backend/services/DerivConnectionManager.ts' },
     { local: './backend/services/DerivBotEngine.ts', remote: '/root/fybot/backend/services/DerivBotEngine.ts' },
     { local: './server.ts', remote: '/root/fybot/server.ts' },
@@ -16,7 +17,9 @@ const filesToUpload = [
     { local: './src/components/LicenseCountdown.tsx', remote: '/root/fybot/src/components/LicenseCountdown.tsx' },
     { local: './src/translations.ts', remote: '/root/fybot/src/translations.ts' },
     { local: './public/snaper1x1.png.png', remote: '/root/fybot/public/snaper1x1.png.png' },
-    { local: './Fybot_Sniper.mq5', remote: '/root/fybot/public/Fybot_Sniper.mq5' }
+    { local: './Fybot_Sniper.mq5', remote: '/root/fybot/public/Fybot_Sniper.mq5' },
+    { local: './.env', remote: '/root/fybot/.env' },
+    { local: './src/components/PricingCard.tsx', remote: '/root/fybot/src/components/PricingCard.tsx' }
 ];
 
 conn.on('ready', () => {

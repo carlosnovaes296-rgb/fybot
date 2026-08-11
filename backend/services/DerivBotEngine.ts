@@ -22,17 +22,11 @@ export class DerivBotEngineEMA {
     private maxHistory: number = 300;
     private enginePingInterval: NodeJS.Timeout | null = null;
 
-    private ohlcM5: Record<string, Candle> = {};
+    private candlesM1: Candle[] = [];
 
-    private candlesH1: Candle[] = [];
-    private candlesM5: Candle[] = [];
-
-    // Periodos da estrategia
-    private readonly EMA_TREND = 200;   // H1
-    private readonly EMA_CONFIRM = 50;  // H1 (mesma timeframe da tendencia, para comparacao coerente)
-    private readonly RSI_PERIOD = 14;   // M5
-    private readonly ATR_PERIOD = 14;   // M5
-    private readonly BREAKOUT_PERIOD = 10; // M5
+    // Periodos da estrategia (Sniper M1)
+    private readonly EMA_TREND = 21;    // M1
+    private readonly RSI_PERIOD = 14;   // M1
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
     private lastSignalCandleEpoch: number | null = null;
@@ -160,7 +154,7 @@ export class DerivBotEngineEMA {
 
             this.isConnected = true;
             console.log(`[DerivBotEngine] Feed conectado. Carregando dados de mercado...`);
-            if (this.onLog) this.onLog(`📊 Feed conectado. Carregando dados de mercado do Ouro...`);
+            if (this.onLog) this.onLog(`📊 Feed conectado. Carregando dados de mercado do Ouro (M1 Sniper)...`);
 
             this.isAuthorized = true;
             this.requestCandleHistory();
@@ -168,10 +162,6 @@ export class DerivBotEngineEMA {
 
         this.ws.on('message', (data: string) => {
             try {
-                // LOG RAW DATA PARA DESCOBRIR O MISTÉRIO!
-                console.log('[DEBUG-FEED-RAW]', data.toString().substring(0, 150));
-                if (this.onLog && data.toString().includes('error')) this.onLog(`[SYS] Feed Raw Error: ${data.toString().substring(0, 100)}`);
-                
                 const response = JSON.parse(data);
 
                 if (response.msg_type === 'ping') {
@@ -184,12 +174,9 @@ export class DerivBotEngineEMA {
                     if (this.onLog) this.onLog(`[SYS] Erro Deriv: ${response.error.message || JSON.stringify(response.error)}`);
                     if (response.msg_type === 'authorize') {
                         this.isAuthorized = false;
-                        if (this.onLog) this.onLog(`⚠️ Token da conta inválido: ${response.error.message}. Por favor, crie um novo Token no site da Deriv e salve no painel.`);
+                        if (this.onLog) this.onLog(`⚠️ Token da conta inválido: ${response.error.message}.`);
                     } else if (response.error.message && response.error.message.includes('frxXAUUSD is invalid')) {
-                        // Deriv às vezes desativa temporariamente a subscrição de velas de frxXAUUSD durante troca de sessão ou manutenção
                         console.warn('[DerivBotEngine] Símbolo de Ouro indisponível temporariamente na Deriv');
-                    } else {
-                        if (this.onLog) this.onLog(`⚠️ Aviso Deriv: ${response.error.message ?? response.error.code}`);
                     }
                     return;
                 }
@@ -204,14 +191,10 @@ export class DerivBotEngineEMA {
                     const mappedCandles = response.candles.map((c: any) => ({
                         epoch: c.epoch, open: c.open, high: c.high, low: c.low, close: c.close
                     }));
-                    if (response.req_id === 3600) {
-                        this.candlesH1 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico H1: ${this.candlesH1.length} velas`);
-                        if (this.onLog) this.onLog(`[SYS] Histórico H1 carregado: ${this.candlesH1.length}/205 velas necessárias`);
-                    } else if (response.req_id === 300) {
-                        this.candlesM5 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico M5: ${this.candlesM5.length} velas`);
-                        if (this.onLog) this.onLog(`[SYS] Histórico M5 carregado: ${this.candlesM5.length}/55 velas necessárias`);
+                    if (response.req_id === 60) {
+                        this.candlesM1 = mappedCandles;
+                        console.log(`[DerivBotEngine] Carregado historico M1: ${this.candlesM1.length} velas`);
+                        if (this.onLog) this.onLog(`[SYS] Histórico M1 (Sniper) carregado: ${this.candlesM1.length} velas`);
                     }
                 }
 
@@ -226,11 +209,9 @@ export class DerivBotEngineEMA {
                     };
 
                     const ohlcGran = Number(ohlc.granularity);
-                    if (ohlcGran === 3600) {
-                        this.updateCandleSeries(this.candlesH1, candle);
-                    } else if (ohlcGran === 300) {
-                        const isNewCandle = this.updateCandleSeries(this.candlesM5, candle);
-                        // Apenas analisar o mercado se uma nova vela fechou no M5
+                    if (ohlcGran === 60) {
+                        const isNewCandle = this.updateCandleSeries(this.candlesM1, candle);
+                        // Apenas analisar o mercado se uma nova vela fechou no M1
                         if (isNewCandle) {
                             this.analyzeMarket();
                         }
@@ -265,27 +246,17 @@ export class DerivBotEngineEMA {
         this.ws?.send(JSON.stringify({
             ticks_history: this.symbol,
             end: 'latest',
-            count: 250,
+            count: 300,
             style: 'candles',
-            granularity: 3600, // H1
-            req_id: 3600
+            granularity: 60, // M1
+            subscribe: 1,
+            req_id: 60
         }));
 
-        // Pequeno atraso para evitar "Rate Limit" ou desconexão por excesso de inscrições simultâneas
+        // ATENÇÃO: Assinatura fantasma de R_100 (Índice de Volatilidade)
+        // Se o Ouro não suportar streaming, a Deriv fecha a conexão em 18s por ociosidade.
+        // O R_100 mantém a conexão ativa eternamente!
         setTimeout(() => {
-            this.ws?.send(JSON.stringify({
-                ticks_history: this.symbol,
-                end: 'latest',
-                count: 100,
-                style: 'candles',
-                granularity: 300, // M5
-                subscribe: 1,
-                req_id: 300
-            }));
-
-            // ATENÇÃO: Assinatura fantasma de R_100 (Índice de Volatilidade)
-            // Se o Ouro não suportar streaming, a Deriv fecha a conexão em 18s por ociosidade.
-            // O R_100 mantém a conexão ativa eternamente!
             this.ws?.send(JSON.stringify({
                 ticks: 'R_100',
                 subscribe: 1,
@@ -331,40 +302,23 @@ export class DerivBotEngineEMA {
     }
 
     private analyzeMarket() {
-        if (!this.isAuthorized) return; // seguranca extra: nunca opera sem autorizacao confirmada
-        if (this.candlesH1.length < this.EMA_TREND + 5) return;
-        if (this.candlesM5.length < this.EMA_CONFIRM + 5) return;
+        if (!this.isAuthorized) return; 
+        if (this.candlesM1.length < this.EMA_TREND + 5) return;
 
         // Sempre usar a ultima vela FECHADA para tomar decisao (evita repainting)
-        const closedCandlesH1 = this.candlesH1.slice(0, -1);
-        const closedCandlesM5 = this.candlesM5.slice(0, -1);
+        const closedCandlesM1 = this.candlesM1.slice(0, -1);
+        const closesM1 = closedCandlesM1.map(c => c.close);
 
-        const closesH1 = closedCandlesH1.map(c => c.close);
-        const closesM5 = closedCandlesM5.map(c => c.close);
-
-        // EMA de tendencia (200) e EMA de confirmacao (50) calculadas no MESMO timeframe (H1),
-        // para que a comparacao "EMA50 > EMA200" faca sentido.
-        const emaTrendSeries = Indicators.ema(closesH1, this.EMA_TREND);
-        const emaConfirmSeries = Indicators.ema(closesH1, this.EMA_CONFIRM);
-        const rsiSeries = Indicators.rsi(closesM5, this.RSI_PERIOD);
+        const emaTrendSeries = Indicators.ema(closesM1, this.EMA_TREND);
+        const rsiSeries = Indicators.rsi(closesM1, this.RSI_PERIOD);
 
         const currentEmaTrend = emaTrendSeries[emaTrendSeries.length - 1];
-        const currentEmaConfirm = emaConfirmSeries[emaConfirmSeries.length - 1];
         const currentRsi = rsiSeries[rsiSeries.length - 1];
 
-        const lastClosedM5 = closedCandlesM5[closedCandlesM5.length - 1];
-        const currentPrice = lastClosedM5.close;
+        const lastClosedM1 = closedCandlesM1[closedCandlesM1.length - 1];
+        const currentPrice = lastClosedM1.close;
 
-        // ATR calculation
-        const atrSeries = Indicators.atr(closedCandlesM5, this.ATR_PERIOD);
-        const currentAtr = atrSeries[atrSeries.length - 1] || (currentPrice * 0.003);
-
-        // Breakout levels
-        const prev10Candles = closedCandlesM5.slice(-this.BREAKOUT_PERIOD - 1, -1);
-        const resistance = Indicators.highestHigh(prev10Candles, this.BREAKOUT_PERIOD);
-        const support = Indicators.lowestLow(prev10Candles, this.BREAKOUT_PERIOD);
-
-        // Define tendencia com base no preco vs EMA200 (H1)
+        // Define tendencia com base no preco vs EMA21 (M1)
         let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
         if (currentPrice > currentEmaTrend) trend = 'TREND_UP';
         else if (currentPrice < currentEmaTrend) trend = 'TREND_DOWN';
@@ -377,10 +331,9 @@ export class DerivBotEngineEMA {
         const nowLog = Date.now();
         if (nowLog - this.lastMonitorLogTime >= 60000) {
             this.lastMonitorLogTime = nowLog;
-            this.onLog?.(`🧠 [Sniper V2] Tend H1: ${trend} | Preco: ${currentPrice.toFixed(2)} | EMA50(H1): ${currentEmaConfirm.toFixed(2)} | RSI(M5): ${currentRsi.toFixed(1)}`);
+            this.onLog?.(`🧠 [Sniper V3] Tend M1: ${trend} | Preço: ${currentPrice.toFixed(2)} | EMA21: ${currentEmaTrend.toFixed(2)} | RSI: ${currentRsi.toFixed(1)}`);
         }
 
-        // Trava de horario inteligente (pausa das 17h as 21h)
         if (!this.isWithinTradingHours()) {
            return;
         }
@@ -388,43 +341,43 @@ export class DerivBotEngineEMA {
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
+        // Sniper Mean Reversion / Pullback Logic
         if (
             trend === 'TREND_UP' &&
-            currentRsi >= 50
+            currentRsi <= 30
         ) {
             signal = 'BUY';
-            reason = `[Sniper V2] Compra Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Alta`;
+            reason = `[Sniper M1] Compra Confirmada (Pullback) | RSI: ${currentRsi.toFixed(1)} | Tendência Alta`;
         }
         else if (
             trend === 'TREND_DOWN' &&
-            currentRsi <= 50
+            currentRsi >= 70
         ) {
             signal = 'SELL';
-            reason = `[Sniper V2] Venda Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Baixa`;
+            reason = `[Sniper M1] Venda Confirmada (Pullback) | RSI: ${currentRsi.toFixed(1)} | Tendência Baixa`;
         }
 
         if (!signal) return;
 
         // One Shot: evita enviar sinal repetido na mesma vela
-        const currentCandleEpoch = lastClosedM5.epoch;
+        const currentCandleEpoch = lastClosedM1.epoch;
         if (currentCandleEpoch === this.lastSignalCandleEpoch) return;
         this.lastSignalCandleEpoch = currentCandleEpoch;
 
-        // TP Fixo da Ordem 1: 0.04%
-        const tpDistance = currentPrice * 0.0004;
+        // Sniper TP: 0.02% | SL: 0.30%
+        const tpDistance = currentPrice * 0.0002;
+        const slDistance = currentPrice * 0.0030;
 
         let tpPrice = 0, slPrice = 0;
         if (signal === 'BUY') {
             tpPrice = parseFloat((currentPrice + tpDistance).toFixed(2));
-            // SL price = 0 para usar a trava inteligente de PnL no servidor
-            slPrice = 0;
+            slPrice = parseFloat((currentPrice - slDistance).toFixed(2));
         } else {
             tpPrice = parseFloat((currentPrice - tpDistance).toFixed(2));
-            slPrice = 0;
+            slPrice = parseFloat((currentPrice + slDistance).toFixed(2));
         }
 
-        this.onLog?.(`🔥 Sinal Disparado: ${signal} em ${currentPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)} (0.04%)`);
-        // A API original onSignal envia (direction, price, reason, tp, sl).
+        this.onLog?.(`🔥 Sinal Disparado: ${signal} em ${currentPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)} (0.02%) | SL: ${slPrice.toFixed(2)} (0.30%)`);
         this.onSignal?.(signal, currentPrice, reason, tpPrice, slPrice);
     }
 }

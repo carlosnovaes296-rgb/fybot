@@ -12,9 +12,22 @@ import mysql from 'mysql2/promise';
 import derivRouter from './backend/deriv/routes.ts';
 import session from 'express-session';
 // (API de Bot Deriv removida)
+import axios from 'axios';
 import { DerivConnectionManager } from './backend/services/DerivConnectionManager.ts';
+import { DerivBotEngineEMA } from './backend/services/DerivBotEngine.ts';
 dotenv.config();
 import * as dbHelper from './backend/db/mysql.ts';
+
+// Copiar bots atualizados para a pasta public
+try {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  fs.copyFileSync(path.join(__dirname, 'Fybot_Pro.mq5'), path.join(__dirname, 'public', 'Fybot_Pro.mq5'));
+  fs.copyFileSync(path.join(__dirname, 'Fybot_Sniper.mq5'), path.join(__dirname, 'public', 'Fybot_Sniper.mq5'));
+  console.log('Arquivos .mq5 copiados para a pasta public com sucesso!');
+} catch (err) {
+  console.error('Erro ao copiar arquivos .mq5:', err);
+}
 
 let mysqlPool: mysql.Pool | null = null;
 
@@ -54,9 +67,32 @@ async function startServer() {
     next();
   });
 
+  app.get('/api/dev/reset-banco', async (req, res) => {
+    try {
+      await dbHelper.pool.query('TRUNCATE TABLE referral_earnings');
+      await dbHelper.pool.query('TRUNCATE TABLE withdrawals');
+      await dbHelper.pool.query('TRUNCATE TABLE payments');
+      await dbHelper.pool.query('DELETE FROM licenses WHERE userId != "1"');
+      
+      // Clear memory
+      referralEarnings.splice(0, referralEarnings.length);
+      withdrawals.splice(0, withdrawals.length);
+      payments.splice(0, payments.length);
+      
+      const adminLicenses = licenses.filter(l => l.userId === '1');
+      licenses.splice(0, licenses.length, ...adminLicenses);
+
+      saveDB();
+      res.send('<h1>Banco de dados (Ganhos, Saques, Pagamentos e Licenças de Teste) ZERADO com sucesso!</h1><p>Volte para a dashboard.</p>');
+    } catch (e: any) {
+      res.status(500).send('Erro: ' + e.message);
+    }
+  });
+
   app.use('/api/deriv', derivRouter);
 
   let globalConnectionManager: DerivConnectionManager | null = null;
+  let globalDerivEngine: DerivBotEngineEMA | null = null;
 
   const DB_DIR = path.join(process.cwd(), 'data');
   if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR);
@@ -123,7 +159,7 @@ async function startServer() {
   };
 
   let users: any[] = [
-    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
   let licenses: any[] = [
@@ -147,7 +183,7 @@ async function startServer() {
       momentum: 0.1,
       ai: 0.30
     },
-    paymentWallet: '0x883a831511a1b71b4920cd32d3694ecef432b585',
+    paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62',
     allowBuy: true,
     allowSell: true
   };
@@ -162,16 +198,7 @@ async function startServer() {
         id INT PRIMARY KEY DEFAULT 1,
         data LONGTEXT NOT NULL
       )`);
-      await conn.execute(`CREATE TABLE IF NOT EXISTS referral_earnings (
-        id VARCHAR(50) PRIMARY KEY,
-        referrerId VARCHAR(50),
-        referredName VARCHAR(100),
-        referredEmail VARCHAR(100),
-        level INT,
-        amount DECIMAL(10,2),
-        type VARCHAR(100),
-        timestamp VARCHAR(50)
-      )`);
+
       conn.release();
       console.log('FYBOT: Connected to MySQL DigitalOcean ✅');
     } catch (e: any) {
@@ -183,6 +210,41 @@ async function startServer() {
   // Load from MySQL
   const loadDB = async () => {
     try {
+      // Auto-migrate using dbHelper.pool
+      try {
+        await dbHelper.pool.query(`ALTER TABLE users ADD COLUMN referralCode VARCHAR(50) DEFAULT ''`);
+        console.log('FYBOT: Coluna referralCode adicionada com sucesso.');
+      } catch (e: any) {}
+      try {
+        await dbHelper.pool.query(`ALTER TABLE users ADD COLUMN referredBy VARCHAR(50) DEFAULT ''`);
+      } catch(e: any) {}
+
+      // AUTO-FIX: Atribuir órfãos ao Admin principal
+      try {
+        const [adminRows] = await dbHelper.pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', ['jfcn2020@gmail.com']);
+        if ((adminRows as any[]).length > 0) {
+          const adminId = (adminRows as any[])[0].id;
+          await dbHelper.pool.query(`
+            UPDATE users 
+            SET referredBy = ? 
+            WHERE (referredBy IS NULL OR referredBy = '' OR referredBy NOT IN (SELECT id FROM (SELECT id FROM users) AS u)) 
+            AND id != ?
+          `, [adminId, adminId]);
+        }
+      } catch (e: any) {
+        console.error('FYBOT: Error auto-fixing orphans', e.message);
+      }
+
+      await dbHelper.pool.query(`CREATE TABLE IF NOT EXISTS referral_earnings (
+        id VARCHAR(50) PRIMARY KEY,
+        referrerId VARCHAR(50),
+        referredName VARCHAR(100),
+        referredEmail VARCHAR(100),
+        level INT,
+        amount DECIMAL(10,2),
+        type VARCHAR(100),
+        timestamp VARCHAR(50)
+      )`);
       users = await dbHelper.getUsers();
       licenses = await dbHelper.getLicenses();
       
@@ -194,26 +256,46 @@ async function startServer() {
 
       payments = await dbHelper.getPayments();
       withdrawals = await dbHelper.getWithdrawals();
-      referralEarnings = await dbHelper.getReferralEarnings().catch(() => []);
-      
-      // RESTAURAÇÃO: Como as comissões não estavam indo para o MySQL, o servidor zerou.
-      // Injetando o $60 manualmente se o admin não tiver ganhos.
-      const adminEarned = referralEarnings.filter(re => re.referrerId === '1').reduce((sum, re) => sum + Number(re.amount), 0);
-      if (adminEarned === 0) {
-        referralEarnings.push({
-          id: 'rec_' + Date.now(),
-          referrerId: '1',
-          referredName: 'Comissão',
-          referredEmail: 'Recuperada',
-          level: 1,
-          amount: 160.00,
-          type: 'Recuperação de Saldo',
-          timestamp: new Date().toISOString()
-        });
+      referralEarnings = await dbHelper.getReferralEarnings();
+
+      // AUTO-FIX: Retroactive commissions
+      try {
+        let changed = false;
+        for (const u of users) {
+          if (u.status === 'ACTIVE' && u.referredBy) {
+            const hasLicense = licenses.some(l => l.userId === u.id);
+            if (!hasLicense) continue;
+            const alreadyPaid = referralEarnings.some(e => e.referredEmail === u.email);
+            if (!alreadyPaid) {
+              const amount = 10.00;
+              const newEarning = {
+                id: 're_retro_' + Math.random().toString(36).substr(2, 9),
+                referrerId: u.referredBy,
+                referredName: u.name,
+                referredEmail: u.email,
+                level: 1,
+                amount: amount,
+                type: `Comissão Recuperada Nível 1`,
+                timestamp: new Date().toISOString()
+              };
+              await dbHelper.insertReferralEarning(newEarning);
+              referralEarnings.push(newEarning);
+              changed = true;
+              console.log(`FYBOT: Comissão recuperada para ${u.name}`);
+            }
+          }
+        }
+        if (changed) {
+          // Re-fetch to ensure memory matches DB
+          referralEarnings = await dbHelper.getReferralEarnings();
+        }
+      } catch(e: any) {
+        console.error('FYBOT: Error paying retroactive commissions', e.message);
       }
-      
-      // Limpando saques de teste do admin para liberar o saldo de $60 para ele sacar.
-      withdrawals = withdrawals.filter(w => (w.userId !== '1' && w.userId !== '1jsleiedp') || w.status === 'REJECTED');
+
+      console.log('✅ Banco de dados sincronizado (MySQL).');
+      console.log(`Total Usuários: ${users.length} | Licenças: ${licenses.length} | Comissões: ${referralEarnings.length}`);
+
 
       const states = await dbHelper.getUserStates();
       for (const row of states) {
@@ -235,10 +317,58 @@ async function startServer() {
     }
   };
   await loadDB();
+
+  // --- CORREÇÃO ÚNICA: Remover a comissão manual indevida (Marcelo) ---
+  const emailsAlvo = ['marcelo_bona@hotmail.com'];
   
-  // globalConnectionManager = new DerivConnectionManager(getUserState, addUserLog, () => users);
+  for (const alvo of emailsAlvo) {
+      // Pega qualquer comissão onde o alvo foi o indicado
+      const badEarnings = referralEarnings.filter(e => e.referredEmail === alvo);
+      for (const badEarning of badEarnings) {
+          const sponsor = users.find(u => u.id === badEarning.referrerId);
+          if (sponsor) {
+              sponsor.balance = Math.max(0, (sponsor.balance || 0) - badEarning.amount);
+              dbHelper.updateUser(sponsor.id, sponsor).catch(()=>{});
+              dbHelper.pool.query('DELETE FROM referral_earnings WHERE id = ?', [badEarning.id]).catch(()=>{});
+              console.log(`FYBOT CLEANUP FORCE: Removida comissão de $${badEarning.amount} do patrocinador ${sponsor.email} (referente a ${alvo})`);
+          }
+          // Remove from memory
+          const idx = referralEarnings.findIndex(e => e.id === badEarning.id);
+          if (idx !== -1) referralEarnings.splice(idx, 1);
+      }
+  }
+  // --------------------------------------------------------------------------
   
-  // Inicia WS para usuários que já estavam com o robô ligado
+
+  globalConnectionManager = new DerivConnectionManager(getUserState, addUserLog, () => users);
+  
+  globalDerivEngine = new DerivBotEngineEMA();
+  globalDerivEngine.onLog = (msg) => {
+      console.log(msg);
+      // Opcional: enviar log da inteligência para os usuários ativos
+      if (globalConnectionManager) {
+          globalConnectionManager.getActiveUserIds().forEach(uid => {
+              addUserLog(uid, msg);
+          });
+      }
+  };
+  globalDerivEngine.onRegimeChange = (regime) => {
+      if (globalConnectionManager) {
+          globalConnectionManager.getActiveUserIds().forEach(uid => {
+              globalConnectionManager!.handleRegimeChange(uid, regime);
+          });
+      }
+  };
+  globalDerivEngine.onSignal = (direction, price, reason, tp, sl) => {
+      if (globalConnectionManager) {
+          globalConnectionManager.getActiveUserIds().forEach(uid => {
+              globalConnectionManager!.executeSignal(uid, direction, price, reason, tp, sl);
+          });
+      }
+  };
+  
+  // Inicia WS para usuários que já estavam com o robô ligado (MAS APENAS SE FOR TESTE)
+  // Como estamos testando o motor oculto, NÃO ligaremos no restart, o admin liga manual.
   users.forEach(u => {
       const state = getUserState(u.id);
       if (state.botRunning) {
@@ -276,7 +406,21 @@ async function startServer() {
     }
   };
 
-  app.get('/api/admin/clean-simulation', (req, res) => {
+  // Admin auth middleware — defined here so it's available for all routes below
+  const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const userId = req.headers['x-admin-userid'] || req.query.adminId;
+    const user = users.find(u => u.id === userId);
+    if (userId === '1' || userId === '3' || userId === '1jsleiedp') {
+      return next();
+    }
+    if (user && user.role === 'ADMIN') {
+      next();
+    } else {
+      res.status(403).json({ error: 'Admin access required' });
+    }
+  };
+
+  app.get('/api/admin/clean-simulation', adminAuth, (req, res) => {
     Object.values(userStates).forEach((state: any) => {
       state.trades = [];
       state.pnlHistory = [];
@@ -285,6 +429,57 @@ async function startServer() {
     });
     saveDB();
     res.json({ success: true, message: "Simulation cleaned" });
+  });
+
+  // Endpoints para TESTE OCULTO DA DERIV (Apenas Admin)
+  app.post('/api/admin/deriv-test/start', adminAuth, (req, res) => {
+    try {
+      const userId = req.headers['x-admin-userid'] || req.query.adminId || req.body.adminId;
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ error: 'Missing admin ID' });
+      }
+      
+      if (globalConnectionManager && globalDerivEngine) {
+        const user = users.find(u => u.id === userId);
+        const token = user?.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
+
+        globalConnectionManager.start(userId);
+        if (token) {
+            globalDerivEngine.connectWithToken(token);
+        }
+        
+        addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Iniciada Manualmente.`);
+        res.json({ success: true, message: "Deriv test started" });
+      } else {
+        res.status(500).json({ error: 'Connection manager not initialized' });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/deriv-test/stop', adminAuth, (req, res) => {
+    try {
+      const userId = req.headers['x-admin-userid'] || req.query.adminId || req.body.adminId;
+      if (!userId || typeof userId !== 'string') {
+        return res.status(400).json({ error: 'Missing admin ID' });
+      }
+      
+      if (globalConnectionManager && globalDerivEngine) {
+        globalConnectionManager.stop(userId);
+        // Desconecta o motor global se ninguém mais estiver testando
+        if (globalConnectionManager.getActiveUserIds().length === 0) {
+            globalDerivEngine.disconnect();
+        }
+        
+        addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Parada Manualmente.`);
+        res.json({ success: true, message: "Deriv test stopped" });
+      } else {
+        res.status(500).json({ error: 'Connection manager not initialized' });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   const getBrazilTime = () => {
@@ -347,15 +542,15 @@ async function startServer() {
       const todayStr = new Date().toISOString().split('T')[0];
       const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
 
-      // SEMPRE força a meta para 4% do saldo base
-      const targetPercent = 0.04;
+      // SEMPRE força a meta para 3.5% do saldo base
+      const targetPercent = 0.035;
       state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
       const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
 
       const openTradesCount = (state.trades || []).filter((t: any) => t.status === 'OPEN').length;
 
       // LÓGICA DA JANELA DE OPERAÇÕES E META DIÁRIA
-      if (state.dailyProfit >= state.dailyProfitTarget && openTradesCount === 0) {
+      if (state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget && openTradesCount === 0) {
          if (!state.systemBlocked) {
              state.systemBlocked = true;
              state.blockedUntil = getNextSessionStart();
@@ -376,11 +571,13 @@ async function startServer() {
          // e o sistema estava bloqueado por motivo de HORÁRIO (e não porque já bateu a meta de hoje)
          // Temos que destravar.
          // Uma maneira de saber é: se blockedUntil passou e a meta não foi batida.
-         if (state.systemBlocked && state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) {
-            state.systemBlocked = false;
-            state.blockedUntil = undefined;
-            state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
-            addUserLog(userId as string, "🔓 [NOVA SESSÃO] A janela de operações abriu. Lucro diário resetado. Sistema liberado!");
+         if (state.systemBlocked) {
+            if ((state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) || (state.dailyProfit < state.dailyProfitTarget || state.dailyProfitTarget === 0)) {
+               state.systemBlocked = false;
+               state.blockedUntil = undefined;
+               state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
+               addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] A proteção diária foi desativada.");
+            }
          }
       }
 
@@ -400,7 +597,27 @@ async function startServer() {
           "[SYS] Aguardando primeiro sincronismo de ordens (Ping 60s)..."
         ],
         trades: (() => {
-          const allTrades = [...(state.trades || [])].sort((a: any, b: any) => new Date(b.time || b.openTime || 0).getTime() - new Date(a.time || a.openTime || 0).getTime());
+          const parseTime = (t: any) => {
+             if (!t) return 0;
+             if (typeof t === 'number') return t < 10000000000 ? t * 1000 : t;
+             const d = new Date(typeof t === 'string' ? t.replace(/\./g, '-') : t);
+             return isNaN(d.getTime()) ? 0 : d.getTime();
+          };
+          // AUTO-CLEANUP a pedido do usuario: remove apenas as ordens fantasmas que foram geradas com o timestamp defeituoso
+          if (state.trades) {
+              state.trades = state.trades.filter((t: any) => {
+                  if (t.status !== 'OPEN' && String(t.id) !== '1265346333') {
+                      // Filtra as ordens que vieram do problema anterior com timestamp massivo
+                      if (t.time && String(t.time).includes('2026-08-10T04:16')) return false;
+                      if (t.time && String(t.time).includes('2026-08-10T04:15')) return false;
+                  }
+                  if (String(t.id) === '1265346333') {
+                      t.profit = 2.20;
+                  }
+                  return true;
+              });
+          }
+          const allTrades = [...(state.trades || [])].sort((a: any, b: any) => parseTime(b.time || b.openTime) - parseTime(a.time || a.openTime));
           const openTrades = allTrades.filter(t => t.status === 'OPEN');
           const closedTrades = allTrades.filter(t => t.status !== 'OPEN');
           return [...openTrades, ...closedTrades].slice(0, 50);
@@ -611,12 +828,168 @@ async function startServer() {
     }
   });
 
+  // PIX payment removed - Sistema usa apenas USDT BEP-20
+
+  app.post('/api/payment/usdt/verify', async (req, res) => {
+    try {
+      const { txHash, userId, planType, amount, email } = req.body;
+      if (!txHash || !userId || !amount) {
+        return res.status(400).json({ error: 'Missing parameters' });
+      }
+
+      const adminUser = users.find(u => u.role === 'ADMIN');
+      const adminWallet = adminUser?.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62';
+      
+      const apiKey = process.env.BSCSCAN_API_KEY;
+
+      if (!adminWallet || adminWallet.includes('SUA_CARTEIRA')) {
+        return res.status(500).json({ error: 'USDT Payments not configured on server (.env missing or wallet not set)' });
+      }
+
+      // Replay prevention
+      const existingPayment = payments.find(p => p.txHash?.toLowerCase() === txHash.toLowerCase());
+      if (existingPayment) {
+        return res.status(400).json({ error: 'Transaction Hash already used for a payment.' });
+      }
+
+      // Direct BSC Node RPC call (No API Key required, no rate limits for single Tx)
+      const rpcUrl = 'https://bsc-dataseed.binance.org/';
+      const rpcData = {
+        jsonrpc: '2.0',
+        method: 'eth_getTransactionReceipt',
+        params: [txHash.trim()],
+        id: 1
+      };
+
+      const response = await axios.post(rpcUrl, rpcData);
+
+      if (!response.data || response.data.error) {
+         return res.status(400).json({ error: 'Erro ao consultar a rede BSC. Verifique se o Hash está correto.' });
+      }
+
+      const receipt = response.data.result;
+      if (!receipt) {
+         return res.status(400).json({ error: 'Transação não encontrada ou ainda não confirmada. Aguarde alguns segundos e tente novamente.' });
+      }
+
+      if (receipt.status !== '0x1') {
+         return res.status(400).json({ error: 'Transação falhou na blockchain. O pagamento não foi concluído.' });
+      }
+
+      // Check if there is a USDT Transfer log
+      const usdtContract = '0x55d398326f99059ff775485246999027b3197955'.toLowerCase();
+      const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'; // Transfer(address,address,uint256)
+      const paddedAdminWallet = '0x000000000000000000000000' + adminWallet.toLowerCase().replace('0x', '');
+
+      let transferLog = null;
+      for (let log of receipt.logs) {
+         if (log.address.toLowerCase() === usdtContract &&
+             log.topics[0] === transferTopic &&
+             log.topics[2]?.toLowerCase() === paddedAdminWallet) {
+             transferLog = log;
+             break;
+         }
+      }
+
+      if (!transferLog) {
+         return res.status(400).json({ error: 'Transação inválida: O destino não é a carteira correta ou o token não é USDT BEP-20.' });
+      }
+
+      // Extract amount (data is hex, 18 decimals)
+      const txAmountHex = transferLog.data;
+      const txAmount = parseInt(txAmountHex, 16) / 1e18;
+
+      if (txAmount < Number(amount) - 0.5) { // 50 cents tolerance
+        return res.status(400).json({ error: `Valor inválido: Você enviou $${txAmount}, mas o plano custa $${amount}.` });
+      }
+
+      // Register the payment
+      const newPayment = {
+        id: 'USDT_' + Date.now(),
+        userId,
+        hash: txHash,
+        txHash: txHash,
+        amount: Number(amount),
+        method: 'USDT',
+        planType: planType || 'PRO',
+        status: 'APPROVED',
+        createdAt: new Date().toISOString()
+      };
+      payments.push(newPayment);
+
+      // Create License
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        user.status = 'ACTIVE';
+        let baseDate = new Date();
+        const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
+        if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
+           baseDate = new Date(currentActive.expiryDate);
+        }
+        
+        const expiryDate = new Date(baseDate);
+        let days = 30;
+        let type = (planType || 'PRO').toUpperCase();
+        if (type.includes('BÁSICA') || type.includes('BASIC')) days = 30;
+        else if (type === 'PRO' || type.includes('PRO')) days = 60;
+        if (type.includes('INSTITUCIONAL') || type.includes('PARTNER')) days = 90;
+        if (type.includes('BOT PRO') || type.includes('ENTERPRISE') || type.includes('180')) days = 180;
+        if (type.includes('LIFETIME') || type.includes('VITALÍCIO') || type.includes('VITALICIO')) days = 36500;
+        
+        if (type.includes('TEST') || type.includes('TESTE')) { days = 30; type = 'SNIPER (TESTE)'; }
+        else if (Number(amount) >= 100) { days = 150; type = 'SNIPER'; }
+        else if (Number(amount) >= 50 && days === 30) { days = 90; type = 'INSTITUCIONAL PRO'; }
+        else if (Number(amount) >= 20 && days === 30) { days = 60; type = 'PRO'; }
+        else if (Number(amount) >= 10 && days === 30) { days = 30; type = 'BASIC'; }
+        
+        expiryDate.setDate(expiryDate.getDate() + days);
+
+        licenses.forEach(l => {
+          if (l.userId === user.id && l.status === 'ACTIVE') {
+            l.status = 'UPGRADED';
+          }
+        });
+
+        licenses.push({
+          id: 'L' + Math.random().toString(36).substr(2, 4),
+          userId: user.id,
+          key: generateUUID(),
+          type: type,
+          status: 'ACTIVE',
+          expiryDate: expiryDate.toISOString()
+        });
+        payCommissions(user, Number(amount), type);
+      }
+      saveDB();
+
+      res.json({ success: true, message: 'Pagamento recebido e licença ativada com sucesso!' });
+    } catch (e: any) {
+      console.error('USDT Verify Error:', e.message);
+      res.status(500).json({ error: 'Erro ao verificar pagamento USDT' });
+    }
+  });
+
+  // /api/payment/status (MercadoPago PIX polling) removed - PIX not supported
+
+  // /api/payment/webhook (PIX) removed
+
   app.post('/api/deriv/submit-payment-hash', (req, res) => {
     try {
       const { userId, txHash, planType, amount } = req.body;
       if (!userId || !txHash) {
         return res.status(400).json({ error: 'userId and txHash are required' });
       }
+
+      // 🔒 PROTEÇÃO: Verifica se essa TxHash já foi usada por qualquer usuário
+      const existingPaymentWithHash = payments.find(
+        (p: any) => p.txHash && p.txHash.toLowerCase() === txHash.toLowerCase() && p.status !== 'REJECTED'
+      );
+      if (existingPaymentWithHash) {
+        return res.status(409).json({
+          error: 'Esta Hash de Transação já foi utilizada para ativar uma licença. Cada transação só pode ser usada uma vez.'
+        });
+      }
+
       const newPayment = {
         id: generateUUID(),
         userId,
@@ -632,91 +1005,6 @@ async function startServer() {
       saveDB();
       res.json({ success: true, payment: newPayment });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get('/api/deriv/pending-payments', (req, res) => {
-    try {
-      // In a real app we might verify admin token, but for now we just filter
-      const pending = payments.filter(p => p.status === 'PENDING');
-      res.json(pending);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/deriv/approve-payment', (req, res) => {
-    try {
-      const { paymentId, adminId } = req.body;
-      const admin = users.find(u => u.id === adminId && u.role === 'ADMIN');
-      if (!admin) {
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
-      const payment = payments.find(p => p.id === paymentId);
-      if (!payment) {
-        return res.status(404).json({ error: 'Payment not found' });
-      }
-      payment.status = 'APPROVED';
-      
-      const existingLicense = licenses.find(l => l.userId === payment.userId);
-      if (existingLicense) {
-        let baseDate = new Date();
-        if (existingLicense.status === 'ACTIVE' && new Date(existingLicense.expiryDate) > baseDate) {
-          baseDate = new Date(existingLicense.expiryDate);
-        }
-        existingLicense.status = 'ACTIVE';
-        let addDays = 30;
-        const pType = (payment.planType || 'PRO').toUpperCase();
-        if (pType.includes('BÁSICA') || pType.includes('BASIC')) addDays = 30;
-        else if (pType === 'PRO' || pType.includes('PRO')) addDays = 60;
-        if (pType.includes('INSTITUCIONAL') || pType.includes('PARTNER')) addDays = 90;
-        if (pType.includes('SNIPER')) addDays = 120;
-        if (pType.includes('BOT PRO') || pType.includes('ENTERPRISE') || pType.includes('180')) addDays = 180;
-        if (pType.includes('LIFETIME') || pType.includes('VITALÍCIO') || pType.includes('VITALICIO')) addDays = 36500;
-        existingLicense.expiryDate = new Date(baseDate.getTime() + addDays * 24 * 60 * 60 * 1000).toISOString();
-      } else {
-        let addDays = 30;
-        const pType = (payment.planType || 'PRO').toUpperCase();
-        if (pType.includes('BÁSICA') || pType.includes('BASIC')) addDays = 30;
-        else if (pType === 'PRO' || pType.includes('PRO')) addDays = 60;
-        if (pType.includes('INSTITUCIONAL') || pType.includes('PARTNER')) addDays = 90;
-        if (pType.includes('SNIPER')) addDays = 120;
-        if (pType.includes('BOT PRO') || pType.includes('ENTERPRISE') || pType.includes('180')) addDays = 180;
-        if (pType.includes('LIFETIME') || pType.includes('VITALÍCIO') || pType.includes('VITALICIO')) addDays = 36500;
-        licenses.push({
-          id: 'L_' + generateUUID().substring(0, 8),
-          userId: payment.userId,
-          key: 'FY-' + generateUUID().substring(0, 12).toUpperCase(),
-          type: payment.planType || 'PRO',
-          status: 'ACTIVE',
-          hwid: '',
-          expiryDate: new Date(Date.now() + addDays * 24 * 60 * 60 * 1000).toISOString()
-        });
-      }
-      saveDB();
-      res.json({ success: true, payment });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/deriv/reject-payment', (req, res) => {
-    try {
-      const { paymentId, adminId } = req.body;
-      const admin = users.find(u => u.id === adminId && u.role === 'ADMIN');
-      if (!admin) {
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
-      const payment = payments.find(p => p.id === paymentId);
-      if (!payment) {
-        return res.status(404).json({ error: 'Payment not found' });
-      }
-      payment.status = 'REJECTED';
-      saveDB();
-      res.json({ success: true, payment });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
     }
   });
 
@@ -829,22 +1117,18 @@ async function startServer() {
     res.json({ trades: state.trades.slice(0, 50) });
   });
 
-  // Admin API Routes auth middleware
-  const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const userId = req.headers['x-admin-userid'] || req.query.adminId;
-    const user = users.find(u => u.id === userId);
-    
-    // ADMIN BACKDOOR FIX: Always allow user ID 1 or 3 (Carlos)
-    if (userId === '1' || userId === '3' || userId === '1jsleiedp') {
-      return next();
-    }
-    
-    if (user && user.role === 'ADMIN') {
-      next();
-    } else {
-      res.status(403).json({ error: 'Admin access required' });
-    }
-  };
+
+
+  app.post('/api/admin/unblock-all', adminAuth, (req, res) => {
+    Object.keys(userStates).forEach(id => {
+       userStates[id].systemBlocked = false;
+       userStates[id].blockedUntil = null;
+       userStates[id].dailyProfit = 0;
+       addUserLog(id, "🔓 [ADMIN] Sistema liberado pelo administrador.");
+    });
+    saveDB();
+    res.json({ success: true, message: "Todos os usuários foram desbloqueados com sucesso." });
+  });
 
   app.get('/api/admin/users', adminAuth, (req, res) => {
     const uniqueUsers = users.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
@@ -876,7 +1160,8 @@ async function startServer() {
     res.json({ success: true, user });
   });
 
-  const payCommissions = (buyer: any, licenseValue: number = 100, planName: string = 'PRO') => {
+  function payCommissions(buyer: any, licenseValue: number = 100, planName: string = 'PRO') {
+    if (!buyer) return;
     let currentUserId = buyer.referredBy;
     let level = 1;
     while (currentUserId && level <= 5) {
@@ -908,7 +1193,7 @@ async function startServer() {
       currentUserId = sponsor.referredBy;
       level++;
     }
-  };
+  }
 
   app.post('/api/admin/users/:id/grant-access', adminAuth, (req, res) => {
     const user = users.find(u => u.id === req.params.id);
@@ -942,7 +1227,22 @@ async function startServer() {
       };
 
       licenses.push(newLicense);
-      payCommissions(user);
+      // REMOVIDO: não pagar comissão em ativação manual
+      // payCommissions(user, 100, 'PRO');
+
+      // Add to payment history so the admin can see it
+      payments.push({
+        id: 'MANUAL_' + Date.now(),
+        userId: user.id,
+        hash: 'Ativação Manual Admin',
+        txHash: 'N/A',
+        amount: 0,
+        method: 'Painel Admin',
+        planType: 'PRO',
+        status: 'APPROVED',
+        createdAt: new Date().toISOString()
+      });
+
       saveDB();
       res.json({ success: true, user, license: newLicense });
     } else {
@@ -975,7 +1275,22 @@ async function startServer() {
       };
 
       licenses.push(newLicense);
-      payCommissions(user);
+      // REMOVIDO: não pagar comissão em ativação manual
+      // payCommissions(user, 100, 'VITALICIO');
+
+      // Add to payment history so the admin can see it
+      payments.push({
+        id: 'MANUAL_' + Date.now(),
+        userId: user.id,
+        hash: 'Ativação Manual Admin',
+        txHash: 'N/A',
+        amount: 0,
+        method: 'Painel Admin',
+        planType: 'VITALICIO',
+        status: 'APPROVED',
+        createdAt: new Date().toISOString()
+      });
+
       saveDB();
       res.json({ success: true, user, license: newLicense });
     } else {
@@ -983,11 +1298,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/admin/users/:id', adminAuth, (req, res) => {
-    users = users.filter((u: any) => u.id !== req.params.id);
-    saveDB();
-    res.json({ success: true });
-  });
+
 
   app.get('/api/referrals/history', (req, res) => {
     try {
@@ -1121,6 +1432,22 @@ async function startServer() {
   });
 
   // Duplicate /api/control route removed
+  
+  app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
+    try {
+      const id = req.params.id;
+      // Remover do banco de dados (se conectado)
+      if (dbHelper.deleteUser) {
+        await dbHelper.deleteUser(id);
+      }
+      // Remover da memória
+      users = users.filter(u => u.id !== id);
+      saveDB();
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   app.get('/api/admin/licenses', adminAuth, (req, res) => {
     const uniqueLicenses = licenses.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
@@ -1141,10 +1468,18 @@ async function startServer() {
     res.json({ success: true, license });
   });
 
-  app.delete('/api/admin/licenses/:id', adminAuth, (req, res) => {
-    licenses = licenses.filter(l => l.id !== req.params.id);
-    saveDB();
-    res.json({ success: true });
+  app.delete('/api/admin/licenses/:id', adminAuth, async (req, res) => {
+    try {
+      const id = req.params.id;
+      if (dbHelper.deleteLicense) {
+        await dbHelper.deleteLicense(id);
+      }
+      licenses = licenses.filter(l => l.id !== id);
+      saveDB();
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.get('/api/admin/payments', adminAuth, (req, res) => {
@@ -1256,6 +1591,37 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/admin/withdrawals/:id', adminAuth, async (req, res) => {
+    try {
+      const id = req.params.id;
+      if (dbHelper.deleteWithdrawal) {
+        await dbHelper.deleteWithdrawal(id);
+      }
+      withdrawals = withdrawals.filter((w: any) => w.id !== id);
+      saveDB();
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/commissions', adminAuth, (req, res) => {
+    try {
+      // Map referral earnings with user info
+      const commissions = referralEarnings.map((re: any) => {
+        const referrer = users.find(u => u.id === re.referrerId);
+        return {
+          ...re,
+          referrerName: referrer?.name || 'Desconhecido',
+          referrerEmail: referrer?.email || 'N/A'
+        };
+      });
+      res.json(commissions);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.post('/api/admin/payments/:id/approve', adminAuth, (req, res) => {
     const payment = payments.find((p: any) => p.id === req.params.id);
     if (payment && payment.status === 'PENDING') {
@@ -1321,6 +1687,20 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/admin/payments/:id', adminAuth, async (req, res) => {
+    try {
+      const id = req.params.id;
+      if (dbHelper.deletePayment) {
+        await dbHelper.deletePayment(id);
+      }
+      payments = payments.filter((p: any) => p.id !== id);
+      saveDB();
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ==========================================
   // WEBHOOK PARA O MT5 (Robô MQL5 -> Site)
   // ==========================================
@@ -1354,35 +1734,83 @@ async function startServer() {
       const state = getUserState(userId);
 
       // Atualiza o estado do usuário com os dados recebidos do MT5
+      let prevDailyProfit = state.dailyProfit || 0;
       if (payload.balance !== undefined) state.balance = payload.balance;
       if (payload.equity !== undefined) state.equity = payload.equity;
       if (payload.daily_profit !== undefined) state.dailyProfit = payload.daily_profit;
+      
+      let profitDiff = state.dailyProfit - prevDailyProfit;
+
       if (payload.trades !== undefined) {
          if (!state.trades) state.trades = [];
          const incomingTradeIds = new Set(payload.trades.map((t: any) => t.id));
          
+         let newlyClosedTrades: any[] = [];
+         
          state.trades = state.trades.map((t: any) => {
             if (incomingTradeIds.has(t.id)) {
                const incomingTrade = payload.trades.find((p: any) => p.id === t.id);
-               return { ...t, ...incomingTrade, status: 'OPEN' };
+               return { ...t, ...incomingTrade, status: 'OPEN', time: incomingTrade.time || t.time || new Date().toISOString() };
             } else {
                // Acabou de fechar!
                if (t.status === 'OPEN') {
-                   const finalProfit = Number(t.profit || 0).toFixed(2);
-                   const isWin = Number(finalProfit) >= 0;
-                   addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${t.symbol || 'XAUUSD'} | Lucro: $${finalProfit}`);
+                   newlyClosedTrades.push(t);
                }
-               return { ...t, status: 'CLOSED' };
+               return { ...t, status: t.status === 'OPEN' ? 'CLOSED' : t.status, time: t.time || new Date().toISOString() };
             }
          });
+         
+         // Infer final profit if exactly one trade closed and daily profit changed
+         if (newlyClosedTrades.length === 1 && Math.abs(profitDiff) > 0.01 && Math.abs(profitDiff) < (state.balance || 10000) * 0.2) {
+             newlyClosedTrades[0].profit = Number(profitDiff.toFixed(2));
+             const isWin = profitDiff >= 0;
+             addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${newlyClosedTrades[0].symbol || 'XAUUSD'} | Lucro Real: $${profitDiff.toFixed(2)}`);
+         } else if (newlyClosedTrades.length > 0) {
+             newlyClosedTrades.forEach(t => {
+                 const finalProfit = Number(t.profit || 0).toFixed(2);
+                 const isWin = Number(finalProfit) >= 0;
+                 addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${t.symbol || 'XAUUSD'} | Lucro Flutuante: $${finalProfit}`);
+             });
+         }
          
          const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
          payload.trades.forEach((t: any) => {
             if (!existingTradeIds.has(t.id)) {
-               state.trades.unshift({ ...t, status: 'OPEN' }); // unshift to put new trades at the top
+               state.trades.unshift({ ...t, status: 'OPEN', time: t.time || new Date().toISOString() }); // unshift to put new trades at the top
                addUserLog(userId, `[MT5] ⚡ NOVA ORDEM: ${t.symbol || 'XAUUSD'} (${t.type}) | Lote: ${t.lot || t.amount}`);
             }
          });
+      }
+      
+      if (payload.closed_trades !== undefined && Array.isArray(payload.closed_trades)) {
+          if (!state.trades) state.trades = [];
+          const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
+          
+          // DEBUG LOG
+          // console.log(`[WEBHOOK DEBUG] Received ${payload.closed_trades.length} closed trades. State trades count: ${state.trades.length}`);
+          
+          payload.closed_trades.forEach((ct: any) => {
+              if (!existingTradeIds.has(ct.id)) {
+                  // A ordem abriu e fechou muito rápido, nem pegamos ela como OPEN.
+                  state.trades.unshift({ ...ct, status: 'CLOSED', time: ct.time || new Date().toISOString() });
+                  const finalProfit = Number(ct.profit || 0).toFixed(2);
+                  const isWin = Number(finalProfit) >= 0;
+                  addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} SCALP RÁPIDO: ${ct.symbol || 'XAUUSD'} | Lucro: $${finalProfit}`);
+              } else {
+                  // Se já existe, garante que o profit final é o correto (caso o webhook feche ela com lucro flutuante desatualizado)
+                  const existingTrade = state.trades.find((t:any) => t.id === ct.id);
+                  if (existingTrade) {
+                      existingTrade.profit = ct.profit;
+                      existingTrade.status = 'CLOSED';
+                      if (!existingTrade.time && ct.time) existingTrade.time = ct.time;
+                  }
+              }
+          });
+      }
+      
+      // Limita histórico em memória para evitar travamentos e perda de ordens antigas na tela
+      if (state.trades && state.trades.length > 300) {
+          state.trades = state.trades.slice(0, 300);
       }
       
       const currentOrders = payload.open_orders || 0;
@@ -1639,7 +2067,7 @@ async function startServer() {
     // Se o usuário tiver uma paymentWallet própria do admin, usa ela
     const user = userId ? users.find(u => u.id === userId) : null;
     const adminUser = users.find(u => u.role === 'ADMIN');
-    const wallet = adminUser?.paymentWallet || config.paymentWallet || '0x883a831511a1b71b4920cd32d3694ecef432b585';
+    const wallet = adminUser?.paymentWallet || config.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62';
     res.json({ wallet });
   });
 
