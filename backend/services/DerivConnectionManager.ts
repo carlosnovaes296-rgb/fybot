@@ -152,12 +152,12 @@ export class DerivConnectionManager {
           return;
         }
 
-        this.addUserLog(userId, `🔍 Conta encontrada: ${contaAlvo.loginid || contaAlvo.id}`);
-
         const accountId = contaAlvo.loginid || contaAlvo.account_id || contaAlvo.id || contaAlvo.client_id || contaAlvo.oauth_client_id;
+        
+        this.addUserLog(userId, `🔍 Conta encontrada: ${accountId}`);
 
-        if (contaAlvo.balance != null) {
-          const bal = parseFloat(contaAlvo.balance);
+        if (contaAlvo.balance != null || contaAlvo.display_balance != null) {
+          const bal = parseFloat(contaAlvo.balance || contaAlvo.display_balance);
           const state = this.getUserState(userId);
           state.balance = bal;
           state.equity = bal;
@@ -240,7 +240,7 @@ export class DerivConnectionManager {
       if (needsAuthCommand) {
         ws.send(JSON.stringify({ authorize: tokenToUse }));
       } else {
-        ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+        ws.send(JSON.stringify({ balance: 1, subscribe: 1, account: accountId }));
         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ portfolio: 1 }));
         ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 25 }));
@@ -257,7 +257,7 @@ export class DerivConnectionManager {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
+          ws.send(JSON.stringify({ balance: 1, subscribe: 1, account: accountId }));
           ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
           ws.send(JSON.stringify({ portfolio: 1 }));
           ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 25 }));
