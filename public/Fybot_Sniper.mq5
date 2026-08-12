@@ -247,7 +247,10 @@ void OnTick()
                double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
                if(step > 0) dcaLot = MathFloor(dcaLot / step) * step;
                double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+               double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
                if(dcaLot < minLot) dcaLot = minLot;
+               if(maxLot > 0 && dcaLot > maxLot) dcaLot = maxLot;
+               dcaLot = NormalizeDouble(dcaLot, 2);
               }
               
             if (currentType == POSITION_TYPE_BUY)
@@ -333,7 +336,10 @@ void OnTick()
          if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
          
          double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+         double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
          if(currentLotSize < minLot) currentLotSize = minLot;
+         if(maxLot > 0 && currentLotSize > maxLot) currentLotSize = maxLot;
+         currentLotSize = NormalizeDouble(currentLotSize, 2);
         }
       else
         {
