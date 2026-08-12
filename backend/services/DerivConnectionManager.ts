@@ -101,7 +101,8 @@ export class DerivConnectionManager {
       
       let authHeader = tokenToUse.startsWith('Bearer ') ? tokenToUse : `Bearer ${tokenToUse}`;
       let resContas = await fetch(`${BASE}/options/accounts`, { 
-        headers: { ...baseHeaders, 'Authorization': authHeader } 
+        headers: { ...baseHeaders, 'Authorization': authHeader },
+        signal: AbortSignal.timeout(4000)
       });
 
       let contasText = await resContas.text();
@@ -110,7 +111,8 @@ export class DerivConnectionManager {
         authHeader = tokenToUse.replace(/^Bearer\s+/i, '');
         this.addUserLog(userId, `🔄 Tentando autorização direta do Token PAT sem o prefixo Bearer...`);
         resContas = await fetch(`${BASE}/options/accounts`, { 
-          headers: { ...baseHeaders, 'Authorization': authHeader } 
+          headers: { ...baseHeaders, 'Authorization': authHeader },
+          signal: AbortSignal.timeout(4000)
         });
         contasText = await resContas.text();
       }
@@ -211,7 +213,8 @@ export class DerivConnectionManager {
             body: JSON.stringify({
               client_id: appIdString,
               token: tokenToUse
-            })
+            }),
+            signal: AbortSignal.timeout(4000)
           });
           
           const respText = await resOtp.text();

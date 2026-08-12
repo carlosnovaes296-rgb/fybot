@@ -58,7 +58,10 @@ router.post("/otp", async (req, res) => {
         };
 
         // Sempre busca as contas para obter o saldo atualizado
-        const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { headers });
+        const accountsRes = await fetch('https://api.derivws.com/trading/v1/options/accounts', { 
+            headers,
+            signal: AbortSignal.timeout(4000)
+        });
         const textRes = await accountsRes.text();
         let accountsData: any;
         try {
@@ -87,7 +90,7 @@ router.post("/otp", async (req, res) => {
         // Pede o OTP para a conta resolvida
         const otpRes = await fetch(
             `https://api.derivws.com/trading/v1/options/accounts/${resolvedAccountId}/otp`,
-            { method: 'POST', headers, body: '{}' }
+            { method: 'POST', headers, body: '{}', signal: AbortSignal.timeout(4000) }
         );
         const otpData: any = await otpRes.json();
 
@@ -131,7 +134,8 @@ router.get("/accounts", async (req, res) => {
             headers: {
                 'Authorization': `Bearer ${patToken}`,
                 'Deriv-App-ID': appId,
-            }
+            },
+            signal: AbortSignal.timeout(4000)
         });
         const accountsData = await accountsRes.json();
         return res.json(accountsData);
