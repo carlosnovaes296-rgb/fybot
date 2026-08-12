@@ -565,7 +565,7 @@ async function startServer() {
              state.blockedUntil = getNextSessionStart();
              addUserLog(userId as string, "🏆 Parabéns volte amanhã hoje sua meta foi concluída com sucesso.");
              if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-             state.botRunning = false;
+             // state.botRunning = false; // Removido para testes
          }
       } else if (!isTradingWindowOpen()) {
          if (!state.systemBlocked) {
@@ -573,7 +573,7 @@ async function startServer() {
              state.blockedUntil = getNextSessionStart();
              addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
              if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-             state.botRunning = false;
+             // state.botRunning = false; // Removido para testes
          }
       } else {
          // Se estamos dentro do horário de operação
@@ -1450,39 +1450,7 @@ async function startServer() {
     }
   });
 
-  // Rota de controle do bot
-  app.post('/api/control', (req, res) => {
-    const { action, userId, tradeSettings } = req.body;
-    const user = users.find(u => u.id === userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const state = getUserState(userId);
 
-    if (action === 'start') {
-        const tokenToUse = user.activeAccountType === 'DEMO' ? user.derivTokenDemo : user.derivTokenReal;
-        if (!tokenToUse) {
-            return res.status(400).json({ error: 'Token da Deriv não configurado para o modo ' + user.activeAccountType });
-        }
-        
-        state.botRunning = true;
-        if (tradeSettings) {
-            state.tradeSettings = tradeSettings; // Se precisar salvar algo
-        }
-        
-        if (globalConnectionManager) globalConnectionManager.start(userId);
-        if (globalDerivEngine) globalDerivEngine.connectWithToken(tokenToUse);
-        addUserLog(userId, `🚀 Iniciando operação no modo ${user.activeAccountType}.`);
-        saveDB();
-        res.json({ success: true, botRunning: state.botRunning });
-    } else if (action === 'stop') {
-        state.botRunning = false;
-        if (globalConnectionManager) globalConnectionManager.stop(userId);
-        addUserLog(userId, '⏸️ Bot pausado pelo usuário.');
-        saveDB();
-        res.json({ success: true, botRunning: state.botRunning });
-    } else {
-        res.status(400).json({ error: 'Invalid action' });
-    }
-  });
   app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
     try {
       const id = req.params.id;
