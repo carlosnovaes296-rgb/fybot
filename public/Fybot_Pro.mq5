@@ -13,7 +13,7 @@
 
 input group "=== Licenciamento ==="
 input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
-input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
+input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook-dca"; // ROTA SECRETA (DCA)
 
 input group "=== Configurações da Estratégia ==="
 input double   InpLotSize = 0.01;            // Tamanho do Lote Fixo
@@ -60,8 +60,8 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // MUDANÇA: EMA mudou de M15 para M1 para o robô reagir rapidamente à tendência atual
-   handleEma21 = iMA(_Symbol, PERIOD_M1, 21, 0, MODE_EMA, PRICE_CLOSE);
+   // CORREÇÃO CRÍTICA: EMA DEVE ser M15. Se usar M1, o preço cruza a EMA antes do RSI dar o sinal, e o robô nunca abre ordem!
+   handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
    handleRsi14 = iRSI(_Symbol, PERIOD_M1, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
@@ -300,7 +300,7 @@ void OnTick()
 
       // --- Lógica a Favor da Tendência (M1) ---
       // Se a tendência é de ALTA (preço acima da EMA M1), ele espera o RSI cair (pullback) para COMPRAR
-      if(trend == "TREND_UP" && rsi[0] <= 30)
+      if(trend == "TREND_UP" && rsi[0] <= 49)
         {
          double buySL = currentAsk - slDist;
          double buyTP = currentAsk + tpDist;
@@ -315,7 +315,7 @@ void OnTick()
            }
         }
       // Se a tendência é de BAIXA (preço abaixo da EMA M1), ele espera o RSI subir (pullback) para VENDER
-      else if(trend == "TREND_DOWN" && rsi[0] >= 70)
+      else if(trend == "TREND_DOWN" && rsi[0] >= 51)
         {
          double sellSL = currentBid + slDist;
          double sellTP = currentBid - tpDist;

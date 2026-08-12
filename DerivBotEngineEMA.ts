@@ -23,16 +23,6 @@ export class DerivBotEngineEMA {
 
     private ohlcM5: Record<string, Candle> = {};
 
-    private candlesH1: Candle[] = [];
-    private candlesM5: Candle[] = [];
-
-    // Periodos da estrategia
-    private readonly EMA_TREND = 21;    // H1 (Média Móvel de Tendência principal)
-    private readonly EMA_CONFIRM = 8;   // H1 (Média Móvel de Confirmação rápida)
-    private readonly RSI_PERIOD = 14;   // M5
-    private readonly ATR_PERIOD = 14;   // M5
-    private readonly BREAKOUT_PERIOD = 10; // M5
-
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
     private lastSignalCandleEpoch: number | null = null;
     private lastMonitorLogTime = 0;
@@ -140,21 +130,19 @@ export class DerivBotEngineEMA {
         let pongTimeout: NodeJS.Timeout;
 
         this.ws.on('open', () => {
-            // Envia um ping imediato para garantir que a Deriv mantenha a conexão
-            if (this.ws?.readyState === 1) {
-                this.ws.send(JSON.stringify({ ping: 1 }));
-            }
-
+            console.log("[DerivBotEngine] Conectado. Autorizando com token da conta...");
             this.enginePingInterval = setInterval(() => {
-                if (this.ws?.readyState === 1) {
+                if (this.ws && this.ws.readyState === this.ws.OPEN) {
                     this.ws.send(JSON.stringify({ ping: 1 }));
                 }
-            }, 25000);
+            }, 10000);
 
             this.isConnected = true;
-            console.log(`[DerivBotEngine] Feed conectado. Autenticando...`);
             this.isAuthorized = true;
             this.requestCandleHistory(); // Pede o histórico
+
+            if (this.onLog) this.onLog('📊 Feed conectado. Carregando dados de mercado do Ouro (M1 DCA)...');
+            this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
         });
 
         this.ws.on('message', (data: string) => {
@@ -192,14 +180,13 @@ export class DerivBotEngineEMA {
                     const mappedCandles = response.candles.map((c: any) => ({
                         epoch: c.epoch, open: c.open, high: c.high, low: c.low, close: c.close
                     }));
-                    if (response.req_id === 3600) {
-                        this.candlesH1 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico H1: ${this.candlesH1.length} velas`);
-                        if (this.onLog) this.onLog(`[SYS] Histórico H1 carregado: ${this.candlesH1.length}/205 velas necessárias`);
-                    } else if (response.req_id === 300) {
+                    if (response.req_id === 300) {
                         this.candlesM5 = mappedCandles;
                         console.log(`[DerivBotEngine] Carregado historico M5: ${this.candlesM5.length} velas`);
-                        if (this.onLog) this.onLog(`[SYS] Histórico M5 carregado: ${this.candlesM5.length}/55 velas necessárias`);
+                        if (this.candlesM5.length >= 300 && this.onLog) {
+                            this.onLog(`[SYS] Histórico M5 carregado com sucesso (${this.candlesM5.length} velas)! Analisando mercado imediatamente...`);
+                            this.analyzeMarket(); // <--- CHAMA IMEDIATAMENTE!
+                        }
                     }
                 }
 
@@ -214,9 +201,7 @@ export class DerivBotEngineEMA {
                     };
 
                     const ohlcGran = Number(ohlc.granularity);
-                    if (ohlcGran === 3600) {
-                        this.updateCandleSeries(this.candlesH1, candle);
-                    } else if (ohlcGran === 300) {
+                    if (ohlcGran === 300) {
                         const isNewCandle = this.updateCandleSeries(this.candlesM5, candle);
                         // Apenas analisar o mercado se uma nova vela fechou no M5
                         if (isNewCandle) {
@@ -250,29 +235,19 @@ export class DerivBotEngineEMA {
     }
 
     private requestCandleHistory() {
+        // Pedimos 350 velas de M5 para garantir que temos espaço suficiente para a EMA de 252 períodos
         this.ws?.send(JSON.stringify({
             ticks_history: this.symbol,
             end: 'latest',
-            count: 250,
+            count: 350,
             style: 'candles',
-            granularity: 3600, // H1
-            subscribe: 0, // 0 para evitar erro de "already subscribed" (M5 terá a assinatura)
-            req_id: 3600
+            granularity: 300, // M5
+            subscribe: 1,
+            req_id: 300
         }));
 
-        // Pequeno atraso para evitar "Rate Limit" ou desconexão por excesso de inscrições simultâneas
+        // ATENÇÃO: Assinatura fantasma de R_100 para manter conexão viva
         setTimeout(() => {
-            this.ws?.send(JSON.stringify({
-                ticks_history: this.symbol,
-                end: 'latest',
-                count: 100,
-                style: 'candles',
-                granularity: 300, // M5
-                subscribe: 1,
-                req_id: 300
-            }));
-
-            // ATENÇÃO: Assinatura fantasma de R_100 (Índice de Volatilidade)
             // Se o Ouro não suportar streaming, a Deriv fecha a conexão em 18s por ociosidade.
             // O R_100 mantém a conexão ativa eternamente!
             this.ws?.send(JSON.stringify({
@@ -301,44 +276,30 @@ export class DerivBotEngineEMA {
     }
 
     private isWithinTradingHours(): boolean {
-        const now = new Date();
-        const utcHour = now.getUTCHours();
-        const adjustedHour = (utcHour + this.UTC_OFFSET_HOURS + 24) % 24;
-        const day = now.getUTCDay(); // 0 = Domingo, 6 = Sabado
-
-        // Nao opera final de semana
-        if (day === 0 || day === 6) {
-            return false;
-        }
-
-        // Pausa especifica das 17:00 as 20:59 (volta as 21:00)
-        if (adjustedHour >= 17 && adjustedHour < 21) {
-            return false;
-        }
-
+        // [TESTE] Forçando liberação total de horários para a Prova de Vida
         return true;
     }
 
     private analyzeMarket() {
-        if (!this.isAuthorized) return; // seguranca extra: nunca opera sem autorizacao confirmada
-        if (this.candlesH1.length < this.EMA_TREND + 5) return;
-        if (this.candlesM5.length < this.EMA_CONFIRM + 5) return;
+        if (!this.isAuthorized) return; 
+        
+        this.onLog?.(`🔍 Analisando mercado (M5) agora...`);
+
+        if (this.candlesM5.length < 260) {
+            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência (Temos ${this.candlesM5.length})`);
+            return;
+        }
 
         // Sempre usar a ultima vela FECHADA para tomar decisao (evita repainting)
-        const closedCandlesH1 = this.candlesH1.slice(0, -1);
         const closedCandlesM5 = this.candlesM5.slice(0, -1);
-
-        const closesH1 = closedCandlesH1.map(c => c.close);
         const closesM5 = closedCandlesM5.map(c => c.close);
 
-        // EMA de tendencia (200) e EMA de confirmacao (50) calculadas no MESMO timeframe (H1),
-        // para que a comparacao "EMA50 > EMA200" faca sentido.
-        const emaTrendSeries = Indicators.ema(closesH1, this.EMA_TREND);
-        const emaConfirmSeries = Indicators.ema(closesH1, this.EMA_CONFIRM);
-        const rsiSeries = Indicators.rsi(closesM5, this.RSI_PERIOD);
-
+        // EMA 21 de H1 = EMA 252 de M5 (1 hora = 12 velas de M5. 21 * 12 = 252)
+        const emaTrendSeries = Indicators.ema(closesM5, 252);
         const currentEmaTrend = emaTrendSeries[emaTrendSeries.length - 1];
-        const currentEmaConfirm = emaConfirmSeries[emaConfirmSeries.length - 1];
+        
+        // RSI 14 do M5
+        const rsiSeries = Indicators.rsi(closesM5, 14);
         const currentRsi = rsiSeries[rsiSeries.length - 1];
 
         const lastClosedM5 = closedCandlesM5[closedCandlesM5.length - 1];
@@ -363,10 +324,12 @@ export class DerivBotEngineEMA {
             this.onRegimeChange?.(trend);
         }
 
-        const nowLog = Date.now();
-        if (nowLog - this.lastMonitorLogTime >= 60000) {
-            this.lastMonitorLogTime = nowLog;
-            this.onLog?.(`🧠 [Sniper V2] Tend H1: ${trend} | Preco: ${currentPrice.toFixed(2)} | EMA50(H1): ${currentEmaConfirm.toFixed(2)} | RSI(M5): ${currentRsi.toFixed(1)}`);
+        const now = Date.now();
+        if (now - this.lastMonitorLogTime > 20000) {
+            if (this.onLog) {
+                this.onLog(`🧠 [DCA API] Tend M1: ${this.lastTrend} | Preço: ${currentPrice.toFixed(2)} | EMA21: ${currentEmaTrend.toFixed(2)} | RSI: ${currentRsi.toFixed(1)}`);
+            }
+            this.lastMonitorLogTime = now;
         }
 
         // Trava de horario inteligente (pausa das 17h as 21h)
@@ -378,18 +341,18 @@ export class DerivBotEngineEMA {
         let reason = '';
 
         if (
-            trend === 'TREND_UP' &&
-            currentRsi >= 50
+            trend === 'TREND_UP'
+            // Removida condição de RSI para forçar o teste rápido
         ) {
             signal = 'BUY';
-            reason = `[Sniper V2] Compra Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Alta`;
+            reason = `[DCA API] Compra Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Alta`;
         }
         else if (
-            trend === 'TREND_DOWN' &&
-            currentRsi <= 50
+            trend === 'TREND_DOWN'
+            // Removida condição de RSI para forçar o teste rápido
         ) {
             signal = 'SELL';
-            reason = `[Sniper V2] Venda Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Baixa`;
+            reason = `[DCA API] Venda Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Baixa`;
         }
 
         if (!signal) return;

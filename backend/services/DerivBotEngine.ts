@@ -1,6 +1,5 @@
 import { WebSocket as NodeWebSocket } from 'ws';
-import { Indicators } from './Indicators.ts';
-import type { Candle } from './Indicators.ts';
+import { Indicators, Candle } from './Indicators.ts';
 
 export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
@@ -22,11 +21,8 @@ export class DerivBotEngineEMA {
     private maxHistory: number = 300;
     private enginePingInterval: NodeJS.Timeout | null = null;
 
-    private candlesM1: Candle[] = [];
-
-    // Periodos da estrategia (Sniper M1)
-    private readonly EMA_TREND = 21;    // M1
-    private readonly RSI_PERIOD = 14;   // M1
+    private candlesM15: Candle[] = [];
+    private ATR_PERIOD = 14;
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
     private lastSignalCandleEpoch: number | null = null;
@@ -57,15 +53,9 @@ export class DerivBotEngineEMA {
         if (force && this.isConnected) {
             this.disconnect();
         }
-        let clean = (token || '').trim();
-        while (clean.startsWith('pat_pat_')) {
-            clean = clean.replace(/^pat_pat_/, 'pat_');
-        }
-        this.currentToken = clean;
+        this.currentToken = token;
 
         console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=${this.appId})...`);
-        if (this.onLog) this.onLog(`📡 Conectando ao feed da Deriv...`);
-
         let finalWsUrl = `wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT`;
         let isMagic = false;
 
@@ -83,7 +73,6 @@ export class DerivBotEngineEMA {
                 if (resContas.ok) {
                     const contasData = await resContas.json();
                     const contasArray = contasData.accounts || contasData.data || contasData;
-                    // Pega a primeira conta real disponível ou qualquer conta se não houver real
                     let contaAlvo = null;
                     if (Array.isArray(contasArray) && contasArray.length > 0) {
                         contaAlvo = contasArray.find(a => {
@@ -141,23 +130,19 @@ export class DerivBotEngineEMA {
         let pongTimeout: NodeJS.Timeout;
 
         this.ws.on('open', () => {
-            // Envia um ping imediato para garantir que a Deriv mantenha a conexão
-            if (this.ws?.readyState === 1) {
-                this.ws.send(JSON.stringify({ ping: 1 }));
-            }
-
+            console.log("[DerivBotEngine] Conectado. Autorizando com token da conta...");
             this.enginePingInterval = setInterval(() => {
-                if (this.ws?.readyState === 1) {
+                if (this.ws && this.ws.readyState === this.ws.OPEN) {
                     this.ws.send(JSON.stringify({ ping: 1 }));
                 }
-            }, 25000);
+            }, 10000);
 
             this.isConnected = true;
-            console.log(`[DerivBotEngine] Feed conectado. Carregando dados de mercado...`);
-            if (this.onLog) this.onLog(`📊 Feed conectado. Carregando dados de mercado do Ouro (M1 Sniper)...`);
-
             this.isAuthorized = true;
             this.requestCandleHistory();
+
+            if (this.onLog) this.onLog('📊 Feed conectado. Carregando dados de mercado do Ouro (M1 DCA)...');
+            this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
         });
 
         this.ws.on('message', (data: string) => {
@@ -174,27 +159,29 @@ export class DerivBotEngineEMA {
                     if (this.onLog) this.onLog(`[SYS] Erro Deriv: ${response.error.message || JSON.stringify(response.error)}`);
                     if (response.msg_type === 'authorize') {
                         this.isAuthorized = false;
-                        if (this.onLog) this.onLog(`⚠️ Token da conta inválido: ${response.error.message}.`);
-                    } else if (response.error.message && response.error.message.includes('frxXAUUSD is invalid')) {
-                        console.warn('[DerivBotEngine] Símbolo de Ouro indisponível temporariamente na Deriv');
                     }
                     return;
                 }
 
                 if (response.msg_type === 'authorize') {
                     this.isAuthorized = true;
+                    console.log(`[DerivBotEngine] Autorizado com sucesso. Conta: ${response.authorize?.loginid}`);
                     if (this.onLog) this.onLog(`✅ Conta autorizada: ${response.authorize?.loginid}`);
                     if (this.onAuthorized) this.onAuthorized(response.authorize);
+                    return;
                 }
 
                 if (response.msg_type === 'candles') {
                     const mappedCandles = response.candles.map((c: any) => ({
                         epoch: c.epoch, open: c.open, high: c.high, low: c.low, close: c.close
                     }));
-                    if (response.req_id === 60) {
-                        this.candlesM1 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico M1: ${this.candlesM1.length} velas`);
-                        if (this.onLog) this.onLog(`[SYS] Histórico M1 (Sniper) carregado: ${this.candlesM1.length} velas`);
+                    if (response.req_id === 300) {
+                        this.candlesM15 = mappedCandles;
+                        console.log(`[DerivBotEngine] Carregado historico M15: ${this.candlesM15.length} velas`);
+                        if (this.candlesM15.length >= 300 && this.onLog) {
+                            this.onLog(`[SYS] Histórico M15 carregado com sucesso (${this.candlesM15.length} velas)! Analisando mercado imediatamente...`);
+                            this.analyzeMarket();
+                        }
                     }
                 }
 
@@ -209,9 +196,8 @@ export class DerivBotEngineEMA {
                     };
 
                     const ohlcGran = Number(ohlc.granularity);
-                    if (ohlcGran === 60) {
-                        const isNewCandle = this.updateCandleSeries(this.candlesM1, candle);
-                        // Apenas analisar o mercado se uma nova vela fechou no M1
+                    if (ohlcGran === 900) {
+                        const isNewCandle = this.updateCandleSeries(this.candlesM15, candle);
                         if (isNewCandle) {
                             this.analyzeMarket();
                         }
@@ -226,7 +212,8 @@ export class DerivBotEngineEMA {
             const reasonStr = reason ? reason.toString() : 'Desconhecido';
             console.log(`[DerivBotEngine] Conexao com feed fechada. Codigo: ${code}, Motivo: ${reasonStr}`);
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
-            if (this.onLog) this.onLog(`⚠️ Conexao Deriv fechada. Código: ${code} | Motivo: ${reasonStr}`);
+            console.log('[DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...');
+            if (this.onLog) this.onLog(`⚠️ Conexao com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
             this.isAuthorized = false;
             setTimeout(() => {
@@ -234,10 +221,9 @@ export class DerivBotEngineEMA {
             }, 5000);
         });
 
-        this.ws.on('error', (err: any) => {
+        this.ws.on('error', (err) => {
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
             console.error('[DerivBotEngine] Erro no socket de feed:', err);
-            if (this.onLog) this.onLog(`⚠️ Erro no feed de mercado: ${err?.message || err}`);
             this.ws?.terminate();
         });
     }
@@ -246,16 +232,13 @@ export class DerivBotEngineEMA {
         this.ws?.send(JSON.stringify({
             ticks_history: this.symbol,
             end: 'latest',
-            count: 300,
+            count: 350,
             style: 'candles',
-            granularity: 60, // M1
+            granularity: 900,
             subscribe: 1,
-            req_id: 60
+            req_id: 300
         }));
 
-        // ATENÇÃO: Assinatura fantasma de R_100 (Índice de Volatilidade)
-        // Se o Ouro não suportar streaming, a Deriv fecha a conexão em 18s por ociosidade.
-        // O R_100 mantém a conexão ativa eternamente!
         setTimeout(() => {
             this.ws?.send(JSON.stringify({
                 ticks: 'R_100',
@@ -277,7 +260,7 @@ export class DerivBotEngineEMA {
         } else if (newCandle.epoch > lastCandle.epoch) {
             series.push(newCandle);
             if (series.length > 500) series.shift();
-            return true; // Retorna true se fechou a vela anterior e abriu uma nova
+            return true;
         }
         return false;
     }
@@ -303,82 +286,77 @@ export class DerivBotEngineEMA {
 
     private analyzeMarket() {
         if (!this.isAuthorized) return; 
-        if (this.candlesM1.length < this.EMA_TREND + 5) return;
+        
+        this.onLog?.(`🔍 Analisando mercado (M15) agora...`);
 
-        // Sempre usar a ultima vela FECHADA para tomar decisao (evita repainting)
-        const closedCandlesM1 = this.candlesM1.slice(0, -1);
-        const closesM1 = closedCandlesM1.map(c => c.close);
+        if (this.candlesM15.length < 50) {
+            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência (Temos ${this.candlesM15.length})`);
+            return;
+        }
 
-        const emaTrendSeries = Indicators.ema(closesM1, this.EMA_TREND);
-        const rsiSeries = Indicators.rsi(closesM1, this.RSI_PERIOD);
+        const closedCandlesM15 = this.candlesM15.slice(0, -1);
+        const closesM15 = closedCandlesM15.map(c => c.close);
 
-        const currentEmaTrend = emaTrendSeries[emaTrendSeries.length - 1];
+        const ema8Series = Indicators.ema(closesM15, 8);
+        const currentEma8 = ema8Series[ema8Series.length - 1];
+
+        const ema28Series = Indicators.ema(closesM15, 28);
+        const currentEma28 = ema28Series[ema28Series.length - 1];
+        
+        const rsiSeries = Indicators.rsi(closesM15, 14);
         const currentRsi = rsiSeries[rsiSeries.length - 1];
 
-        const lastClosedM1 = closedCandlesM1[closedCandlesM1.length - 1];
-        const currentPrice = lastClosedM1.close;
+        const lastClosedM15 = closedCandlesM15[closedCandlesM15.length - 1];
+        const currentPrice = lastClosedM15.close;
 
-        // Define tendencia com base no preco vs EMA21 (M1)
+        const atrSeries = Indicators.atr(closedCandlesM15, this.ATR_PERIOD);
+        const currentAtr = atrSeries[atrSeries.length - 1];
+
         let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > currentEmaTrend) trend = 'TREND_UP';
-        else if (currentPrice < currentEmaTrend) trend = 'TREND_DOWN';
+        if (currentPrice > currentEma8 && currentEma8 > currentEma28) {
+            trend = 'TREND_UP';
+        } else if (currentPrice < currentEma8 && currentEma8 < currentEma28) {
+            trend = 'TREND_DOWN';
+        }
 
         if (trend !== this.lastTrend) {
             this.lastTrend = trend;
-            this.onRegimeChange?.(trend);
+            if (this.onRegimeChange) this.onRegimeChange(trend);
         }
 
-        const nowLog = Date.now();
-        if (nowLog - this.lastMonitorLogTime >= 60000) {
-            this.lastMonitorLogTime = nowLog;
-            this.onLog?.(`🧠 [Sniper V3] Tend M1: ${trend} | Preço: ${currentPrice.toFixed(2)} | EMA21: ${currentEmaTrend.toFixed(2)} | RSI: ${currentRsi.toFixed(1)}`);
-        }
-
-        if (!this.isWithinTradingHours()) {
-           return;
-        }
+        if (!this.isWithinTradingHours()) return;
 
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        // Sniper Mean Reversion / Pullback Logic
-        // Em M1, usamos RSI 40 e 60 com EMA 21 para pegar pullbacks frequentes e seguros
-        if (
-            trend === 'TREND_UP' &&
-            currentRsi <= 40
-        ) {
+        if (trend === 'TREND_UP' && currentRsi >= 60) {
             signal = 'BUY';
-            reason = `[Sniper M1] Compra Confirmada (Pullback) | RSI: ${currentRsi.toFixed(1)} | Tendência Alta`;
+            reason = `[DCA API] Compra | RSI: ${currentRsi.toFixed(1)} | EMA8 > EMA28`;
         }
-        else if (
-            trend === 'TREND_DOWN' &&
-            currentRsi >= 60
-        ) {
+        else if (trend === 'TREND_DOWN' && currentRsi <= 40) {
             signal = 'SELL';
-            reason = `[Sniper M1] Venda Confirmada (Pullback) | RSI: ${currentRsi.toFixed(1)} | Tendência Baixa`;
+            reason = `[DCA API] Venda | RSI: ${currentRsi.toFixed(1)} | EMA8 < EMA28`;
         }
 
-        if (!signal) return;
-
-        // One Shot: evita enviar sinal repetido na mesma vela
-        const currentCandleEpoch = lastClosedM1.epoch;
-        if (currentCandleEpoch === this.lastSignalCandleEpoch) return;
-        this.lastSignalCandleEpoch = currentCandleEpoch;
-
-        // Sniper TP: 0.02% | SL: 0.30%
-        const tpDistance = currentPrice * 0.0002;
-        const slDistance = currentPrice * 0.0030;
-
-        let tpPrice = 0, slPrice = 0;
-        if (signal === 'BUY') {
-            tpPrice = parseFloat((currentPrice + tpDistance).toFixed(2));
-            slPrice = parseFloat((currentPrice - slDistance).toFixed(2));
-        } else {
-            tpPrice = parseFloat((currentPrice - tpDistance).toFixed(2));
-            slPrice = parseFloat((currentPrice + slDistance).toFixed(2));
+        if (signal && this.onSignal && lastClosedM15.epoch !== this.lastSignalCandleEpoch) {
+            this.lastSignalCandleEpoch = lastClosedM15.epoch;
+            
+            // Distancia padrao baseada no ATR (ex: 1.5x)
+            let dynamicDistance = currentAtr * 1.5;
+            
+            // Limite maximo de 0.05% do preco para proteger a operacao
+            const maxDistance = currentPrice * 0.0005; 
+            
+            if (dynamicDistance > maxDistance) {
+                dynamicDistance = maxDistance; // Trava no maximo de 0.05%
+            }
+            
+            // Relacao 1:1 entre SL e TP
+            const tp = signal === 'BUY' ? currentPrice + dynamicDistance : currentPrice - dynamicDistance;
+            const sl = signal === 'BUY' ? currentPrice - dynamicDistance : currentPrice + dynamicDistance;
+            
+            this.onLog?.(`[DCA API] SL/TP calculados: Distância ${dynamicDistance.toFixed(2)} (ATR: ${currentAtr.toFixed(2)})`);
+            this.onSignal(signal, currentPrice, reason, tp, sl);
         }
-
-        this.onLog?.(`🔥 Sinal Disparado: ${signal} em ${currentPrice.toFixed(2)} | TP: ${tpPrice.toFixed(2)} (0.02%) | SL: ${slPrice.toFixed(2)} (0.30%)`);
-        this.onSignal?.(signal, currentPrice, reason, tpPrice, slPrice);
     }
 }

@@ -309,7 +309,22 @@ async function startServer() {
         // WIPE LOGS SO THE USER SEES A FRESH START WITH MT5
         userStates[row.userId] = { ...stateData, logs: [], pendingOrders: new Set(stateData.pendingOrders || []) };
       }
+      
       console.log(`FYBOT: Loaded ${users.length} users and states from MySQL ✅`);
+
+      // AUTO-START BOTS THAT WERE RUNNING
+      users.forEach(u => {
+          const state = getUserState(u.id);
+          if (state.botRunning) {
+              if (globalConnectionManager) globalConnectionManager.start(u.id);
+              
+              const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
+              if (activeToken && activeToken.startsWith('pat_')) {
+                  if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
+              }
+          }
+      });
+
     } catch (e) {
       console.error('FYBOT: CRITICAL ERROR - Failed to load DB', e);
       console.error('FYBOT: Shutting down to prevent data overwrite.');
@@ -366,21 +381,7 @@ async function startServer() {
           });
       }
   };
-  
-  // Inicia WS para usuários que já estavam com o robô ligado (MAS APENAS SE FOR TESTE)
-  // Como estamos testando o motor oculto, NÃO ligaremos no restart, o admin liga manual.
-  users.forEach(u => {
-      const state = getUserState(u.id);
-      if (state.botRunning) {
-          // globalConnectionManager!.start(u.id);
-          
-          // Ensure botEngine native analysis is also started for this user
-          const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
-          if (activeToken && activeToken.startsWith('pat_')) {
-          }
-      }
-  });
-
+  // users.forEach auto-start was moved inside loadDB()
   const saveDB = async () => {
     if (!users || users.length === 0) return;
     try {
@@ -448,6 +449,10 @@ async function startServer() {
             globalDerivEngine.connectWithToken(token);
         }
         
+        const state = getUserState(userId);
+        // NÃO LIGAR O BOTÃO GERAL: state.botRunning = true;
+        saveDB();
+        
         addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Iniciada Manualmente.`);
         res.json({ success: true, message: "Deriv test started" });
       } else {
@@ -471,6 +476,10 @@ async function startServer() {
         if (globalConnectionManager.getActiveUserIds().length === 0) {
             globalDerivEngine.disconnect();
         }
+        
+        const state = getUserState(userId);
+        state.botRunning = false;
+        saveDB();
         
         addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Parada Manualmente.`);
         res.json({ success: true, message: "Deriv test stopped" });
@@ -600,7 +609,9 @@ async function startServer() {
           const parseTime = (t: any) => {
              if (!t) return 0;
              if (typeof t === 'number') return t < 10000000000 ? t * 1000 : t;
-             const d = new Date(typeof t === 'string' ? t.replace(/\./g, '-') : t);
+             // Only replace dots for MT5 YYYY.MM.DD format, don't break ISO strings YYYY-MM-DDTHH:mm:ss.mssZ
+             const dateStr = typeof t === 'string' ? (t.includes('T') ? t : t.replace(/\./g, '-')) : t;
+             const d = new Date(dateStr);
              return isNaN(d.getTime()) ? 0 : d.getTime();
           };
           // AUTO-CLEANUP a pedido do usuario: remove apenas as ordens fantasmas que foram geradas com o timestamp defeituoso
@@ -617,7 +628,13 @@ async function startServer() {
                   return true;
               });
           }
-          const allTrades = [...(state.trades || [])].sort((a: any, b: any) => parseTime(b.time || b.openTime) - parseTime(a.time || a.openTime));
+          const now = Date.now();
+          const allTrades = [...(state.trades || [])]
+            .filter((t: any) => {
+                const tTime = parseTime(t.time || t.openTime);
+                return (now - tTime) < (48 * 60 * 60 * 1000);
+            })
+            .sort((a: any, b: any) => parseTime(b.time || b.openTime) - parseTime(a.time || a.openTime));
           const openTrades = allTrades.filter(t => t.status === 'OPEN');
           const closedTrades = allTrades.filter(t => t.status !== 'OPEN');
           return [...openTrades, ...closedTrades].slice(0, 50);
@@ -1038,24 +1055,20 @@ async function startServer() {
       // state.trades = []; 
       // state.dailyProfit = 0;
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
-      // if (globalConnectionManager) globalConnectionManager.start(userId);
+      if (globalConnectionManager) globalConnectionManager.start(userId);
       
-      // MIGRADO PARA MT5: O painel web não puxa mais a conexão via Token da Deriv!
-      // Ele apenas liga o botão visual e aguarda o robô do MT5 enviar os Webhooks.
-      /*
       if (user) {
           const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
           if (activeToken && activeToken.startsWith('pat_')) {
-              // API bot connect logic removed
+              if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
           }
       }
-      */
 
     } else {
       state.botRunning = false;
       addUserLog(userId, "FYBOT PRO PARADO - Modo de Segurança ativo.");
       if (globalConnectionManager) globalConnectionManager.stop(userId);
-      // API bot disconnect logic removed
+      if (globalDerivEngine) globalDerivEngine.disconnect();
     }
     
     saveDB(); // <-- Added saveDB() to persist botRunning state!
@@ -1703,8 +1716,9 @@ async function startServer() {
 
   // ==========================================
   // WEBHOOK PARA O MT5 (Robô MQL5 -> Site)
+  // Suporta a Rota Padrão e a Rota Secreta DCA
   // ==========================================
-  app.post('/api/mt5-webhook', (req, res) => {
+  app.post(['/api/mt5-webhook', '/api/mt5-webhook-dca'], (req, res) => {
     try {
       const payload = req.body || {};
       
@@ -1731,12 +1745,23 @@ async function startServer() {
       }
       
       const userId = license.userId;
+      
+      // GUARD: If the user is connected natively via API, IGNORE MT5 BALANCE UPDATES to prevent flashing/conflicts!
+      // This protects the admin testing natively, while clients using MT5 continue to work perfectly!
+      // A Rota Secreta DCA ignora esse bloqueio para você poder testar o DCA sem conflitos!
+      const isDcaRoute = req.path.includes('-dca');
+      const isNativeApiActive = !isDcaRoute && globalConnectionManager && globalConnectionManager.getActiveUserIds().includes(userId);
+
       const state = getUserState(userId);
 
       // Atualiza o estado do usuário com os dados recebidos do MT5
       let prevDailyProfit = state.dailyProfit || 0;
-      if (payload.balance !== undefined) state.balance = payload.balance;
-      if (payload.equity !== undefined) state.equity = payload.equity;
+      
+      if (!isNativeApiActive) {
+          if (payload.balance !== undefined) state.balance = payload.balance;
+          if (payload.equity !== undefined) state.equity = payload.equity;
+      }
+      
       if (payload.daily_profit !== undefined) state.dailyProfit = payload.daily_profit;
       
       let profitDiff = state.dailyProfit - prevDailyProfit;

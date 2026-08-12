@@ -52,8 +52,14 @@ export class DerivConnectionManager {
   }
 
   public async start(userId: string) {
+    this.addUserLog(userId, `[DEBUG] Start connection request received for user ${userId}`);
     const user = this.getUsers().find(u => u.id === userId);
-    if (!user) return;
+    if (!user) {
+        this.addUserLog(userId, `[DEBUG ERROR] User ${userId} not found in getUsers()!`);
+        return;
+    }
+    
+    this.addUserLog(userId, `[DEBUG] User found! Mode: ${user.activeAccountType}`);
 
     const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
     let tokenToUse = (activeToken || '').trim();
@@ -77,6 +83,7 @@ export class DerivConnectionManager {
     const appIdString = "33TVM6cBQ9GfSjbwQHHdE"; 
     let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appIdString}&l=PT`;
     let needsAuthCommand = true;
+    let accountIdToUse: string | undefined = undefined;
     const origin = "https://fybot.life";
     const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)";
 
@@ -114,7 +121,8 @@ export class DerivConnectionManager {
       } catch (err) {
         this.addUserLog(userId, `❌ [ERRO DE TOKEN DERIV] O Token configurado no painel é INVÁLIDO ou EXPIRADO.`);
         const stateOnFail = this.getUserState(userId);
-        if (stateOnFail) stateOnFail.botRunning = false;
+        const u = this.getUsers().find(user => user.id === userId);
+        if (stateOnFail && u && u.role === 'ADMIN') stateOnFail.botRunning = false;
         this.stop(userId);
         return;
       }
@@ -123,13 +131,19 @@ export class DerivConnectionManager {
         const msgErro = contasData.error?.message || contasText;
         this.addUserLog(userId, `❌ [ERRO DE AUTENTICAÇÃO] A Deriv recusou o Token: ${msgErro}`);
         const stateOnFail = this.getUserState(userId);
-        if (stateOnFail) stateOnFail.botRunning = false;
+        const u = this.getUsers().find(user => user.id === userId);
+        if (stateOnFail && u && u.role === 'ADMIN') stateOnFail.botRunning = false;
         this.stop(userId);
         return;
       }
 
       const contasArray = contasData.accounts || contasData.data || contasData;
       if (Array.isArray(contasArray) && contasArray.length > 0) {
+        
+        // NOVO LOG PARA DEPURAR QUAIS CONTAS ESTÃO DISPONÍVEIS
+        const allIds = contasArray.map((a: any) => a.loginid || a.account_id || a.id).join(', ');
+        this.addUserLog(userId, `[DEBUG] Contas disponíveis no Token: ${allIds}`);
+
         const isDemo = user.activeAccountType === 'DEMO';
         let contaAlvo = null;
         if (isDemo) {
@@ -138,10 +152,19 @@ export class DerivConnectionManager {
             return id.includes('VRT') || id.startsWith('VR') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo';
           });
         } else {
+          // Prioridade 1: Conta CR (Conta Real padrão em USD)
           contaAlvo = contasArray.find((a: any) => {
             const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
-            return !(id.includes('VRT') || id.includes('VOT') || id.startsWith('VR') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo');
+            return id.startsWith('CR');
           });
+          
+          // Prioridade 2: Qualquer outra conta real que não seja DEMO
+          if (!contaAlvo) {
+            contaAlvo = contasArray.find((a: any) => {
+              const id = (a.loginid || a.account_id || a.id || a.client_id || "").toString().toUpperCase();
+              return !(id.includes('VRT') || id.includes('VOT') || id.startsWith('VR') || id.startsWith('DOT') || a.is_virtual === 1 || a.is_virtual === true || a.account_type === 'demo');
+            });
+          }
         }
 
         if (!contaAlvo) {
@@ -153,14 +176,18 @@ export class DerivConnectionManager {
         }
 
         const accountId = contaAlvo.loginid || contaAlvo.account_id || contaAlvo.id || contaAlvo.client_id || contaAlvo.oauth_client_id;
+        accountIdToUse = accountId;
         
-        this.addUserLog(userId, `🔍 Conta encontrada: ${accountId}`);
+        this.addUserLog(userId, `🔍 Conta encontrada: ${accountId} | INFO: ${JSON.stringify(contaAlvo)}`);
 
         if (contaAlvo.balance != null || contaAlvo.display_balance != null) {
           const bal = parseFloat(contaAlvo.balance || contaAlvo.display_balance);
           const state = this.getUserState(userId);
           state.balance = bal;
           state.equity = bal;
+          this.addUserLog(userId, `💰 Saldo via REST capturado: ${bal}`);
+        } else {
+          this.addUserLog(userId, `⚠️ API REST não retornou saldo para a conta ${accountId}.`);
         }
 
         if (!accountId) {
@@ -223,7 +250,7 @@ export class DerivConnectionManager {
     let portfolioInterval: NodeJS.Timeout;
     
     ws.on('open', () => {
-      this.addUserLog(userId, `✅ [WS] Conectado à Deriv! Motor Sniper 1x1 ativado.`);
+      this.addUserLog(userId, `✅ [WS] Conectado à Deriv! DCA API ativado.`);
 
       pingInterval = setInterval(() => {
         if (ws.readyState === ws.OPEN) {
@@ -240,16 +267,23 @@ export class DerivConnectionManager {
       if (needsAuthCommand) {
         ws.send(JSON.stringify({ authorize: tokenToUse }));
       } else {
-        ws.send(JSON.stringify({ balance: 1, subscribe: 1, account: accountId }));
+        ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
         ws.send(JSON.stringify({ portfolio: 1 }));
-        ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 25 }));
+        ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 100, sort: "DESC" }));
       }
     });
 
     ws.on('message', (msg: any) => {
       try {
         const data = JSON.parse(msg.toString());
+        
+        // Omitimos o log no painel para não poluir com pings e portfolios a cada segundo
+        console.log(`[WS] msg_type recebido: ${data.msg_type}`, data.error ? `ERRO: ${data.error.message}` : '');
+        
+        if (data.msg_type === 'balance') {
+           // O saldo bruto já é processado na função getBalance, não precisa logar a string no painel
+        }
 
         if (data.msg_type === 'authorize') {
           if (data.error) {
@@ -257,10 +291,15 @@ export class DerivConnectionManager {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ balance: 1, subscribe: 1, account: accountId }));
+          ws.send(JSON.stringify({ balance: 1, subscribe: 1 }));
           ws.send(JSON.stringify({ proposal_open_contract: 1, subscribe: 1 }));
           ws.send(JSON.stringify({ portfolio: 1 }));
-          ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 25 }));
+          ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 100, sort: "DESC" }));
+        }
+
+        if (data.error) {
+           this.addUserLog(userId, `⚠️ [DERIV API] Erro: ${data.error.message}`);
+           return;
         }
 
         if (data.msg_type === 'profit_table' && data.profit_table && data.profit_table.transactions) {
@@ -500,6 +539,9 @@ export class DerivConnectionManager {
 
     if (openTradesCount >= DerivConnectionManager.MAX_OPEN_ORDERS) {
       // Já existe 1 ordem aberta, modo 1x1 ignora.
+      if (Math.random() < 0.2) {
+          this.addUserLog(userId, `⚠️ Sinal recebido, mas já existe 1 ordem aberta. Aguardando fechamento (Modo 1x1).`);
+      }
       return;
     }
 

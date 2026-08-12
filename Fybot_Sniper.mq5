@@ -20,9 +20,9 @@ input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do S
 
 input group "=== Configurações da Estratégia ==="
 input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
-input double             InpRiskPct = 2.0;           // Risco da Banca (%) - Se Dinâmico
+input double             InpRiskPct = 1.0;           // Volume da Banca (%) - Se Dinâmico
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
-input double   InpTakeProfitPct = 0.02;      // Alvo de Lucro Inicial (%)
+input double   InpTakeProfitPct = 0.05;      // Alvo de Lucro Inicial (%)
 input double   InpDailyTargetPct = 10.0;     // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
@@ -61,9 +61,9 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // MUDANÇA: EMA mudou de M15 para M1 para o robô reagir IMEDIATAMENTE a bombas de alta ou baixa.
-   handleEma21 = iMA(_Symbol, PERIOD_M1, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M1, 14, PRICE_CLOSE);
+   // IGUALANDO LÓGICA COM A API: EMA e RSI no M5
+   handleEma21 = iMA(_Symbol, PERIOD_M5, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
      {
@@ -244,12 +244,12 @@ void OnTick()
       if(currentAsk > ema[0]) trend = "TREND_UP";
       else if(currentBid < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M1): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M5 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
 
       double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
 
-      double internalSLPct = 0.04; // Stop Loss Fixo em 0.04% (1x1 Puro)
+      double internalSLPct = 0.20; // Stop Loss Fixo em 0.20% (Igual API)
 
       double slDist = currentAsk * (internalSLPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
@@ -257,19 +257,12 @@ void OnTick()
       // --- Cálculo do Lote Dinâmico ---
       if(InpLotMode == LOT_DYNAMIC)
         {
-         double riskAmount = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
-         double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-         double tickSize = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-         if(tickSize > 0 && tickValue > 0)
-           {
-            double lossPerLot = (slDist / tickSize) * tickValue;
-            if(lossPerLot > 0)
-              {
-               currentLotSize = riskAmount / lossPerLot;
-               double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-               if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
-              }
-           }
+         // Novo cálculo direto: Lote = X% da Banca (onde X é o InpRiskPct)
+         currentLotSize = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
+         
+         double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+         if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
+         
          double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
          if(currentLotSize < minLot) currentLotSize = minLot;
         }
@@ -280,8 +273,8 @@ void OnTick()
 
       // --- Lógica a Favor da Tendência (M1) ---
       // Como a EMA agora é de M1, ele vai virar a mão rapidamente se o mercado explodir para cima.
-      // Se a EMA M1 diz que é ALTA, ele espera um pullbackzinho no RSI e COMPRA.
-      if(trend == "TREND_UP" && rsi[0] <= 45)
+      // Lógica Igual à API: Confirmação de Momentum (RSI >= 50 para COMPRA e <= 50 para VENDA)
+      if(trend == "TREND_UP" && rsi[0] >= 50)
         {
          double buySL = currentAsk - slDist;
          double buyTP = currentAsk + tpDist;
@@ -295,8 +288,7 @@ void OnTick()
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
            }
         }
-      // Se a EMA M1 diz que é QUEDA, ele espera um pullbackzinho no RSI e VENDE.
-      else if(trend == "TREND_DOWN" && rsi[0] >= 55)
+      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
         {
          double sellSL = currentBid + slDist;
          double sellTP = currentBid - tpDist;

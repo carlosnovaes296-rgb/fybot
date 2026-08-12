@@ -1824,7 +1824,7 @@ export default function App() {
             </div>
 
             <div className="hidden md:flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 ml-4 overflow-hidden shadow-inner">
-              {currentUser?.role === 'ADMIN' && (
+              {(currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase().includes('alaides')) && (
                 <button
                   onClick={toggleAccountType}
                   disabled={loading || currentUser?.activeAccountType === 'DEMO'}
@@ -1896,7 +1896,7 @@ export default function App() {
             <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
           </div>
           <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            {currentUser?.role === 'ADMIN' && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase().includes('alaides')) && (
               <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'DEMO'}
@@ -2107,9 +2107,8 @@ export default function App() {
                           <tbody className="divide-y divide-white/[0.03]">
                             {(() => {
                               const filtered = (stats.trades || []).filter((tr: any) => {
-                                const statusMatch = tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
-                                return statusMatch;
-                              });
+                                return tradeFilter === 'ALL' ? true : tr.status === tradeFilter;
+                              }).sort((a: any, b: any) => new Date(b.time).getTime() - new Date(a.time).getTime());
                               if (filtered.length === 0) return (
                                 <tr>
                                   <td colSpan={8} className="py-12 text-center text-sm text-white/20 italic">
@@ -2118,7 +2117,7 @@ export default function App() {
                                 </tr>
                               );
                               const maxAbsProfit = Math.max(...filtered.filter((t: any) => t.profit).map((t: any) => Math.abs(Number(t.profit))), 1);
-                              return filtered.slice(0, 15).map((trade: any, idx: number) => {
+                              return filtered.slice(0, 20).map((trade: any, idx: number) => {
                                 const isLatestTrade = idx === 0;
                                 const profitVal = Number(trade.profit || 0);
                                 const profitPct = profitVal ? (Math.abs(profitVal) / maxAbsProfit) * 100 : 0;

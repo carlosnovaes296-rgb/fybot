@@ -1,8 +1,12 @@
 const fs = require('fs');
-const content = fs.readFileSync('c:\\Users\\sobit\\OneDrive\\Área de Trabalho\\Fybot pro\\server.ts', 'utf8');
+const content = fs.readFileSync('src/App.tsx', 'utf8');
 const lines = content.split('\n');
-lines.forEach((line, i) => {
-    if (line.includes('/api/status')) {
-        console.log(`Line ${i+1}: ${line.trim()}`);
+lines.forEach((line, index) => {
+  if (line.includes('const toggleBot')) {
+    console.log(`Line ${index + 1}: ${line}`);
+    // print 20 lines after
+    for (let i = 1; i <= 20; i++) {
+      console.log(`Line ${index + 1 + i}: ${lines[index + i]}`);
     }
+  }
 });

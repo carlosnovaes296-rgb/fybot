@@ -14,7 +14,7 @@
 // ===================================================================
 input group "=== Conexão API ==="
 input string   InpLicenseKey    = "";         // Licença do Painel Web
-input string   InpServerUrl     = "https://fybot.life/api/ea/heartbeat"; // URL da API
+input string   InpServerUrl     = "https://fybot.life/api/mt5-webhook"; // URL da API
 input int      InpHeartbeatMs   = 2000;       // Frequência heartbeat (ms)
 input string   InpSymbols       = "XAUUSD"; // Símbolos (modo live)
 
