@@ -36,6 +36,7 @@ int            currentDay = -1; // CORRIGIDO: usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
 // Handles de Indicadores
+int            handleEma14;
 int            handleEma21;
 int            handleRsi14;
 
@@ -61,11 +62,12 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // IGUALANDO LÓGICA COM A API: EMA e RSI no M5
-   handleEma21 = iMA(_Symbol, PERIOD_M5, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
+   // IGUALANDO LÓGICA COM A API: EMA 14/21 e RSI no M15
+   handleEma14 = iMA(_Symbol, PERIOD_M15, 14, 0, MODE_EMA, PRICE_CLOSE);
+   handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleRsi14 = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
 
-   if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
+   if(handleEma14 == INVALID_HANDLE || handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
      {
       Print("Erro ao carregar indicadores.");
       return(INIT_FAILED);
@@ -169,7 +171,10 @@ void OnTick()
         }
      }
 
-   // Varredura para encontrar a Ordem "Âncora" (Primeira ordem)
+   // Varredura para encontrar a Ordem "Âncora" (Primeira ordem) e Calcular Preço Médio
+   double totalVolume = 0;
+   double totalOpenPriceValue = 0;
+   
    if(openOrders > 0)
      {
       datetime oldestTime = 0;
@@ -178,12 +183,82 @@ void OnTick()
          ulong ticket = PositionGetTicket(i);
          if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
            {
+            double posVolume = PositionGetDouble(POSITION_VOLUME);
+            double posPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            totalVolume += posVolume;
+            totalOpenPriceValue += (posPrice * posVolume);
+
             datetime posTime = (datetime)PositionGetInteger(POSITION_TIME);
             if(oldestTime == 0 || posTime < oldestTime)
               {
                oldestTime = posTime;
-               firstOrderPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+               firstOrderPrice = posPrice;
                currentType = PositionGetInteger(POSITION_TYPE);
+              }
+           }
+        }
+        
+      // -- Lógica DCA e Fechamento Global --
+      double avgPrice = totalOpenPriceValue / totalVolume;
+      
+      double drawdownPct = 0;
+      double profitPct = 0;
+      
+      if(currentType == POSITION_TYPE_BUY)
+        {
+         drawdownPct = (firstOrderPrice - currentBid) / firstOrderPrice;
+         profitPct = (currentBid - avgPrice) / avgPrice;
+        }
+      else if (currentType == POSITION_TYPE_SELL)
+        {
+         drawdownPct = (currentAsk - firstOrderPrice) / firstOrderPrice;
+         profitPct = (avgPrice - currentAsk) / avgPrice;
+        }
+
+      // 1. TP Global e SL Global
+      if (profitPct >= 0.0004) // +0.04% a partir do Preço Médio
+        {
+         Print("🏆 [TP GLOBAL] Lucro alvo atingido no Preço Médio! Fechando a cesta.");
+         CloseAll();
+         return; 
+        }
+      else if (drawdownPct >= 0.0020) // -0.20% a partir da Ordem Mestra
+        {
+         Print("🛑 [SL GLOBAL] Perda máxima de 0.20% atingida na Ordem Mestra. Protegendo capital!");
+         CloseAll();
+         cooldownEndTime = TimeCurrent() + (15 * 60); // 15 minutos
+         return; 
+        }
+
+      // 2. DCA (Ordens 2, 3, 4)
+      if (openOrders < 4)
+        {
+         bool openDca = false;
+         if (drawdownPct >= 0.0004 && openOrders == 1) openDca = true;
+         else if (drawdownPct >= 0.0008 && openOrders == 2) openDca = true;
+         else if (drawdownPct >= 0.0012 && openOrders == 3) openDca = true;
+
+         if (openDca)
+           {
+            double dcaLot = 0.01;
+            if(InpLotMode == LOT_DYNAMIC)
+              {
+               dcaLot = (AccountInfoDouble(ACCOUNT_BALANCE) / 10000.0) * InpRiskPct;
+               double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+               if(step > 0) dcaLot = MathFloor(dcaLot / step) * step;
+               double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+               if(dcaLot < minLot) dcaLot = minLot;
+              }
+              
+            if (currentType == POSITION_TYPE_BUY)
+              {
+               if(trade.Buy(dcaLot, _Symbol, currentAsk, 0, 0))
+                  Print("📉 [DCA] Recuo atingido. Abrindo Ordem ", openOrders + 1, "!");
+              }
+            else if (currentType == POSITION_TYPE_SELL)
+              {
+               if(trade.Sell(dcaLot, _Symbol, currentBid, 0, 0))
+                  Print("📉 [DCA] Recuo atingido. Abrindo Ordem ", openOrders + 1, "!");
               }
            }
         }
@@ -229,36 +304,30 @@ void OnTick()
            }
         }
 
-      // Verifica se é uma nova vela de M1
-      datetime currentM5Time = iTime(_Symbol, PERIOD_M1, 0);
-      if(currentM5Time == lastM5CandleTime) return; // Já avaliou essa vela
+      // Verifica se é uma nova vela de M15
+      datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
+      if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
 
-      double ema[1];
+      double ema14[1];
+      double ema21[1];
       double rsi[1];
 
       // Pega o valor ATUAL (índice 0) dos indicadores para não ter atraso
-      if(CopyBuffer(handleEma21, 0, 0, 1, ema) <= 0) return;
+      if(CopyBuffer(handleEma14, 0, 0, 1, ema14) <= 0) return;
+      if(CopyBuffer(handleEma21, 0, 0, 1, ema21) <= 0) return;
       if(CopyBuffer(handleRsi14, 0, 0, 1, rsi) <= 0) return;
 
       string trend = "LATERAL";
-      if(currentAsk > ema[0]) trend = "TREND_UP";
-      else if(currentBid < ema[0]) trend = "TREND_DOWN";
+      if(currentAsk > ema14[0] && ema14[0] > ema21[0]) trend = "TREND_UP";
+      else if(currentBid < ema14[0] && ema14[0] < ema21[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M5 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
-
-      double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
-      if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
-
-      double internalSLPct = 0.20; // Stop Loss Fixo em 0.20% (Igual API)
-
-      double slDist = currentAsk * (internalSLPct / 100.0);
-      if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
+      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M15): ", DoubleToString(rsi[0], 1));
 
       // --- Cálculo do Lote Dinâmico ---
       if(InpLotMode == LOT_DYNAMIC)
         {
-         // Novo cálculo direto: Lote = X% da Banca (onde X é o InpRiskPct)
-         currentLotSize = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
+         // Cálculo Corrigido: 0.01 de lote para cada $100 de banca (com InpRiskPct = 1.0)
+         currentLotSize = (AccountInfoDouble(ACCOUNT_BALANCE) / 10000.0) * InpRiskPct;
          
          double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
          if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
@@ -271,31 +340,25 @@ void OnTick()
          currentLotSize = 0.01; // Modo Fixo
         }
 
-      // --- Lógica a Favor da Tendência (M1) ---
-      // Como a EMA agora é de M1, ele vai virar a mão rapidamente se o mercado explodir para cima.
-      // Lógica Igual à API: Confirmação de Momentum (RSI >= 50 para COMPRA e <= 50 para VENDA)
-      if(trend == "TREND_UP" && rsi[0] >= 50)
+      // --- Lógica a Favor da Tendência ---
+      if(trend == "TREND_UP" && rsi[0] <= 30)
         {
-         double buySL = currentAsk - slDist;
-         double buyTP = currentAsk + tpDist;
-         if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
+         if(trade.Buy(currentLotSize, _Symbol, currentAsk, 0, 0)) // TP e SL no EA
            {
-            Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM5Time;
+            Print("🔥 Sinal Disparado: COMPRA (Ordem 1)! Lote: ", currentLotSize);
+            lastM5CandleTime = currentM15Time;
            }
          else
            {
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
            }
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
+      else if(trend == "TREND_DOWN" && rsi[0] >= 70)
         {
-         double sellSL = currentBid + slDist;
-         double sellTP = currentBid - tpDist;
-         if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
+         if(trade.Sell(currentLotSize, _Symbol, currentBid, 0, 0)) // TP e SL no EA
            {
-            Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM5Time;
+            Print("🔥 Sinal Disparado: VENDA (Ordem 1)! Lote: ", currentLotSize);
+            lastM5CandleTime = currentM15Time;
            }
          else
            {
