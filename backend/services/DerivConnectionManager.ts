@@ -390,6 +390,8 @@ export class DerivConnectionManager {
           const isSold = contract.is_sold === 1;
 
           state.equity = state.balance + profit;
+          
+          const trade = state.trades.find((t: any) => String(t.id) === contractId);
 
           if (trade) {
             trade.profit = profit;
