@@ -580,8 +580,8 @@ export class DerivConnectionManager {
       return;
     }
 
-    if (openTradesCount >= DerivConnectionManager.MAX_OPEN_ORDERS) {
-      // Já existe 1 ordem aberta, modo 1x1 ignora.
+    if (openTradesCount >= 1) {
+      // Já existe 1 ordem aberta, modo DCA assumiu, o motor ignora novos sinais.
       if (Math.random() < 0.2) {
           this.addUserLog(userId, `⚠️ Sinal recebido, mas já existe 1 ordem aberta. Aguardando fechamento (Modo 1x1).`);
       }

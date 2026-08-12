@@ -61,9 +61,9 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // IGUALANDO LÓGICA COM A API: EMA e RSI no M5
-   handleEma21 = iMA(_Symbol, PERIOD_M5, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
+   // IGUALANDO LÓGICA COM A API: EMA e RSI no M15 (alterado conforme a API)
+   handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleRsi14 = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
 
    if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
      {
@@ -77,10 +77,6 @@ int OnInit()
 
 //+------------------------------------------------------------------+
 //| Atualiza horário de meia-noite para controle de lucro diário     |
-//| CORRIGIDO: agora também reseta initialBalance quando o dia vira, |
-//| já que antes a meta diária e o lucro diário ficavam calculados   |
-//| sobre o saldo do momento em que o EA foi ligado, e não do início |
-//| do dia atual (quebra em EAs que rodam vários dias seguidos).     |
 //+------------------------------------------------------------------+
 void UpdateMidnightTime()
   {
@@ -163,9 +159,6 @@ void OnTick()
 
          openOrders++;
          floatingPnL += posPnL;
-         // CORRIGIDO: removido bloco morto que comparava POSITION_TIME (data/hora)
-         // com firstOrderPrice (preço) — não fazia sentido e não tinha efeito algum.
-         // A ordem âncora já é corretamente encontrada na varredura abaixo.
         }
      }
 
@@ -188,8 +181,6 @@ void OnTick()
            }
         }
      }
-
-
 
    // -------------------------------------------------------------
    // MÁQUINA DE SINAIS - ORDEM 1 (Se não temos ordens abertas)
@@ -229,9 +220,9 @@ void OnTick()
            }
         }
 
-      // Verifica se é uma nova vela de M1
-      datetime currentM5Time = iTime(_Symbol, PERIOD_M1, 0);
-      if(currentM5Time == lastM5CandleTime) return; // Já avaliou essa vela
+      // Verifica se é uma nova vela de M15
+      datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
+      if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
 
       double ema[1];
       double rsi[1];
@@ -244,7 +235,7 @@ void OnTick()
       if(currentAsk > ema[0]) trend = "TREND_UP";
       else if(currentBid < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M5 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M15): ", DoubleToString(rsi[0], 1));
 
       double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
@@ -257,8 +248,8 @@ void OnTick()
       // --- Cálculo do Lote Dinâmico ---
       if(InpLotMode == LOT_DYNAMIC)
         {
-         // Novo cálculo direto: Lote = X% da Banca (onde X é o InpRiskPct)
-         currentLotSize = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
+         // CORREÇÃO DO CÁLCULO DE LOTE (Bug do volume resolvido)
+         currentLotSize = (AccountInfoDouble(ACCOUNT_BALANCE) / 10000.0) * InpRiskPct;
          
          double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
          if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
@@ -271,9 +262,7 @@ void OnTick()
          currentLotSize = 0.01; // Modo Fixo
         }
 
-      // --- Lógica a Favor da Tendência (M1) ---
-      // Como a EMA agora é de M1, ele vai virar a mão rapidamente se o mercado explodir para cima.
-      // Lógica Igual à API: Confirmação de Momentum (RSI >= 50 para COMPRA e <= 50 para VENDA)
+      // --- Lógica a Favor da Tendência (M15) ---
       if(trend == "TREND_UP" && rsi[0] >= 50)
         {
          double buySL = currentAsk - slDist;
@@ -281,7 +270,7 @@ void OnTick()
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
             Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM5Time;
+            lastM5CandleTime = currentM15Time;
            }
          else
            {
@@ -295,27 +284,12 @@ void OnTick()
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
             Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM5Time;
+            lastM5CandleTime = currentM15Time;
            }
          else
            {
             Print("❌ Erro ao abrir VENDA: ", GetLastError());
            }
-        }
-     }
-  }
-
-//+------------------------------------------------------------------+
-//| Função Auxiliar para fechar todas as ordens (Pânico)             |
-//+------------------------------------------------------------------+
-void CloseAll()
-  {
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-        {
-         trade.PositionClose(ticket);
         }
      }
   }
@@ -346,11 +320,6 @@ void SyncWithServer()
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
 
-   // CORRIGIDO: antes calculava "equity - initialBalance", que é uma conta
-   // diferente da usada pela lógica de trading (GetDailyProfit(), que soma
-   // negociações fechadas desde a meia-noite). Isso fazia o dashboard e o
-   // EA mostrarem/usarem números de lucro diário divergentes. Agora ambos
-   // usam a mesma função.
    double daily_profit = GetDailyProfit();
 
    int open_orders = 0;
@@ -441,14 +410,5 @@ void SyncWithServer()
    ArrayResize(post, ArraySize(post) - 1); // Remove o \0 do final da string
 
    int res = WebRequest("POST", InpServerUrl, headers, 5000, post, result, result_headers);
-
-   if(res != 200)
-     {
-      // Nota: se res == -1, o erro mais comum é a URL não estar cadastrada em
-      // Ferramentas > Opções > Expert Advisors > "Permitir WebRequest para as URLs".
-      Print("❌ Falha ao enviar Webhook (", res, "). Retentando na próxima...");
-     }
   }
-
-
 //+------------------------------------------------------------------+

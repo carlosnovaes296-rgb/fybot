@@ -326,13 +326,13 @@ export class DerivBotEngineEMA {
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        if (trend === 'TREND_UP' && currentRsi <= 30) {
+        if (trend === 'TREND_UP' && currentRsi >= 50) {
             signal = 'BUY';
-            reason = `[DCA API] Compra | RSI: ${currentRsi.toFixed(1)} | EMA14 > EMA21`;
+            reason = `[DCA API MOMENTO] Compra | RSI: ${currentRsi.toFixed(1)} | EMA14 > EMA21`;
         }
-        else if (trend === 'TREND_DOWN' && currentRsi >= 70) {
+        else if (trend === 'TREND_DOWN' && currentRsi <= 50) {
             signal = 'SELL';
-            reason = `[DCA API] Venda | RSI: ${currentRsi.toFixed(1)} | EMA14 < EMA21`;
+            reason = `[DCA API MOMENTO] Venda | RSI: ${currentRsi.toFixed(1)} | EMA14 < EMA21`;
         }
 
         if (signal && this.onSignal && lastClosedM15.epoch !== this.lastSignalCandleEpoch) {
