@@ -10,12 +10,15 @@
 #include <Trade\Trade.mqh>
 
 
+enum ENUM_LOT_MODE { LOT_FIXED, LOT_DYNAMIC };
 
 input group "=== Licenciamento ==="
 input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
 input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook-dca"; // ROTA SECRETA (DCA)
 
 input group "=== Configurações da Estratégia ==="
+input ENUM_LOT_MODE InpLotMode = LOT_FIXED;  // Modo de Lote
+input double   InpRiskPct = 1.0;             // Volume da Banca (%) - Se Dinâmico
 input double   InpLotSize = 0.01;            // Tamanho do Lote Fixo
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
 input double   InpTakeProfitPct = 0.04;      // Alvo de Lucro Inicial (%)
@@ -124,6 +127,21 @@ double GetDailyProfit()
   }
 
 //+------------------------------------------------------------------+
+//| Função para atualizar TP de todas as posições DCA                |
+//+------------------------------------------------------------------+
+void UpdateAllPositionsTP(double newTP)
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+        {
+         trade.PositionModify(ticket, PositionGetDouble(POSITION_SL), newTP);
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
@@ -161,9 +179,6 @@ void OnTick()
 
          openOrders++;
          floatingPnL += posPnL;
-         // CORRIGIDO: removido bloco morto que comparava POSITION_TIME (data/hora)
-         // com firstOrderPrice (preço) — não fazia sentido e não tinha efeito algum.
-         // A ordem âncora já é corretamente encontrada na varredura abaixo.
         }
      }
 
@@ -192,7 +207,6 @@ void OnTick()
    // -------------------------------------------------------------
    if(openOrders > 0 && openOrders < 4)
      {
-
       double priceDiffPct = 0;
       bool isAgainstUs = false;
       double executionPrice = 0;
@@ -210,6 +224,23 @@ void OnTick()
          executionPrice = currentBid;
         }
 
+      // --- Cálculo do Lote Dinâmico ---
+      if(InpLotMode == LOT_DYNAMIC)
+        {
+         // Novo cálculo direto: Lote = X% da Banca (onde X é o InpRiskPct)
+         currentLotSize = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
+         
+         double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+         if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
+         
+         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+         if(currentLotSize < minLot) currentLotSize = minLot;
+        }
+      else
+        {
+         currentLotSize = InpLotSize;
+        }
+
       if(isAgainstUs)
         {
          double dropMagnitude = MathAbs(priceDiffPct);
@@ -220,9 +251,6 @@ void OnTick()
             double tpDist = DCATPs[openOrders - 1];
             double tpPrice = 0;
 
-            // CORRIGIDO: cada nova ordem de DCA agora recebe um SL real de
-            // corretora no momento da abertura (0.30%), além da proteção de
-            // violinada por tick. Antes ia com SL=0 e só recebia TP.
             double newOrderSLDist = executionPrice * (0.30 / 100.0);
             if(newOrderSLDist <= minStopDist) newOrderSLDist = minStopDist + (_Point * 20);
 

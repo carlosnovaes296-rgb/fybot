@@ -14,7 +14,7 @@ export class DerivConnectionManager {
   private userCooldown: Map<string, number> = new Map();
   private static readonly COOLDOWN_MS = 15 * 60 * 1000; // 15 minutos
 
-  private static readonly MAX_OPEN_ORDERS = 1;
+  private static readonly MAX_OPEN_ORDERS = 4;
 
   private getUserState: (userId: string) => any;
   public addUserLog: (userId: string, msg: string) => void;
@@ -391,7 +391,6 @@ export class DerivConnectionManager {
 
           state.equity = state.balance + profit;
 
-          const trade = state.trades.find((t: any) => String(t.id) === contractId);
           if (trade) {
             trade.profit = profit;
 
@@ -399,21 +398,65 @@ export class DerivConnectionManager {
               trade.openPrice = contract.entry_spot || contract.current_spot || 0;
             }
 
-            if (state.dailyProfit >= state.dailyTarget) {
-              const openTrades = state.trades.filter((t: any) => t.status === 'OPEN');
-              if (openTrades.length > 0) {
-                const floatingPnL = openTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-                const maxAllowedLoss = -(state.dailyProfit * 0.05);
+            // --- Lógica de DCA e TP/SL Global ---
+            const openTrades = state.trades
+                .filter((t: any) => t.status === 'OPEN')
+                .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+            const currentSpot = contract.current_spot;
+            if (openTrades.length > 0 && currentSpot) {
+                const masterTrade = openTrades[0];
+                const drawdownPct = masterTrade.type === 'BUY' 
+                  ? (masterTrade.openPrice - currentSpot) / masterTrade.openPrice 
+                  : (currentSpot - masterTrade.openPrice) / masterTrade.openPrice;
+
+                // 1. DCA Lógica
+                if (drawdownPct >= 0.0004 && openTrades.length === 1) {
+                    this.addUserLog(userId, `📉 [DCA] Recuo de 0.04% atingido. Abrindo Ordem 2!`);
+                    this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
+                } else if (drawdownPct >= 0.0008 && openTrades.length === 2) {
+                    this.addUserLog(userId, `📉 [DCA] Recuo de 0.08% atingido. Abrindo Ordem 3!`);
+                    this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
+                } else if (drawdownPct >= 0.0012 && openTrades.length === 3) {
+                    this.addUserLog(userId, `📉 [DCA] Recuo de 0.12% atingido. Abrindo Ordem 4!`);
+                    this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
+                }
+
+                // 2. TP / SL Global
+                const totalLot = openTrades.reduce((sum: number, t: any) => sum + t.lot, 0);
+                const avgPrice = openTrades.reduce((sum: number, t: any) => sum + (t.openPrice * t.lot), 0) / totalLot;
                 
-                if (floatingPnL <= maxAllowedLoss) {
-                  const now = Date.now();
-                  if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
-                    state.lastSmartCloseTime = now;
-                    this.addUserLog(userId, `🏆 [TRAVA DE PROTEÇÃO] Meta atingida e prejuízo aberto bateu 5% do lucro diário. Cortando posições!`);
-                    openTrades.forEach((t: any) => {
-                      this.closeTrade(userId, String(t.id));
-                    });
-                  }
+                const profitPct = masterTrade.type === 'BUY'
+                  ? (currentSpot - avgPrice) / avgPrice
+                  : (avgPrice - currentSpot) / avgPrice;
+
+                const now = Date.now();
+                if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
+                    if (profitPct >= 0.0004) {
+                        state.lastSmartCloseTime = now;
+                        this.addUserLog(userId, `🏆 [TP GLOBAL] Lucro alvo atingido no Preço Médio! Fechando a cesta.`);
+                        openTrades.forEach((t: any) => this.closeTrade(userId, String(t.id)));
+                    } else if (drawdownPct >= 0.0020) {
+                        state.lastSmartCloseTime = now;
+                        this.addUserLog(userId, `🛑 [SL GLOBAL] Perda máxima de 0.20% atingida na Ordem Mestra. Protegendo capital!`);
+                        openTrades.forEach((t: any) => this.closeTrade(userId, String(t.id)));
+                    }
+                }
+            }
+            // -------------------------------------
+
+            if (state.dailyProfit >= state.dailyTarget) {
+              const floatingPnL = openTrades.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
+              const maxAllowedLoss = -(state.dailyProfit * 0.05);
+              
+              if (floatingPnL <= maxAllowedLoss) {
+                const now = Date.now();
+                if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
+                  state.lastSmartCloseTime = now;
+                  this.addUserLog(userId, `🏆 [TRAVA DE PROTEÇÃO] Meta atingida e prejuízo aberto bateu 5% do lucro diário. Cortando posições!`);
+                  openTrades.forEach((t: any) => {
+                    this.closeTrade(userId, String(t.id));
+                  });
                 }
               }
             }
@@ -566,16 +609,10 @@ export class DerivConnectionManager {
     let finalStake = manualStake && manualStake > 0 ? manualStake : parseFloat((balance * 0.01).toFixed(2));
     if (finalStake < 1.0) finalStake = 1.0;
 
-    const tpDistancePct = Math.abs((engineTp - price) / price);
-    let tpAmount = parseFloat((tpDistancePct * finalStake * multiplierValue).toFixed(2));
-    if (tpAmount < 0.10) tpAmount = 0.10;
-
-    const slDistancePct = Math.abs((engineSl - price) / price);
-    let slAmount = parseFloat((slDistancePct * finalStake * multiplierValue).toFixed(2));
-    if (slAmount < 0.10) slAmount = 0.10;
-
     const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
 
+    // Como é DCA, enviamos a ordem SEM limites (limit_order) na Deriv.
+    // O fechamento será gerenciado em memória pelo TP/SL Global.
     ws.send(JSON.stringify({
       buy: 1,
       price: finalStake,
@@ -585,11 +622,7 @@ export class DerivConnectionManager {
         contract_type: contractType,
         currency: "USD",
         multiplier: multiplierValue,
-        underlying_symbol: "frxXAUUSD",
-        limit_order: {
-          take_profit: tpAmount,
-          stop_loss: slAmount
-        }
+        underlying_symbol: "frxXAUUSD"
       }
     }));
 

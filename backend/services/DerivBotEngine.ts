@@ -297,11 +297,11 @@ export class DerivBotEngineEMA {
         const closedCandlesM15 = this.candlesM15.slice(0, -1);
         const closesM15 = closedCandlesM15.map(c => c.close);
 
-        const ema8Series = Indicators.ema(closesM15, 8);
-        const currentEma8 = ema8Series[ema8Series.length - 1];
+        const ema14Series = Indicators.ema(closesM15, 14);
+        const currentEma14 = ema14Series[ema14Series.length - 1];
 
-        const ema28Series = Indicators.ema(closesM15, 28);
-        const currentEma28 = ema28Series[ema28Series.length - 1];
+        const ema21Series = Indicators.ema(closesM15, 21);
+        const currentEma21 = ema21Series[ema21Series.length - 1];
         
         const rsiSeries = Indicators.rsi(closesM15, 14);
         const currentRsi = rsiSeries[rsiSeries.length - 1];
@@ -309,13 +309,10 @@ export class DerivBotEngineEMA {
         const lastClosedM15 = closedCandlesM15[closedCandlesM15.length - 1];
         const currentPrice = lastClosedM15.close;
 
-        const atrSeries = Indicators.atr(closedCandlesM15, this.ATR_PERIOD);
-        const currentAtr = atrSeries[atrSeries.length - 1];
-
         let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > currentEma8 && currentEma8 > currentEma28) {
+        if (currentPrice > currentEma14 && currentEma14 > currentEma21) {
             trend = 'TREND_UP';
-        } else if (currentPrice < currentEma8 && currentEma8 < currentEma28) {
+        } else if (currentPrice < currentEma14 && currentEma14 < currentEma21) {
             trend = 'TREND_DOWN';
         }
 
@@ -329,34 +326,21 @@ export class DerivBotEngineEMA {
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        if (trend === 'TREND_UP' && currentRsi >= 60) {
+        if (trend === 'TREND_UP' && currentRsi <= 30) {
             signal = 'BUY';
-            reason = `[DCA API] Compra | RSI: ${currentRsi.toFixed(1)} | EMA8 > EMA28`;
+            reason = `[DCA API] Compra | RSI: ${currentRsi.toFixed(1)} | EMA14 > EMA21`;
         }
-        else if (trend === 'TREND_DOWN' && currentRsi <= 40) {
+        else if (trend === 'TREND_DOWN' && currentRsi >= 70) {
             signal = 'SELL';
-            reason = `[DCA API] Venda | RSI: ${currentRsi.toFixed(1)} | EMA8 < EMA28`;
+            reason = `[DCA API] Venda | RSI: ${currentRsi.toFixed(1)} | EMA14 < EMA21`;
         }
 
         if (signal && this.onSignal && lastClosedM15.epoch !== this.lastSignalCandleEpoch) {
             this.lastSignalCandleEpoch = lastClosedM15.epoch;
             
-            // Distancia padrao baseada no ATR (ex: 1.5x)
-            let dynamicDistance = currentAtr * 1.5;
-            
-            // Limite maximo de 0.05% do preco para proteger a operacao
-            const maxDistance = currentPrice * 0.0005; 
-            
-            if (dynamicDistance > maxDistance) {
-                dynamicDistance = maxDistance; // Trava no maximo de 0.05%
-            }
-            
-            // Relacao 1:1 entre SL e TP
-            const tp = signal === 'BUY' ? currentPrice + dynamicDistance : currentPrice - dynamicDistance;
-            const sl = signal === 'BUY' ? currentPrice - dynamicDistance : currentPrice + dynamicDistance;
-            
-            this.onLog?.(`[DCA API] SL/TP calculados: Distância ${dynamicDistance.toFixed(2)} (ATR: ${currentAtr.toFixed(2)})`);
-            this.onSignal(signal, currentPrice, reason, tp, sl);
+            // O SL e TP individuais não são mais enviados via corretora (limit_order).
+            // O DerivConnectionManager fará a gestão global da rede DCA em memória.
+            this.onSignal(signal, currentPrice, reason, 0, 0);
         }
     }
 }

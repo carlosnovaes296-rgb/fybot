@@ -1050,9 +1050,9 @@ async function startServer() {
       state.analysisStartedAt = Date.now();
       state.analysisSignals = { BUY: 0, SELL: 0 };
       state.dominantTrend = null;
-      // FIX ABSOLUTO removido: Não vamos mais apagar o histórico de trades ao reiniciar. 
-      // O portfolio handler já cuida de marcar fantasmas como CLOSED.
-      // state.trades = []; 
+      // Limpar apenas as ordens que ficaram presas no status PENDING_
+      state.trades = (state.trades || []).filter((t: any) => !t.id.toString().startsWith('PENDING_'));
+      // O portfolio handler já cuida de marcar fantasmas (contratos reais) como CLOSED.
       // state.dailyProfit = 0;
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
       if (globalConnectionManager) globalConnectionManager.start(userId);
@@ -1060,7 +1060,13 @@ async function startServer() {
       if (user) {
           const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
           if (activeToken && activeToken.startsWith('pat_')) {
-              if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
+              try {
+                  if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken).catch(err => {
+                      console.error("Erro no connectWithToken:", err);
+                  });
+              } catch (e) {
+                  console.error("Erro síncrono no connectWithToken:", e);
+              }
           }
       }
 

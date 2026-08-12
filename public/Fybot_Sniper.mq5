@@ -30,16 +30,14 @@ input int      InpSlippage = 10;             // Slippage Máximo
 CTrade         trade;
 double         initialBalance = 0;
 double         currentLotSize = 0.01;
-datetime       lastM15CandleTime = 0;
+datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 int            currentDay = -1; // CORRIGIDO: usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
 // Handles de Indicadores
-int            handleEma8;
-int            handleEma28;
+int            handleEma21;
 int            handleRsi14;
-int            handleAtr14;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -63,13 +61,11 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // IGUALANDO LÓGICA COM A API: EMAs, RSI e ATR no M15
-   handleEma8 = iMA(_Symbol, PERIOD_M15, 8, 0, MODE_EMA, PRICE_CLOSE);
-   handleEma28 = iMA(_Symbol, PERIOD_M15, 28, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
-   handleAtr14 = iATR(_Symbol, PERIOD_M15, 14);
+   // IGUALANDO LÓGICA COM A API: EMA e RSI no M5
+   handleEma21 = iMA(_Symbol, PERIOD_M5, 21, 0, MODE_EMA, PRICE_CLOSE);
+   handleRsi14 = iRSI(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
 
-   if(handleEma8 == INVALID_HANDLE || handleEma28 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE || handleAtr14 == INVALID_HANDLE)
+   if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
      {
       Print("Erro ao carregar indicadores.");
       return(INIT_FAILED);
@@ -233,36 +229,30 @@ void OnTick()
            }
         }
 
-      // Verifica se é uma nova vela de M15
-      datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
-      if(currentM15Time == lastM15CandleTime) return; // Já avaliou essa vela
+      // Verifica se é uma nova vela de M1
+      datetime currentM5Time = iTime(_Symbol, PERIOD_M1, 0);
+      if(currentM5Time == lastM5CandleTime) return; // Já avaliou essa vela
 
-      double ema8[1];
-      double ema28[1];
+      double ema[1];
       double rsi[1];
-      double atr[1];
 
       // Pega o valor ATUAL (índice 0) dos indicadores para não ter atraso
-      if(CopyBuffer(handleEma8, 0, 0, 1, ema8) <= 0) return;
-      if(CopyBuffer(handleEma28, 0, 0, 1, ema28) <= 0) return;
+      if(CopyBuffer(handleEma21, 0, 0, 1, ema) <= 0) return;
       if(CopyBuffer(handleRsi14, 0, 0, 1, rsi) <= 0) return;
-      if(CopyBuffer(handleAtr14, 0, 0, 1, atr) <= 0) return;
 
       string trend = "LATERAL";
-      if(currentAsk > ema8[0] && ema8[0] > ema28[0]) trend = "TREND_UP";
-      else if(currentBid < ema8[0] && ema8[0] < ema28[0]) trend = "TREND_DOWN";
+      if(currentAsk > ema[0]) trend = "TREND_UP";
+      else if(currentBid < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI: ", DoubleToString(rsi[0], 1), " | ATR: ", DoubleToString(atr[0], 5));
+      Print("🧠 [Sniper V2] M5 Tendência: ", trend, " | RSI(M5): ", DoubleToString(rsi[0], 1));
 
-      // Calculo de SL e TP Dinamico (ATR) com teto
-      double dynamicDist = atr[0] * 1.5;
-      double maxDist = currentAsk * 0.0005; // Máximo de 0.05%
-      
-      if(dynamicDist > maxDist) dynamicDist = maxDist;
-      if(dynamicDist <= minStopDist) dynamicDist = minStopDist + (_Point * 20);
+      double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
+      if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
 
-      double tpDist = dynamicDist;
-      double slDist = dynamicDist;
+      double internalSLPct = 0.20; // Stop Loss Fixo em 0.20% (Igual API)
+
+      double slDist = currentAsk * (internalSLPct / 100.0);
+      if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
       // --- Cálculo do Lote Dinâmico ---
       if(InpLotMode == LOT_DYNAMIC)
@@ -281,29 +271,31 @@ void OnTick()
          currentLotSize = 0.01; // Modo Fixo
         }
 
-      // --- Lógica a Favor da Tendência (M15) ---
-      if(trend == "TREND_UP" && rsi[0] >= 60)
+      // --- Lógica a Favor da Tendência (M1) ---
+      // Como a EMA agora é de M1, ele vai virar a mão rapidamente se o mercado explodir para cima.
+      // Lógica Igual à API: Confirmação de Momentum (RSI >= 50 para COMPRA e <= 50 para VENDA)
+      if(trend == "TREND_UP" && rsi[0] >= 50)
         {
          double buySL = currentAsk - slDist;
          double buyTP = currentAsk + tpDist;
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
-            Print("🔥 Sinal Disparado: COMPRA (Alinhamento EMA)! Lote: ", currentLotSize);
-            lastM15CandleTime = currentM15Time;
+            Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize);
+            lastM5CandleTime = currentM5Time;
            }
          else
            {
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
            }
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 40)
+      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
         {
          double sellSL = currentBid + slDist;
          double sellTP = currentBid - tpDist;
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
-            Print("🔥 Sinal Disparado: VENDA (Alinhamento EMA)! Lote: ", currentLotSize);
-            lastM15CandleTime = currentM15Time;
+            Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize);
+            lastM5CandleTime = currentM5Time;
            }
          else
            {
