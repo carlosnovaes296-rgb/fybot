@@ -12,14 +12,14 @@ const filesToUpload = [
     { local: './src/components/TradingChart.tsx', remote: '/root/fybot/src/components/TradingChart.tsx' },
     { local: './src/config.ts', remote: '/root/fybot/src/config.ts' },
     { local: './src/components/TradingScheduleTimer.tsx', remote: '/root/fybot/src/components/TradingScheduleTimer.tsx' },
-    { local: './DerivBotEngineEMA.ts', remote: '/root/fybot/DerivBotEngineEMA.ts' },
     { local: './Fybot_Pro.mq5', remote: '/root/fybot/public/Fybot_Pro.mq5' },
     { local: './src/components/LicenseCountdown.tsx', remote: '/root/fybot/src/components/LicenseCountdown.tsx' },
     { local: './src/translations.ts', remote: '/root/fybot/src/translations.ts' },
     { local: './public/snaper1x1.png.png', remote: '/root/fybot/public/snaper1x1.png.png' },
     { local: './Fybot_Sniper.mq5', remote: '/root/fybot/public/Fybot_Sniper.mq5' },
     { local: './.env', remote: '/root/fybot/.env' },
-    { local: './src/components/PricingCard.tsx', remote: '/root/fybot/src/components/PricingCard.tsx' }
+    { local: './src/components/PricingCard.tsx', remote: '/root/fybot/src/components/PricingCard.tsx' },
+    { local: './src/components/NavItem.tsx', remote: '/root/fybot/src/components/NavItem.tsx' }
 ];
 
 conn.on('ready', () => {

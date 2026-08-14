@@ -22,10 +22,20 @@ input group "=== Configurações da Estratégia ==="
 input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
 input double             InpRiskPct = 1.0;           // Volume da Banca (%) - Se Dinâmico
 input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
-input double   InpTakeProfitPct = 0.05;      // Alvo de Lucro Inicial (%)
 input double   InpDailyTargetPct = 10.0;     // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
+
+input group "=== Gestão de Risco (Trailing/Exaustão) ==="
+input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para Breakeven
+input double   InpBreakEvenOffsetPoints = 10.0;    // Distância do Breakeven (pontos)
+input double   InpTrailMultiplier = 1.5;           // Multiplicador do Trailing
+input int      InpTrailLookback = 5;               // Velas para Volatilidade do Trailing
+input double   InpExhaustionVolumeDropPct = 30.0;  // Queda de Volume (%) para Exaustão
+input double   InpExhaustionWickRatio = 0.5;       // Proporção do Pavio para Exaustão
+input int      InpConsolidationLookback = 5;       // Velas para detectar Consolidação
+input double   InpConsolidationRangeRatio = 1.2;   // Razão de consolidação (range)
+input double   InpConsolidationEmaGapRatio = 0.5;  // Gap máximo entre EMAs na consolidação
 
 CTrade         trade;
 double         initialBalance = 0;
@@ -35,9 +45,12 @@ datetime       midnightTime = 0;
 int            currentDay = -1; // CORRIGIDO: usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
+double         peakPrice = 0;
+bool           exhaustionTriggered = false;
+
 // Handles de Indicadores
 int            handleEma21;
-int            handleRsi14;
+int            handleEma8;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -61,11 +74,11 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // IGUALANDO LÓGICA COM A API: EMA e RSI no M15 (alterado conforme a API)
+   // IGUALANDO LÓGICA COM A API: EMA 21 e EMA 8 no M15 (alterado conforme a API)
    handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
+   handleEma8 = iMA(_Symbol, PERIOD_M15, 8, 0, MODE_EMA, PRICE_CLOSE);
 
-   if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
+   if(handleEma21 == INVALID_HANDLE || handleEma8 == INVALID_HANDLE)
      {
       Print("Erro ao carregar indicadores.");
       return(INIT_FAILED);
@@ -122,6 +135,187 @@ double GetDailyProfit()
   }
 
 //+------------------------------------------------------------------+
+//| Funções do Trailing Avançado                                     |
+//+------------------------------------------------------------------+
+bool IsExhaustion(long dir)
+  {
+   long vol1 = iVolume(_Symbol, PERIOD_M15, 1);
+   long vol2 = iVolume(_Symbol, PERIOD_M15, 2);
+   long vol3 = iVolume(_Symbol, PERIOD_M15, 3);
+   double avgVolPrev = (vol2 + vol3) / 2.0;
+
+   bool volumeCaindo = false;
+   if(avgVolPrev > 0)
+      volumeCaindo = (vol1 < avgVolPrev * (1.0 - InpExhaustionVolumeDropPct / 100.0));
+
+   double open1 = iOpen(_Symbol, PERIOD_M15, 1);
+   double close1 = iClose(_Symbol, PERIOD_M15, 1);
+   double high1 = iHigh(_Symbol, PERIOD_M15, 1);
+   double low1  = iLow(_Symbol, PERIOD_M15, 1);
+   
+   double body      = MathAbs(close1 - open1);
+   double upperWick = high1 - MathMax(open1, close1);
+   double lowerWick = MathMin(open1, close1) - low1;
+
+   bool velaRejeicao = false;
+   if(dir == POSITION_TYPE_BUY) velaRejeicao = (body > 0 && upperWick >= body * InpExhaustionWickRatio && upperWick > lowerWick);
+   else                         velaRejeicao = (body > 0 && lowerWick >= body * InpExhaustionWickRatio && lowerWick > upperWick);
+
+   return (volumeCaindo || velaRejeicao);
+  }
+
+double AverageCandleRange(int lookback)
+  {
+   double sum = 0;
+   for(int i = 1; i <= lookback; i++)
+     {
+      sum += (iHigh(_Symbol, PERIOD_M15, i) - iLow(_Symbol, PERIOD_M15, i));
+     }
+   return (lookback > 0) ? (sum / lookback) : 0;
+  }
+
+bool IsAccumulationZone()
+  {
+   int lookback = InpConsolidationLookback;
+   double highest = -1, lowest = -1;
+   for(int i = 1; i <= lookback; i++)
+     {
+      double h = iHigh(_Symbol, PERIOD_M15, i);
+      double l = iLow(_Symbol, PERIOD_M15, i);
+      if(highest < 0 || h > highest) highest = h;
+      if(lowest  < 0 || l < lowest)  lowest  = l;
+     }
+   double totalRange = highest - lowest;
+   double avgRange = AverageCandleRange(lookback);
+   if(avgRange <= 0) return false;
+
+   bool precoParado = (totalRange <= avgRange * InpConsolidationRangeRatio);
+
+   double ema21[1], ema8[1];
+   if(CopyBuffer(handleEma21, 0, 1, 1, ema21) <= 0) return false;
+   if(CopyBuffer(handleEma8, 0, 1, 1, ema8) <= 0) return false;
+
+   double gap = MathAbs(ema8[0] - ema21[0]);
+   bool emasConvergentes = (gap <= avgRange * InpConsolidationEmaGapRatio);
+
+   return (precoParado && emasConvergentes);
+  }
+
+void ManageTrailingOne(ulong ticket)
+  {
+   if(!PositionSelectByTicket(ticket)) return;
+
+   long   dir       = PositionGetInteger(POSITION_TYPE);
+   int    digits    = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+   double point     = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   double currentSL = PositionGetDouble(POSITION_SL);
+   double entry     = PositionGetDouble(POSITION_PRICE_OPEN);
+   
+   double spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * point;
+   if (spread == 0) spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID));
+   double minDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * point;
+   if (minDist < spread * 2) minDist = spread * 2;
+
+   if(peakPrice == 0) peakPrice = entry;
+
+   double high0 = iHigh(_Symbol, PERIOD_M15, 0);
+   double low0  = iLow(_Symbol, PERIOD_M15, 0);
+   if(dir == POSITION_TYPE_BUY && high0 > peakPrice) peakPrice = high0;
+   if(dir == POSITION_TYPE_SELL && low0 < peakPrice) peakPrice = low0;
+
+   bool jaEstavaAtivo = exhaustionTriggered;
+   bool acumulacao = IsAccumulationZone();
+   if(IsExhaustion(dir) || acumulacao) exhaustionTriggered = true;
+
+   if(!jaEstavaAtivo && exhaustionTriggered && acumulacao)
+     {
+      double ema21[1];
+      if(CopyBuffer(handleEma21, 0, 0, 1, ema21) > 0)
+        {
+         double ema21SL = NormalizeDouble(ema21[0], digits);
+         double bidNow = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+         double askNow = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+         double distAtual = (dir == POSITION_TYPE_BUY) ? (bidNow - ema21SL) : (ema21SL - askNow);
+         bool melhoraEma21 = (dir == POSITION_TYPE_BUY) ? (currentSL == 0 || ema21SL > currentSL)
+                                                        : (currentSL == 0 || ema21SL < currentSL);
+
+         if(melhoraEma21 && distAtual >= minDist)
+           {
+            if(trade.PositionModify(ticket, ema21SL, PositionGetDouble(POSITION_TP)))
+              {
+               Print("🛡️ Zona de acumulação | SL movido para a EMA21: ", DoubleToString(ema21SL, digits));
+               currentSL = ema21SL;
+              }
+           }
+        }
+     }
+
+   double avancoFavoravel = (dir == POSITION_TYPE_BUY) ? (peakPrice - entry) : (entry - peakPrice);
+   double avancoFavoravelPts = avancoFavoravel / point;
+
+   double buffer;
+   if(exhaustionTriggered)
+     {
+      buffer = minDist; // modo agressivo: colado ao pico
+     }
+   else if(avancoFavoravelPts >= InpBreakevenArmPoints)
+     {
+      // NOVA REGRA: Se engatou o Breakeven, permite perder apenas 10% do lucro máximo atingido!
+      buffer = MathMax(avancoFavoravel * 0.10, minDist);
+     }
+   else
+     {
+      // Respira normalmente antes de engatar o lucro
+      double avgRange = AverageCandleRange(InpTrailLookback);
+      buffer = MathMax(avgRange * InpTrailMultiplier, minDist);
+     }
+
+   if(avancoFavoravelPts >= InpBreakevenArmPoints)
+     {
+      double beOffset = InpBreakEvenOffsetPoints * point;
+      double beLevel = (dir == POSITION_TYPE_BUY) ? NormalizeDouble(entry + beOffset, digits) : NormalizeDouble(entry - beOffset, digits);
+      bool beMelhora = (dir == POSITION_TYPE_BUY) ? (currentSL == 0 || beLevel > currentSL) : (currentSL == 0 || beLevel < currentSL);
+
+      double bidNow = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double askNow = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double distBE = (dir == POSITION_TYPE_BUY) ? (bidNow - beLevel) : (beLevel - askNow);
+
+      if(beMelhora && distBE >= minDist)
+        {
+         if(trade.PositionModify(ticket, beLevel, PositionGetDouble(POSITION_TP)))
+           {
+            Print("🛡️ Piso de Breakeven | SL movido para zero-a-zero: ", DoubleToString(beLevel, digits));
+            currentSL = beLevel;
+           }
+        }
+     }
+
+   if(avancoFavoravel <= minDist) return; 
+
+   double newLevel = (dir == POSITION_TYPE_BUY) ? NormalizeDouble(peakPrice - buffer, digits)
+                                                : NormalizeDouble(peakPrice + buffer, digits);
+
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double currentPrice = (dir == POSITION_TYPE_BUY) ? bid : ask;
+   double distToCurrent = (dir == POSITION_TYPE_BUY) ? (currentPrice - newLevel) : (newLevel - currentPrice);
+   
+   if(distToCurrent < minDist) return;
+
+   bool melhora = (dir == POSITION_TYPE_BUY) ? (currentSL == 0 || newLevel > currentSL)
+                                             : (currentSL == 0 || newLevel < currentSL);
+   if(!melhora) return;
+
+   if(trade.PositionModify(ticket, newLevel, PositionGetDouble(POSITION_TP)))
+     {
+      if(exhaustionTriggered)
+         Print("🚨 Exaustão | SL esmagado no pico! Novo Stop: ", DoubleToString(newLevel, digits));
+      else
+         Print("📈 Trailing (Momentum) | Novo Stop Móvel: ", DoubleToString(newLevel, digits));
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
@@ -171,6 +365,8 @@ void OnTick()
          ulong ticket = PositionGetTicket(i);
          if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
            {
+            ManageTrailingOne(ticket); // <-- TRAILING MÓVEL ATIVADO
+            
             datetime posTime = (datetime)PositionGetInteger(POSITION_TIME);
             if(oldestTime == 0 || posTime < oldestTime)
               {
@@ -224,50 +420,37 @@ void OnTick()
       datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
       if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
 
-      double ema[1];
-      double rsi[1];
+      double ema21[1];
+      double ema8[1];
 
       // Pega o valor ATUAL (índice 0) dos indicadores para não ter atraso
-      if(CopyBuffer(handleEma21, 0, 0, 1, ema) <= 0) return;
-      if(CopyBuffer(handleRsi14, 0, 0, 1, rsi) <= 0) return;
+      if(CopyBuffer(handleEma21, 0, 0, 1, ema21) <= 0) return;
+      if(CopyBuffer(handleEma8, 0, 0, 1, ema8) <= 0) return;
 
       string trend = "LATERAL";
-      if(currentAsk > ema[0]) trend = "TREND_UP";
-      else if(currentBid < ema[0]) trend = "TREND_DOWN";
+      if(currentAsk > ema8[0] && ema8[0] > ema21[0]) trend = "TREND_UP";
+      else if(currentBid < ema8[0] && ema8[0] < ema21[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M15): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
 
-      double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
-      if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
+      // Reseta variaveis globais antes de abrir nova ordem
+      peakPrice = 0;
+      exhaustionTriggered = false;
 
-      double internalSLPct = 0.20; // Stop Loss Fixo em 0.20% (Igual API)
+      double internalSLPct = 0.20; // Stop Loss Fixo inicial em 0.20%
 
       double slDist = currentAsk * (internalSLPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
-      // --- Cálculo do Lote Dinâmico ---
-      if(InpLotMode == LOT_DYNAMIC)
-        {
-         // CORREÇÃO DO CÁLCULO DE LOTE (Bug do volume resolvido)
-         currentLotSize = (AccountInfoDouble(ACCOUNT_BALANCE) / 10000.0) * InpRiskPct;
-         
-         double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-         if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
-         
-         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-         if(currentLotSize < minLot) currentLotSize = minLot;
-        }
-      else
-        {
-         currentLotSize = 0.01; // Modo Fixo
-        }
+      // --- Cálculo do Lote ---
+      // Forçado para 0.01 conforme solicitado para reduzir a exposição
+      currentLotSize = 0.01;
 
       // --- Lógica a Favor da Tendência (M15) ---
-      if(trend == "TREND_UP" && rsi[0] >= 50)
+      if(trend == "TREND_UP")
         {
          double buySL = currentAsk - slDist;
-         double buyTP = currentAsk + tpDist;
-         if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
+         if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, 0)) // TP = 0 (Trailing Stop vai fechar)
            {
             Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize);
             lastM5CandleTime = currentM15Time;
@@ -277,11 +460,10 @@ void OnTick()
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
            }
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
+      else if(trend == "TREND_DOWN")
         {
          double sellSL = currentBid + slDist;
-         double sellTP = currentBid - tpDist;
-         if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
+         if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, 0)) // TP = 0 (Trailing Stop vai fechar)
            {
             Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize);
             lastM5CandleTime = currentM15Time;

@@ -224,22 +224,9 @@ void OnTick()
          executionPrice = currentBid;
         }
 
-      // --- Cálculo do Lote Dinâmico ---
-      if(InpLotMode == LOT_DYNAMIC)
-        {
-         // Novo cálculo direto: Lote = X% da Banca (onde X é o InpRiskPct)
-         currentLotSize = AccountInfoDouble(ACCOUNT_BALANCE) * (InpRiskPct / 100.0);
-         
-         double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-         if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
-         
-         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-         if(currentLotSize < minLot) currentLotSize = minLot;
-        }
-      else
-        {
-         currentLotSize = InpLotSize;
-        }
+      // --- Cálculo do Lote ---
+      // Forçado para 0.01 conforme solicitado para reduzir a exposição
+      currentLotSize = 0.01;
 
       if(isAgainstUs)
         {
@@ -323,8 +310,8 @@ void OnTick()
       double slDist = currentAsk * (internalSLPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
-      // --- Lote Fixo Travado ---
-      currentLotSize = InpLotSize;
+      // --- Lote Fixo Travado em 0.01 ---
+      currentLotSize = 0.01;
 
       // --- Lógica a Favor da Tendência (M1) ---
       // Se a tendência é de ALTA (preço acima da EMA M1), ele espera o RSI cair (pullback) para COMPRAR

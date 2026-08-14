@@ -20,7 +20,7 @@ export function NavItem({ icon, label, active, onClick }: NavItemProps) {
       <span className={`${active ? 'text-black' : 'group-hover:scale-110 group-hover:text-emerald-400'} transition-transform duration-200`}>
         {icon}
       </span>
-      <span className="hidden md:block text-xl">{label}</span>
+      <span className="text-xl">{label}</span>
     </button>
   );
 }

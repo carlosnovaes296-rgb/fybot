@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                                Fybot_Sniper.mq5 |
 //|                                           1x1 Scalper Dinâmico   |
-//|                                        (Versão corrigida)        |
+//|                                  (Versão corrigida - v2.02)      |
 //+------------------------------------------------------------------+
 #property copyright "Fybot Sniper"
 #property link      "https://fybot.life"
-#property version   "2.01"
+#property version   "2.02"
 
 #include <Trade\Trade.mqh>
 
@@ -21,23 +21,36 @@ input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do S
 input group "=== Configurações da Estratégia ==="
 input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
 input double             InpRiskPct = 1.0;           // Volume da Banca (%) - Se Dinâmico
-input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo Diário ($)
-input double   InpTakeProfitPct = 0.05;      // Alvo de Lucro Inicial (%)
+input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo por Ordem ($)
 input double   InpDailyTargetPct = 10.0;     // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
+
+input group "=== Gestão de Risco (Trailing/Exaustão) ==="
+input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para Breakeven
+input double   InpBreakEvenOffsetPoints = 10.0;    // Distância do Breakeven (pontos)
+input double   InpTrailMultiplier = 1.5;           // Multiplicador do Trailing
+input int      InpTrailLookback = 5;               // Velas para Volatilidade do Trailing
+input double   InpExhaustionVolumeDropPct = 30.0;  // Queda de Volume (%) para Exaustão
+input double   InpExhaustionWickRatio = 0.5;       // Proporção do Pavio para Exaustão
+input int      InpConsolidationLookback = 5;       // Velas para detectar Consolidação
+input double   InpConsolidationRangeRatio = 1.2;   // Razão de consolidação (range)
+input double   InpConsolidationEmaGapRatio = 0.5;  // Gap máximo entre EMAs na consolidação
 
 CTrade         trade;
 double         initialBalance = 0;
 double         currentLotSize = 0.01;
 datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
-int            currentDay = -1; // CORRIGIDO: usado para detectar virada de dia
+int            currentDay = -1; // usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
+
+double         peakPrice = 0;
+bool           exhaustionTriggered = false;
 
 // Handles de Indicadores
 int            handleEma21;
-int            handleRsi14;
+int            handleEma8;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -61,11 +74,11 @@ int OnInit()
 
    UpdateMidnightTime();
 
-   // IGUALANDO LÓGICA COM A API: EMA e RSI no M15 (alterado conforme a API)
+   // IGUALANDO LÓGICA COM A API: EMA 21 e EMA 8 no M15
    handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
-   handleRsi14 = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
+   handleEma8 = iMA(_Symbol, PERIOD_M15, 8, 0, MODE_EMA, PRICE_CLOSE);
 
-   if(handleEma21 == INVALID_HANDLE || handleRsi14 == INVALID_HANDLE)
+   if(handleEma21 == INVALID_HANDLE || handleEma8 == INVALID_HANDLE)
      {
       Print("Erro ao carregar indicadores.");
       return(INIT_FAILED);
@@ -96,7 +109,7 @@ void UpdateMidnightTime()
   }
 
 //+------------------------------------------------------------------+
-//| Calcula o Lucro Fechado do Dia                                   |
+//| Calcula o Lucro Fechado do Dia (FIX: agora filtra por símbolo)   |
 //+------------------------------------------------------------------+
 double GetDailyProfit()
   {
@@ -107,7 +120,8 @@ double GetDailyProfit()
    for(int i = 0; i < total; i++)
      {
       ulong ticket = HistoryDealGetTicket(i);
-      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) == InpMagicNumber)
+      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) == InpMagicNumber &&
+         HistoryDealGetString(ticket, DEAL_SYMBOL) == _Symbol)
         {
          long dealType = HistoryDealGetInteger(ticket, DEAL_TYPE);
          if(dealType != DEAL_TYPE_BALANCE)
@@ -122,6 +136,160 @@ double GetDailyProfit()
   }
 
 //+------------------------------------------------------------------+
+//| FIX: Cálculo de lote dinâmico baseado em % de risco da banca     |
+//| Se LOT_FIXED, mantém 0.01. Se LOT_DYNAMIC, calcula pelo risco.   |
+//+------------------------------------------------------------------+
+double CalculateLotSize(double slDistance)
+  {
+   if(InpLotMode == LOT_FIXED || slDistance <= 0)
+      return 0.01;
+
+   double balance     = AccountInfoDouble(ACCOUNT_BALANCE);
+   double riskAmount  = balance * (InpRiskPct / 100.0);
+
+   double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+
+   if(tickValue <= 0 || tickSize <= 0)
+      return 0.01;
+
+   double lossPerLot = (slDistance / tickSize) * tickValue;
+   if(lossPerLot <= 0)
+      return 0.01;
+
+   double lot = riskAmount / lossPerLot;
+
+   double minLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+
+   if(lotStep <= 0) lotStep = minLot > 0 ? minLot : 0.01;
+
+   lot = MathFloor(lot / lotStep) * lotStep;
+
+   if(lot < minLot) lot = minLot;
+   if(lot > maxLot) lot = maxLot;
+   if(lot <= 0)      lot = minLot > 0 ? minLot : 0.01;
+
+   return NormalizeDouble(lot, 2);
+  }
+
+//+------------------------------------------------------------------+
+//| Funções do Trailing Avançado                                     |
+//+------------------------------------------------------------------+
+bool IsExhaustion(long dir)
+  {
+   long vol1 = iVolume(_Symbol, PERIOD_M15, 1);
+   long vol2 = iVolume(_Symbol, PERIOD_M15, 2);
+   long vol3 = iVolume(_Symbol, PERIOD_M15, 3);
+   double avgVolPrev = (vol2 + vol3) / 2.0;
+
+   bool volumeCaindo = false;
+   if(avgVolPrev > 0)
+      volumeCaindo = (vol1 < avgVolPrev * (1.0 - InpExhaustionVolumeDropPct / 100.0));
+
+   double open1 = iOpen(_Symbol, PERIOD_M15, 1);
+   double close1 = iClose(_Symbol, PERIOD_M15, 1);
+   double high1 = iHigh(_Symbol, PERIOD_M15, 1);
+   double low1  = iLow(_Symbol, PERIOD_M15, 1);
+
+   double body      = MathAbs(close1 - open1);
+   double upperWick = high1 - MathMax(open1, close1);
+   double lowerWick = MathMin(open1, close1) - low1;
+
+   bool velaRejeicao = false;
+   if(dir == POSITION_TYPE_BUY) velaRejeicao = (body > 0 && upperWick >= body * InpExhaustionWickRatio && upperWick > lowerWick);
+   else                         velaRejeicao = (body > 0 && lowerWick >= body * InpExhaustionWickRatio && lowerWick > upperWick);
+
+   return (volumeCaindo || velaRejeicao);
+  }
+
+double AverageCandleRange(int lookback)
+  {
+   double sum = 0;
+   for(int i = 1; i <= lookback; i++)
+     {
+      sum += (iHigh(_Symbol, PERIOD_M15, i) - iLow(_Symbol, PERIOD_M15, i));
+     }
+   return (lookback > 0) ? (sum / lookback) : 0;
+  }
+
+bool IsAccumulationZone()
+  {
+   int lookback = InpConsolidationLookback;
+   double highest = -1, lowest = -1;
+   for(int i = 1; i <= lookback; i++)
+     {
+      double h = iHigh(_Symbol, PERIOD_M15, i);
+      double l = iLow(_Symbol, PERIOD_M15, i);
+      if(highest < 0 || h > highest) highest = h;
+      if(lowest  < 0 || l < lowest)  lowest  = l;
+     }
+   double totalRange = highest - lowest;
+   double avgRange = AverageCandleRange(lookback);
+   if(avgRange <= 0) return false;
+
+   bool precoParado = (totalRange <= avgRange * InpConsolidationRangeRatio);
+
+   double ema21[1], ema8[1];
+   if(CopyBuffer(handleEma21, 0, 1, 1, ema21) <= 0) return false;
+   if(CopyBuffer(handleEma8, 0, 1, 1, ema8) <= 0) return false;
+
+   double gap = MathAbs(ema8[0] - ema21[0]);
+   bool emasConvergentes = (gap <= avgRange * InpConsolidationEmaGapRatio);
+
+   return (precoParado && emasConvergentes);
+  }
+
+void ManageTrailingOne(ulong ticket)
+  {
+   if(!PositionSelectByTicket(ticket)) return;
+
+   long   dir       = PositionGetInteger(POSITION_TYPE);
+   double entry     = PositionGetDouble(POSITION_PRICE_OPEN);
+   double currentSL = PositionGetDouble(POSITION_SL);
+
+   double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+
+   // Atualiza o pico de lucro em dólares
+   if(posPnL > peakPrice) peakPrice = posPnL;
+
+   // 1. Gatilho de Breakeven no $1.00 de Lucro
+   if(peakPrice >= 1.00)
+     {
+      double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+      double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID));
+      if (minStopDist < spread * 2) minStopDist = spread * 2;
+
+      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      double currentPrice = (dir == POSITION_TYPE_BUY) ? bid : ask;
+      double distToEntry = (dir == POSITION_TYPE_BUY) ? (currentPrice - entry) : (entry - currentPrice);
+
+      bool canMoveToBE = (dir == POSITION_TYPE_BUY) ? (currentSL < entry) : (currentSL > entry || currentSL == 0);
+
+      // Mover SL para o 0x0
+      if(canMoveToBE && distToEntry >= minStopDist)
+        {
+         if(trade.PositionModify(ticket, entry, PositionGetDouble(POSITION_TP)))
+           {
+            Print("🛡️ Breakeven Ativado! Lucro bateu $", DoubleToString(peakPrice, 2), " - SL movido para o 0x0.");
+           }
+        }
+
+      // 2. Trailing Stop Absoluto (Segurar 95% do pico)
+      double trailingStopProfit = peakPrice * 0.95; // Retém 95% do pico
+
+      // Se o lucro atual cair 5% (abaixo ou igual a 95% do pico), fecha a mercado
+      if(posPnL <= trailingStopProfit && posPnL > 0)
+        {
+         Print("🚨 [Trailing Stop] Queda de 5% detectada! Fechando a mercado para reter $", DoubleToString(posPnL, 2), " (Pico foi $", DoubleToString(peakPrice, 2), ")");
+         trade.PositionClose(ticket);
+        }
+     }
+  }
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
@@ -130,9 +298,6 @@ void OnTick()
    double dailyTarget = initialBalance * (InpDailyTargetPct / 100.0);
 
    int openOrders = 0;
-   double floatingPnL = 0;
-   double firstOrderPrice = 0;
-   long currentType = -1; // 0 = Buy, 1 = Sell
 
    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
@@ -142,6 +307,7 @@ void OnTick()
    if (minStopDist < spread * 2) minStopDist = spread * 2;
 
    // Verifica Violinada (SL em Dólares) e calcula o estado atual
+   // FIX: protecao agora vale para os dois modos de lote, nao so LOT_FIXED
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
@@ -149,8 +315,7 @@ void OnTick()
         {
          double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
 
-         // Proteção de Violinada (Corta 1 ordem individualmente apenas no Lote Fixo)
-         if(InpLotMode == LOT_FIXED && InpMaxSLDollars > 0 && posPnL <= -InpMaxSLDollars)
+         if(InpMaxSLDollars > 0 && posPnL <= -InpMaxSLDollars)
            {
             Print("🚨 [VIOLINADA] Ordem perdeu $", DoubleToString(-posPnL, 2), ". Fechando imediatamente!");
             trade.PositionClose(ticket);
@@ -158,26 +323,18 @@ void OnTick()
            }
 
          openOrders++;
-         floatingPnL += posPnL;
         }
      }
 
-   // Varredura para encontrar a Ordem "Âncora" (Primeira ordem)
+   // Roda o trailing/breakeven em toda ordem aberta deste EA
    if(openOrders > 0)
      {
-      datetime oldestTime = 0;
       for(int i = 0; i < PositionsTotal(); i++)
         {
          ulong ticket = PositionGetTicket(i);
          if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
            {
-            datetime posTime = (datetime)PositionGetInteger(POSITION_TIME);
-            if(oldestTime == 0 || posTime < oldestTime)
-              {
-               oldestTime = posTime;
-               firstOrderPrice = PositionGetDouble(POSITION_PRICE_OPEN);
-               currentType = PositionGetInteger(POSITION_TYPE);
-              }
+            ManageTrailingOne(ticket);
            }
         }
      }
@@ -200,23 +357,24 @@ void OnTick()
          return; // Está de castigo esperando o mercado acalmar
         }
 
-      // Verifica se a última ordem fechada deu prejuízo para ativar o Cooldown
+      // Verifica se a última ordem fechada (deste símbolo/magic) deu prejuízo
       HistorySelect(TimeCurrent() - 3600, TimeCurrent());
       int histTotal = HistoryDealsTotal();
-      if(histTotal > 0)
+      for(int i = histTotal - 1; i >= 0; i--)
         {
-         ulong lastTicket = HistoryDealGetTicket(histTotal - 1);
-         if(HistoryDealGetInteger(lastTicket, DEAL_MAGIC) == InpMagicNumber)
+         ulong lastTicket = HistoryDealGetTicket(i);
+         if(HistoryDealGetInteger(lastTicket, DEAL_MAGIC) == InpMagicNumber &&
+            HistoryDealGetString(lastTicket, DEAL_SYMBOL) == _Symbol)
            {
             double lastProfit = HistoryDealGetDouble(lastTicket, DEAL_PROFIT) + HistoryDealGetDouble(lastTicket, DEAL_SWAP);
             long dealEntry = HistoryDealGetInteger(lastTicket, DEAL_ENTRY);
-            // Se foi uma saída de mercado com perda
             if((dealEntry == DEAL_ENTRY_OUT || dealEntry == DEAL_ENTRY_INOUT) && lastProfit < -0.1)
               {
                Print("🚨 Última ordem bateu no Stop Loss! Ativando pausa de 15 minutos de segurança...");
                cooldownEndTime = TimeCurrent() + (15 * 60); // 15 minutos
                return;
               }
+            break; // achou o ultimo deal relevante deste EA/simbolo, para de procurar
            }
         }
 
@@ -224,67 +382,59 @@ void OnTick()
       datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
       if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
 
-      double ema[1];
-      double rsi[1];
+      double ema21[1];
+      double ema8[1];
 
-      // Pega o valor ATUAL (índice 0) dos indicadores para não ter atraso
-      if(CopyBuffer(handleEma21, 0, 0, 1, ema) <= 0) return;
-      if(CopyBuffer(handleRsi14, 0, 0, 1, rsi) <= 0) return;
+      if(CopyBuffer(handleEma21, 0, 0, 1, ema21) <= 0) return;
+      if(CopyBuffer(handleEma8, 0, 0, 1, ema8) <= 0) return;
 
       string trend = "LATERAL";
-      if(currentAsk > ema[0]) trend = "TREND_UP";
-      else if(currentBid < ema[0]) trend = "TREND_DOWN";
+      if(currentAsk > ema8[0] && ema8[0] > ema21[0]) trend = "TREND_UP";
+      else if(currentBid < ema8[0] && ema8[0] < ema21[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M15): ", DoubleToString(rsi[0], 1));
+      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
 
-      double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
-      if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
+      // FIX: marca a vela como avaliada AQUI, independente do resultado,
+      // para nao reavaliar/spammar a cada tick durante a mesma vela M15.
+      lastM5CandleTime = currentM15Time;
 
-      double internalSLPct = 0.20; // Stop Loss Fixo em 0.20% (Igual API)
+      // Reseta variaveis globais antes de abrir nova ordem
+      peakPrice = 0;
+      exhaustionTriggered = false;
+
+      double internalSLPct = 0.06; // Stop Loss Fixo inicial em 0.06%
+      double internalTPPct = 0.06; // Take Profit Fixo em 0.06%
 
       double slDist = currentAsk * (internalSLPct / 100.0);
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
 
-      // --- Cálculo do Lote Dinâmico ---
-      if(InpLotMode == LOT_DYNAMIC)
-        {
-         // CORREÇÃO DO CÁLCULO DE LOTE (Bug do volume resolvido)
-         currentLotSize = (AccountInfoDouble(ACCOUNT_BALANCE) / 10000.0) * InpRiskPct;
-         
-         double step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-         if(step > 0) currentLotSize = MathFloor(currentLotSize / step) * step;
-         
-         double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-         if(currentLotSize < minLot) currentLotSize = minLot;
-        }
-      else
-        {
-         currentLotSize = 0.01; // Modo Fixo
-        }
+      double tpDist = currentAsk * (internalTPPct / 100.0);
+      if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
+
+      // FIX: lote agora respeita InpLotMode (fixo 0.01 ou dinamico por risco %)
+      currentLotSize = CalculateLotSize(slDist);
 
       // --- Lógica a Favor da Tendência (M15) ---
-      if(trend == "TREND_UP" && rsi[0] >= 50)
+      if(trend == "TREND_UP")
         {
          double buySL = currentAsk - slDist;
          double buyTP = currentAsk + tpDist;
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
-            Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM15Time;
+            Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(buyTP, 5));
            }
          else
            {
             Print("❌ Erro ao abrir COMPRA: ", GetLastError());
            }
         }
-      else if(trend == "TREND_DOWN" && rsi[0] <= 50)
+      else if(trend == "TREND_DOWN")
         {
          double sellSL = currentBid + slDist;
          double sellTP = currentBid - tpDist;
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
-            Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize);
-            lastM5CandleTime = currentM15Time;
+            Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(sellTP, 5));
            }
          else
            {
@@ -300,6 +450,10 @@ void OnTick()
 void OnDeinit(const int reason)
   {
    EventKillTimer();
+
+   // FIX: libera os handles dos indicadores (evita vazamento de recursos)
+   if(handleEma21 != INVALID_HANDLE) IndicatorRelease(handleEma21);
+   if(handleEma8  != INVALID_HANDLE) IndicatorRelease(handleEma8);
   }
 
 //+------------------------------------------------------------------+
@@ -352,12 +506,12 @@ void SyncWithServer()
      }
    trades_json += "]";
 
-   // Capture last 10 closed trades today to ensure fast scalps are not missed
+   // Captura os ultimos 10 trades fechados hoje
    HistorySelect(midnightTime, TimeCurrent());
    int histTotal = HistoryDealsTotal();
    string closed_json = "[";
    int closed_count = 0;
-   
+
    for(int i = histTotal - 1; i >= 0 && closed_count < 10; i--)
      {
       ulong ticket = HistoryDealGetTicket(i);
@@ -367,17 +521,16 @@ void SyncWithServer()
          if(entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_INOUT)
            {
             if(closed_count > 0) closed_json += ",";
-            
+
             double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT) + HistoryDealGetDouble(ticket, DEAL_SWAP) + HistoryDealGetDouble(ticket, DEAL_COMMISSION);
             double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
             double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
             string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
             long pos_id = HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
-            
-            // Revert deal type to show original position type
+
             long dealType = HistoryDealGetInteger(ticket, DEAL_TYPE);
-            string type_str = (dealType == DEAL_TYPE_BUY) ? "sell" : "buy"; 
-            
+            string type_str = (dealType == DEAL_TYPE_BUY) ? "sell" : "buy";
+
             closed_json += "{";
             closed_json += "\"id\":\"" + IntegerToString(pos_id) + "\",";
             closed_json += "\"type\":\"" + type_str + "\",";
@@ -410,5 +563,10 @@ void SyncWithServer()
    ArrayResize(post, ArraySize(post) - 1); // Remove o \0 do final da string
 
    int res = WebRequest("POST", InpServerUrl, headers, 5000, post, result, result_headers);
+   if(res == -1)
+     {
+      Print("⚠️ Falha ao sincronizar com o servidor. Erro: ", GetLastError(),
+            " - verifique se a URL está na lista de URLs permitidas (Ferramentas > Opções > Expert Advisors).");
+     }
   }
 //+------------------------------------------------------------------+

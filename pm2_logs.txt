@@ -1,0 +1,205 @@
+[TAILING] Tailing last 100 lines for [fybot] process (change the value with --lines option)
+/root/.pm2/logs/fybot-out.log last 100 lines:
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando ao feed da Deriv (app_id=33TVM6cBQ9GfSjbwQHHdE)...
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conectando WebSocket na URL: wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Codigo: 1006, Motivo: 
+0|fybot    | [DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...
+0|fybot    | ⚠️ Conexao com feed perdida. Reconectando em 5s...
+
+/root/.pm2/logs/fybot-error.log last 100 lines:
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: WebSocket was closed before the connection was established
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+0|fybot    | [DerivBotEngine] Erro no socket de feed: Unexpected server response: 401
+

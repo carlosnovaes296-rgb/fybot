@@ -1134,7 +1134,7 @@ export default function App() {
   };
 
   const toggleBot = async () => {
-    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com';
+    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com';
 
     // If system is blocked by daily target, prevent starting the robot
     if (!stats.botRunning && stats.systemBlocked) {
@@ -1498,8 +1498,16 @@ export default function App() {
         />
       )}
 
+      {/* Mobile Menu Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      
       {/* Sidebar */}
-      <div className={`fixed left-0 top-0 h-full w-64 bg-[#0f0f12] border-r border-white/5 flex flex-col items-stretch z-50 transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <div className={`fixed left-0 top-0 h-full w-72 bg-[#0f0f12] border-r border-white/5 flex flex-col items-stretch z-50 transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="py-6 flex items-center justify-center gap-3 border-b border-white/5">
           {/* Expanded (Desktop): Brand Logo */}
           <div className="hidden md:flex items-center justify-center select-none">
@@ -1571,7 +1579,7 @@ export default function App() {
             }}
           />
 
-          {(currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com') && (
+          {(currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com') && (
             <NavItem
               icon={<Download size={20} color="#00FF00" />}
               label="Baixar DCA (Apenas Admin)"
@@ -1586,14 +1594,14 @@ export default function App() {
           )}
         </nav>
         <div className="p-4 md:p-6 pb-10">
-          <div className="mb-6 flex flex-row justify-center items-center gap-8">
-
-            <a href="https://wa.me/5577999359309?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
+          <div className="mb-6 flex flex-col justify-center items-center gap-2 mt-4">
+            <a href="https://wa.me/5577999483349?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-200"
+              className="hover:scale-110 transition-transform duration-200 flex flex-col items-center"
               title="Grupo Fybot WhatsApp">
-              <img src="/whatsapp-logo.webp.webp" alt="WhatsApp" className="w-20 h-20 object-contain drop-shadow-md" />
+              <img src="/whatsapp-logo.webp.webp" alt="WhatsApp" className="w-16 h-16 object-contain drop-shadow-md mb-2" />
+              <span className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">Grupo Oficial Fybot</span>
             </a>
           </div>
 
@@ -1618,7 +1626,7 @@ export default function App() {
       </div>
 
       {/* Main Content */}
-      <main className="pl-0 md:pl-64 min-h-screen w-full overflow-x-hidden">
+      <main className="pl-0 md:pl-72 min-h-screen w-full overflow-x-hidden">
         {/* Modal: Activate License */}
         <AnimatePresence>
           {showLicenseModal && (
@@ -1851,18 +1859,6 @@ export default function App() {
               <span className="hidden sm:inline text-[10px] uppercase tracking-tighter text-white/30">{t.header.equity}</span>
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
-
-            <button
-              onClick={() => { fetchStatus(); alert(language === 'en' ? 'Syncing with MT5...' : 'Sincronizando com MT5...'); }}
-              disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all duration-300 font-bold text-xs shadow-xl"
-              title="Forçar sincronização com MetaTrader 5"
-            >
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{language === 'en' ? 'SYNC' : 'SINCRONIZAR'}</span>
-            </button>
-
-
             <button
               onClick={toggleBot}
               disabled={loading || stats.systemBlocked}
@@ -1934,7 +1930,7 @@ export default function App() {
                   const displayBalance = isConnected ? stats.balance : 0;
                   return (
                     <div className="flex flex-col gap-2">
-                      <TradingScheduleTimer />
+                      {!(stats?.activeLicense?.key?.toUpperCase().includes('ADMIN') || currentUser?.id?.toUpperCase().includes('ADMIN')) && <TradingScheduleTimer />}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard
                           label=""
@@ -1949,19 +1945,19 @@ export default function App() {
                         />
                         <StatCard
                           label=""
-                          value={isConnected ? `$${(displayBalance * 0.035).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
-                          delta="3.5%"
+                          value={isConnected ? `$${(displayBalance * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                          delta="2.5%"
                           icon={<Target className="text-amber-500" />}
                           trendPositive={true}
                           labelClassName="text-amber-500"
                           valueClassName="text-amber-500"
                           trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                          subLabel="Projeção de ganho diário 3.5%"
+                          subLabel="Projeção de ganho diário 2.5%"
                         />
                         {(() => {
                           // Só mostra lucro se estiver conectado com saldo real/demo validado
                           const realTimeProfit = isConnected ? (stats.dailyProfit || 0) : 0;
-                          const liveTarget = displayBalance * 0.035;
+                          const liveTarget = displayBalance * 0.025;
                           return (
                             <StatCard
                               label=""
@@ -3681,7 +3677,7 @@ export default function App() {
                     </div>
 
                     {/* Deriv Connection (Apenas ADMIN para testes) */}
-                    {currentUser?.role === 'ADMIN' && (
+                    {(currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com') && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest pl-1">Token Deriv (Conta Real)</label>

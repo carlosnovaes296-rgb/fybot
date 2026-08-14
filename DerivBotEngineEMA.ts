@@ -1,5 +1,5 @@
 import { WebSocket as NodeWebSocket } from 'ws';
-import { Indicators, Candle } from './Indicators.ts';
+import { Indicators, Candle } from './Indicators';
 
 export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
@@ -21,8 +21,9 @@ export class DerivBotEngineEMA {
     private maxHistory: number = 300;
     private enginePingInterval: NodeJS.Timeout | null = null;
 
-    private ohlcM5: Record<string, Candle> = {};
-
+    private candlesM5: Candle[] = [];
+    private ATR_PERIOD = 14;
+    private BREAKOUT_PERIOD = 10;
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
     private lastSignalCandleEpoch: number | null = null;
     private lastMonitorLogTime = 0;
@@ -227,10 +228,16 @@ export class DerivBotEngineEMA {
             }, 5000);
         });
 
-        this.ws.on('error', (err) => {
+        this.ws.on('error', (err: any) => {
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
-            console.error('[DerivBotEngine] Erro no socket de feed:', err);
-            this.ws?.terminate();
+            console.error('[DerivBotEngine] Erro no socket de feed:', err.message);
+            try {
+                if (this.ws && this.ws.readyState !== 3) {
+                    this.ws.terminate();
+                }
+            } catch (e) {
+                // Ignore terminate errors
+            }
         });
     }
 
@@ -294,13 +301,11 @@ export class DerivBotEngineEMA {
         const closedCandlesM5 = this.candlesM5.slice(0, -1);
         const closesM5 = closedCandlesM5.map(c => c.close);
 
-        // EMA 21 de H1 = EMA 252 de M5 (1 hora = 12 velas de M5. 21 * 12 = 252)
-        const emaTrendSeries = Indicators.ema(closesM5, 252);
-        const currentEmaTrend = emaTrendSeries[emaTrendSeries.length - 1];
-        
-        // RSI 14 do M5
-        const rsiSeries = Indicators.rsi(closesM5, 14);
-        const currentRsi = rsiSeries[rsiSeries.length - 1];
+        const ema8Series = Indicators.ema(closesM5, 8);
+        const currentEma8 = ema8Series[ema8Series.length - 1];
+
+        const ema21Series = Indicators.ema(closesM5, 21);
+        const currentEma21 = ema21Series[ema21Series.length - 1];
 
         const lastClosedM5 = closedCandlesM5[closedCandlesM5.length - 1];
         const currentPrice = lastClosedM5.close;
@@ -314,10 +319,9 @@ export class DerivBotEngineEMA {
         const resistance = Indicators.highestHigh(prev10Candles, this.BREAKOUT_PERIOD);
         const support = Indicators.lowestLow(prev10Candles, this.BREAKOUT_PERIOD);
 
-        // Define tendencia com base no preco vs EMA200 (H1)
         let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > currentEmaTrend) trend = 'TREND_UP';
-        else if (currentPrice < currentEmaTrend) trend = 'TREND_DOWN';
+        if (currentPrice > currentEma8 && currentEma8 > currentEma21) trend = 'TREND_UP';
+        else if (currentPrice < currentEma8 && currentEma8 < currentEma21) trend = 'TREND_DOWN';
 
         if (trend !== this.lastTrend) {
             this.lastTrend = trend;
@@ -327,32 +331,27 @@ export class DerivBotEngineEMA {
         const now = Date.now();
         if (now - this.lastMonitorLogTime > 20000) {
             if (this.onLog) {
-                this.onLog(`🧠 [DCA API] Tend M1: ${this.lastTrend} | Preço: ${currentPrice.toFixed(2)} | EMA21: ${currentEmaTrend.toFixed(2)} | RSI: ${currentRsi.toFixed(1)}`);
+                this.onLog(`🧠 [DCA API] Tend M1: ${this.lastTrend} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${currentEma8.toFixed(2)} | EMA21: ${currentEma21.toFixed(2)}`);
             }
             this.lastMonitorLogTime = now;
         }
 
         // Trava de horario inteligente (pausa das 17h as 21h)
-        if (!this.isWithinTradingHours()) {
-           return;
-        }
+        // [MODIFICADO] Trava removida no motor para permitir testes do Admin (o bloqueio de usuarios normais fica no server.ts)
+        // if (!this.isWithinTradingHours()) {
+        //    return;
+        // }
 
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        if (
-            trend === 'TREND_UP'
-            // Removida condição de RSI para forçar o teste rápido
-        ) {
+        if (trend === 'TREND_UP') {
             signal = 'BUY';
-            reason = `[DCA API] Compra Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Alta`;
+            reason = `[DCA API] Compra Confirmada | EMA 8 > EMA 21 | Tendencia Alta`;
         }
-        else if (
-            trend === 'TREND_DOWN'
-            // Removida condição de RSI para forçar o teste rápido
-        ) {
+        else if (trend === 'TREND_DOWN') {
             signal = 'SELL';
-            reason = `[DCA API] Venda Confirmada | RSI: ${currentRsi.toFixed(1)} | Tendencia Baixa`;
+            reason = `[DCA API] Venda Confirmada | EMA 8 < EMA 21 | Tendencia Baixa`;
         }
 
         if (!signal) return;

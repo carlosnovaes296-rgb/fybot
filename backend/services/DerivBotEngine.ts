@@ -1,5 +1,5 @@
 import { WebSocket as NodeWebSocket } from 'ws';
-import { Indicators, Candle } from './Indicators.ts';
+import { Indicators, Candle } from './Indicators';
 
 export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
@@ -20,13 +20,40 @@ export class DerivBotEngineEMA {
 
     private maxHistory: number = 300;
     private enginePingInterval: NodeJS.Timeout | null = null;
+    // [CORRIGIDO] pongTimeout precisa viver no escopo da instancia, nao dentro de connectWithToken,
+    // senao cada nova conexao perde a referencia do timeout anterior e o watchdog nunca funciona.
+    private pongTimeout: NodeJS.Timeout | null = null;
+    private readonly PONG_TIMEOUT_MS = 15000;
 
     private candlesM15: Candle[] = [];
+    private candlesM30: Candle[] = [];
     private ATR_PERIOD = 14;
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
     private lastSignalCandleEpoch: number | null = null;
     private lastMonitorLogTime = 0;
+
+    public currentEma8: number = 0;
+    public currentEma21: number = 0;
+
+    public getMarketState() {
+        if (this.candlesM15.length < 3 || this.candlesM30.length < 3) return null;
+
+        // Retorna as 3 últimas velas fechadas para análise de exaustão
+        const len = this.candlesM15.length;
+        // len - 1 = vela atual (aberta), len - 2 = última fechada
+        const lastClosedCandle = this.candlesM15[len - 2];
+        const prevCandle1 = this.candlesM15[len - 3];
+        const prevCandle2 = this.candlesM15[len - 4] || prevCandle1;
+
+        return {
+            ema8: this.currentEma8,
+            ema21: this.currentEma21,
+            lastClosedCandle,
+            prevCandle1,
+            prevCandle2
+        };
+    }
 
     public onSignal?: (direction: 'BUY' | 'SELL', price: number, reason: string, tp: number, sl: number) => void;
     public onRegimeChange?: (regime: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL') => void;
@@ -36,12 +63,16 @@ export class DerivBotEngineEMA {
     public disconnect() {
         if (this.ws) {
             console.log('[DerivBotEngine] Forcando desconexao via comando do usuario...');
-            this.ws.terminate();
-            this.ws.on('close', () => {
+            const wsRef = this.ws;
+            // [CORRIGIDO] o listener de 'close' agora e registrado ANTES do terminate(),
+            // evitando a corrida em que o evento poderia disparar antes do handler existir.
+            wsRef.on('close', () => {
                 if (this.enginePingInterval) clearInterval(this.enginePingInterval);
+                if (this.pongTimeout) clearTimeout(this.pongTimeout);
                 this.isConnected = false;
                 this.isAuthorized = false;
             });
+            wsRef.terminate();
             this.ws = null;
         }
         this.isConnected = false;
@@ -126,22 +157,34 @@ export class DerivBotEngineEMA {
         if (this.enginePingInterval) {
             clearInterval(this.enginePingInterval);
         }
-
-        let pongTimeout: NodeJS.Timeout;
+        if (this.pongTimeout) {
+            clearTimeout(this.pongTimeout);
+            this.pongTimeout = null;
+        }
 
         this.ws.on('open', () => {
             console.log("[DerivBotEngine] Conectado. Autorizando com token da conta...");
             this.enginePingInterval = setInterval(() => {
                 if (this.ws && this.ws.readyState === this.ws.OPEN) {
                     this.ws.send(JSON.stringify({ ping: 1 }));
+                    // [CORRIGIDO] agora o watchdog realmente arma um timeout: se o 'pong'
+                    // (msg_type 'ping' de resposta) nao chegar a tempo, forcamos o terminate()
+                    // do socket para acionar a reconexao automatica no handler de 'close'.
+                    if (this.pongTimeout) clearTimeout(this.pongTimeout);
+                    this.pongTimeout = setTimeout(() => {
+                        console.warn('[DerivBotEngine] Pong nao recebido a tempo. Encerrando socket para reconectar...');
+                        if (this.onLog) this.onLog('⚠️ Sem resposta do servidor (pong). Reiniciando conexao...');
+                        this.ws?.terminate();
+                    }, this.PONG_TIMEOUT_MS);
                 }
             }, 10000);
 
+            // [CORRIGIDO] isConnected passa a refletir apenas que o socket abriu.
+            // isAuthorized so vira true quando a Deriv confirmar o 'authorize' na mensagem,
+            // e requestCandleHistory() so e chamado apos essa confirmacao (ver 'message' abaixo).
             this.isConnected = true;
-            this.isAuthorized = true;
-            this.requestCandleHistory();
 
-            if (this.onLog) this.onLog('📊 Feed conectado. Carregando dados de mercado do Ouro (M1 DCA)...');
+            if (this.onLog) this.onLog('📊 Feed conectado. Autorizando conta...');
             this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
         });
 
@@ -150,7 +193,11 @@ export class DerivBotEngineEMA {
                 const response = JSON.parse(data);
 
                 if (response.msg_type === 'ping') {
-                    clearTimeout(pongTimeout);
+                    // Resposta (pong) do servidor ao nosso ping
+                    if (this.pongTimeout) {
+                        clearTimeout(this.pongTimeout);
+                        this.pongTimeout = null;
+                    }
                     return;
                 }
 
@@ -158,7 +205,12 @@ export class DerivBotEngineEMA {
                     console.error('[DerivBotEngine] Erro da Deriv:', response.error);
                     if (this.onLog) this.onLog(`[SYS] Erro Deriv: ${response.error.message || JSON.stringify(response.error)}`);
                     if (response.msg_type === 'authorize') {
+                        // [CORRIGIDO] antes disso o socket ficava pendurado (isConnected=true,
+                        // isAuthorized=false, sem tentativa de reconexao). Agora forcamos o
+                        // terminate() para cair no fluxo padrao de reconexao em 5s.
                         this.isAuthorized = false;
+                        console.error('[DerivBotEngine] Falha na autorizacao. Encerrando socket para nova tentativa...');
+                        this.ws?.terminate();
                     }
                     return;
                 }
@@ -168,6 +220,9 @@ export class DerivBotEngineEMA {
                     console.log(`[DerivBotEngine] Autorizado com sucesso. Conta: ${response.authorize?.loginid}`);
                     if (this.onLog) this.onLog(`✅ Conta autorizada: ${response.authorize?.loginid}`);
                     if (this.onAuthorized) this.onAuthorized(response.authorize);
+                    // [CORRIGIDO] o historico de velas so e pedido depois da autorizacao confirmada,
+                    // e nao mais otimisticamente no 'open'.
+                    this.requestCandleHistory();
                     return;
                 }
 
@@ -178,8 +233,11 @@ export class DerivBotEngineEMA {
                     if (response.req_id === 300) {
                         this.candlesM15 = mappedCandles;
                         console.log(`[DerivBotEngine] Carregado historico M15: ${this.candlesM15.length} velas`);
-                        if (this.candlesM15.length >= 300 && this.onLog) {
-                            this.onLog(`[SYS] Histórico M15 carregado com sucesso (${this.candlesM15.length} velas)! Analisando mercado imediatamente...`);
+                    } else if (response.req_id === 301) {
+                        this.candlesM30 = mappedCandles;
+                        console.log(`[DerivBotEngine] Carregado historico M30: ${this.candlesM30.length} velas`);
+                        if (this.candlesM15.length > 50 && this.candlesM30.length > 50 && this.onLog) {
+                            this.onLog(`[SYS] Histórico M15 e M30 carregados! Analisando mercado imediatamente...`);
                             this.analyzeMarket();
                         }
                     }
@@ -198,9 +256,9 @@ export class DerivBotEngineEMA {
                     const ohlcGran = Number(ohlc.granularity);
                     if (ohlcGran === 900) {
                         const isNewCandle = this.updateCandleSeries(this.candlesM15, candle);
-                        if (isNewCandle) {
-                            this.analyzeMarket();
-                        }
+                        if (isNewCandle) this.analyzeMarket();
+                    } else if (ohlcGran === 1800) {
+                        this.updateCandleSeries(this.candlesM30, candle);
                     }
                 }
             } catch (err) {
@@ -212,19 +270,34 @@ export class DerivBotEngineEMA {
             const reasonStr = reason ? reason.toString() : 'Desconhecido';
             console.log(`[DerivBotEngine] Conexao com feed fechada. Codigo: ${code}, Motivo: ${reasonStr}`);
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
+            if (this.pongTimeout) {
+                clearTimeout(this.pongTimeout);
+                this.pongTimeout = null;
+            }
             console.log('[DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...');
             if (this.onLog) this.onLog(`⚠️ Conexao com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
             this.isAuthorized = false;
+            this.ws = null;
             setTimeout(() => {
                 if (this.currentToken) this.connectWithToken(this.currentToken);
             }, 5000);
         });
 
-        this.ws.on('error', (err) => {
+        this.ws.on('error', (err: any) => {
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
-            console.error('[DerivBotEngine] Erro no socket de feed:', err);
-            this.ws?.terminate();
+            if (this.pongTimeout) {
+                clearTimeout(this.pongTimeout);
+                this.pongTimeout = null;
+            }
+            console.error('[DerivBotEngine] Erro no socket de feed:', err.message);
+            try {
+                if (this.ws && this.ws.readyState !== 3) {
+                    this.ws.terminate();
+                }
+            } catch (e) {
+                // Ignore terminate errors
+            }
         });
     }
 
@@ -241,7 +314,21 @@ export class DerivBotEngineEMA {
 
         setTimeout(() => {
             this.ws?.send(JSON.stringify({
-                ticks: 'R_100',
+                ticks_history: this.symbol,
+                end: 'latest',
+                count: 350,
+                style: 'candles',
+                granularity: 1800,
+                subscribe: 1,
+                req_id: 301
+            }));
+        }, 500);
+
+        setTimeout(() => {
+            // [CORRIGIDO] estava assinando ticks de 'R_100' (Indice de Volatilidade),
+            // sem relacao com o ativo operado. Corrigido para o simbolo real do robo.
+            this.ws?.send(JSON.stringify({
+                ticks: this.symbol,
                 subscribe: 1,
                 req_id: 9999
             }));
@@ -276,70 +363,76 @@ export class DerivBotEngineEMA {
             return false;
         }
 
-        // Pausa especifica das 17:00 as 20:59 (volta as 21:00)
-        if (adjustedHour >= 17 && adjustedHour < 21) {
-            return false;
-        }
+        // Operação 24h durante a semana (trava de horário removida)
 
         return true;
     }
 
     private analyzeMarket() {
-        if (!this.isAuthorized) return; 
-        
+        if (!this.isAuthorized) return;
+
         this.onLog?.(`🔍 Analisando mercado (M15) agora...`);
 
-        if (this.candlesM15.length < 50) {
-            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência (Temos ${this.candlesM15.length})`);
+        if (this.candlesM15.length < 50 || this.candlesM30.length < 50) {
+            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência M15/M30`);
             return;
         }
 
         const closedCandlesM15 = this.candlesM15.slice(0, -1);
         const closesM15 = closedCandlesM15.map(c => c.close);
+        const ema8M15 = Indicators.ema(closesM15, 8)[closesM15.length - 1];
+        const ema21M15 = Indicators.ema(closesM15, 21)[closesM15.length - 1];
+        this.currentEma8 = ema8M15;
+        this.currentEma21 = ema21M15;
 
-        const ema14Series = Indicators.ema(closesM15, 14);
-        const currentEma14 = ema14Series[ema14Series.length - 1];
-
-        const ema21Series = Indicators.ema(closesM15, 21);
-        const currentEma21 = ema21Series[ema21Series.length - 1];
-        
-        const rsiSeries = Indicators.rsi(closesM15, 14);
-        const currentRsi = rsiSeries[rsiSeries.length - 1];
+        const closedCandlesM30 = this.candlesM30.slice(0, -1);
+        const closesM30 = closedCandlesM30.map(c => c.close);
+        const ema8M30 = Indicators.ema(closesM30, 8)[closesM30.length - 1];
+        const ema21M30 = Indicators.ema(closesM30, 21)[closesM30.length - 1];
 
         const lastClosedM15 = closedCandlesM15[closedCandlesM15.length - 1];
         const currentPrice = lastClosedM15.close;
 
-        let trend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > currentEma14 && currentEma14 > currentEma21) {
-            trend = 'TREND_UP';
-        } else if (currentPrice < currentEma14 && currentEma14 < currentEma21) {
-            trend = 'TREND_DOWN';
+        let trendM15: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+        if (currentPrice > ema8M15 && ema8M15 > ema21M15) trendM15 = 'TREND_UP';
+        else if (currentPrice < ema8M15 && ema8M15 < ema21M15) trendM15 = 'TREND_DOWN';
+
+        let trendM30: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+        if (currentPrice > ema8M30 && ema8M30 > ema21M30) trendM30 = 'TREND_UP';
+        else if (currentPrice < ema8M30 && ema8M30 < ema21M30) trendM30 = 'TREND_DOWN';
+
+        let combinedTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+        if (trendM15 === 'TREND_UP' && trendM30 === 'TREND_UP') combinedTrend = 'TREND_UP';
+        else if (trendM15 === 'TREND_DOWN' && trendM30 === 'TREND_DOWN') combinedTrend = 'TREND_DOWN';
+
+        if (combinedTrend !== this.lastTrend) {
+            this.lastTrend = combinedTrend;
+            if (this.onRegimeChange) this.onRegimeChange(combinedTrend);
         }
 
-        if (trend !== this.lastTrend) {
-            this.lastTrend = trend;
-            if (this.onRegimeChange) this.onRegimeChange(trend);
+        if (Math.random() < 0.3) {
+            this.onLog?.(`🧠 [SNIPER API] Confluência | M15: ${trendM15} | M30: ${trendM30} | Preço: ${currentPrice.toFixed(2)}`);
         }
 
-        if (!this.isWithinTradingHours()) return;
+        if (!this.isWithinTradingHours()) {
+            this.onLog?.(`⏸️ Mercado fechado (Fim de semana). Sinal ignorado.`);
+            return;
+        }
 
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        if (trend === 'TREND_UP' && currentRsi >= 50) {
+        if (combinedTrend === 'TREND_UP') {
             signal = 'BUY';
-            reason = `[DCA API MOMENTO] Compra | RSI: ${currentRsi.toFixed(1)} | EMA14 > EMA21`;
+            reason = `[SNIPER CONFLUÊNCIA] Compra | M15 + M30 de Alta`;
         }
-        else if (trend === 'TREND_DOWN' && currentRsi <= 50) {
+        else if (combinedTrend === 'TREND_DOWN') {
             signal = 'SELL';
-            reason = `[DCA API MOMENTO] Venda | RSI: ${currentRsi.toFixed(1)} | EMA14 < EMA21`;
+            reason = `[SNIPER CONFLUÊNCIA] Venda | M15 + M30 de Baixa`;
         }
 
         if (signal && this.onSignal && lastClosedM15.epoch !== this.lastSignalCandleEpoch) {
             this.lastSignalCandleEpoch = lastClosedM15.epoch;
-            
-            // O SL e TP individuais não são mais enviados via corretora (limit_order).
-            // O DerivConnectionManager fará a gestão global da rede DCA em memória.
             this.onSignal(signal, currentPrice, reason, 0, 0);
         }
     }
