@@ -4,7 +4,7 @@ const conn = new Client();
 
 conn.on('ready', () => {
   console.log('✅ Connected to VPS.');
-  conn.exec(`mysql -u fybot_user -pfybot_password_2024 fybot_db -e "SHOW COLUMNS FROM users; SELECT * FROM users WHERE email = 'laidesantos33@gmail.com';"`, (err, stream) => {
+  conn.exec(`pm2 logs fybot --lines 50 --nostream`, (err, stream) => {
     if (err) throw err;
     stream.on('close', (code) => {
       conn.end();

@@ -26,7 +26,6 @@ export class DerivBotEngineEMA {
     private readonly PONG_TIMEOUT_MS = 15000;
 
     private candlesM15: Candle[] = [];
-    private candlesM30: Candle[] = [];
     private ATR_PERIOD = 14;
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
@@ -37,7 +36,7 @@ export class DerivBotEngineEMA {
     public currentEma21: number = 0;
 
     public getMarketState() {
-        if (this.candlesM15.length < 3 || this.candlesM30.length < 3) return null;
+        if (this.candlesM15.length < 3) return null;
 
         // Retorna as 3 últimas velas fechadas para análise de exaustão
         const len = this.candlesM15.length;
@@ -233,11 +232,8 @@ export class DerivBotEngineEMA {
                     if (response.req_id === 300) {
                         this.candlesM15 = mappedCandles;
                         console.log(`[DerivBotEngine] Carregado historico M15: ${this.candlesM15.length} velas`);
-                    } else if (response.req_id === 301) {
-                        this.candlesM30 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico M30: ${this.candlesM30.length} velas`);
-                        if (this.candlesM15.length > 50 && this.candlesM30.length > 50 && this.onLog) {
-                            this.onLog(`[SYS] Histórico M15 e M30 carregados! Analisando mercado imediatamente...`);
+                        if (this.candlesM15.length > 50 && this.onLog) {
+                            this.onLog(`[SYS] Histórico M15 carregado! Analisando mercado imediatamente...`);
                             this.analyzeMarket();
                         }
                     }
@@ -257,8 +253,6 @@ export class DerivBotEngineEMA {
                     if (ohlcGran === 900) {
                         const isNewCandle = this.updateCandleSeries(this.candlesM15, candle);
                         if (isNewCandle) this.analyzeMarket();
-                    } else if (ohlcGran === 1800) {
-                        this.updateCandleSeries(this.candlesM30, candle);
                     }
                 }
             } catch (err) {
@@ -313,26 +307,16 @@ export class DerivBotEngineEMA {
         }));
 
         setTimeout(() => {
-            this.ws?.send(JSON.stringify({
-                ticks_history: this.symbol,
-                end: 'latest',
-                count: 350,
-                style: 'candles',
-                granularity: 1800,
-                subscribe: 1,
-                req_id: 301
-            }));
-        }, 500);
-
-        setTimeout(() => {
             // [CORRIGIDO] estava assinando ticks de 'R_100' (Indice de Volatilidade),
             // sem relacao com o ativo operado. Corrigido para o simbolo real do robo.
-            this.ws?.send(JSON.stringify({
-                ticks: this.symbol,
-                subscribe: 1,
-                req_id: 9999
-            }));
-        }, 2000);
+            if (this.ws?.readyState === 1) {
+                this.ws?.send(JSON.stringify({
+                    ticks: this.symbol,
+                    subscribe: 1,
+                    req_id: 9999
+                }));
+            }
+        }, 1000);
     }
 
     private updateCandleSeries(series: Candle[], newCandle: Candle): boolean {
@@ -373,8 +357,8 @@ export class DerivBotEngineEMA {
 
         this.onLog?.(`🔍 Analisando mercado (M15) agora...`);
 
-        if (this.candlesM15.length < 50 || this.candlesM30.length < 50) {
-            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência M15/M30`);
+        if (this.candlesM15.length < 50) {
+            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência M15`);
             return;
         }
 
@@ -385,33 +369,20 @@ export class DerivBotEngineEMA {
         this.currentEma8 = ema8M15;
         this.currentEma21 = ema21M15;
 
-        const closedCandlesM30 = this.candlesM30.slice(0, -1);
-        const closesM30 = closedCandlesM30.map(c => c.close);
-        const ema8M30 = Indicators.ema(closesM30, 8)[closesM30.length - 1];
-        const ema21M30 = Indicators.ema(closesM30, 21)[closesM30.length - 1];
-
         const lastClosedM15 = closedCandlesM15[closedCandlesM15.length - 1];
         const currentPrice = lastClosedM15.close;
 
         let trendM15: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > ema8M15 && ema8M15 > ema21M15) trendM15 = 'TREND_UP';
-        else if (currentPrice < ema8M15 && ema8M15 < ema21M15) trendM15 = 'TREND_DOWN';
+        if (ema8M15 > ema21M15) trendM15 = 'TREND_UP';
+        else if (ema8M15 < ema21M15) trendM15 = 'TREND_DOWN';
 
-        let trendM30: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (currentPrice > ema8M30 && ema8M30 > ema21M30) trendM30 = 'TREND_UP';
-        else if (currentPrice < ema8M30 && ema8M30 < ema21M30) trendM30 = 'TREND_DOWN';
-
-        let combinedTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
-        if (trendM15 === 'TREND_UP' && trendM30 === 'TREND_UP') combinedTrend = 'TREND_UP';
-        else if (trendM15 === 'TREND_DOWN' && trendM30 === 'TREND_DOWN') combinedTrend = 'TREND_DOWN';
-
-        if (combinedTrend !== this.lastTrend) {
-            this.lastTrend = combinedTrend;
-            if (this.onRegimeChange) this.onRegimeChange(combinedTrend);
+        if (trendM15 !== this.lastTrend) {
+            this.lastTrend = trendM15;
+            if (this.onRegimeChange) this.onRegimeChange(trendM15);
         }
 
         if (Math.random() < 0.3) {
-            this.onLog?.(`🧠 [SNIPER API] Confluência | M15: ${trendM15} | M30: ${trendM30} | Preço: ${currentPrice.toFixed(2)}`);
+            this.onLog?.(`🧠 [Fybot Sniper API] M15: ${trendM15} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${ema8M15.toFixed(2)} | EMA21: ${ema21M15.toFixed(2)}`);
         }
 
         if (!this.isWithinTradingHours()) {
@@ -419,16 +390,21 @@ export class DerivBotEngineEMA {
             return;
         }
 
+        // --- Lógica Fybot Sniper API: Pullback na EMA 8 ---
+        const MAX_PROXIMITY_USD = 1.50; // Equivalente a InpEma8ProximityPoints = 150.0 no XAUUSD
+        const distAbs = Math.abs(currentPrice - ema8M15);
+        const isNearEma8 = distAbs <= MAX_PROXIMITY_USD;
+
         let signal: 'BUY' | 'SELL' | null = null;
         let reason = '';
 
-        if (combinedTrend === 'TREND_UP') {
+        if (trendM15 === 'TREND_UP' && isNearEma8 && currentPrice >= ema8M15) {
             signal = 'BUY';
-            reason = `[SNIPER CONFLUÊNCIA] Compra | M15 + M30 de Alta`;
+            reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
         }
-        else if (combinedTrend === 'TREND_DOWN') {
+        else if (trendM15 === 'TREND_DOWN' && isNearEma8 && currentPrice <= ema8M15) {
             signal = 'SELL';
-            reason = `[SNIPER CONFLUÊNCIA] Venda | M15 + M30 de Baixa`;
+            reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
         }
 
         if (signal && this.onSignal && lastClosedM15.epoch !== this.lastSignalCandleEpoch) {

@@ -121,6 +121,64 @@ async function handleDerivPKCELogin(clientId: string) {
 }
 // --------------------
 
+const MT5TradingViewChart = ({ symbol }: { symbol: string }) => {
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!container.current) return;
+    container.current.innerHTML = '';
+    
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.type = "text/javascript";
+    script.async = true;
+    
+    let displaySymbol = symbol;
+    if (symbol.includes('R_100') || symbol.includes('R_') || symbol.includes('1HZ')) {
+      displaySymbol = 'OANDA:XAUUSD';
+    } else if (!displaySymbol.includes(':')) {
+       displaySymbol = 'OANDA:' + displaySymbol;
+    }
+
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: displaySymbol,
+      interval: "15",
+      timezone: "America/Sao_Paulo",
+      theme: "dark",
+      style: "1",
+      locale: "br",
+      enable_publishing: false,
+      backgroundColor: "rgba(0, 0, 0, 1)",
+      gridColor: "rgba(17, 17, 17, 1)",
+      hide_top_toolbar: false,
+      hide_legend: false,
+      save_image: false,
+      studies: [
+        "MASimple@tv-basicstudies",
+        "MASimple@tv-basicstudies"
+      ],
+      support_host: "https://www.tradingview.com",
+      overrides: {
+        "mainSeriesProperties.candleStyle.upColor": "#00FF00",
+        "mainSeriesProperties.candleStyle.downColor": "#000000",
+        "mainSeriesProperties.candleStyle.borderUpColor": "#00FF00",
+        "mainSeriesProperties.candleStyle.borderDownColor": "#00FF00",
+        "mainSeriesProperties.candleStyle.wickUpColor": "#00FF00",
+        "mainSeriesProperties.candleStyle.wickDownColor": "#00FF00",
+        "paneProperties.background": "#000000",
+        "paneProperties.vertGridProperties.color": "#111111",
+        "paneProperties.horzGridProperties.color": "#111111"
+      }
+    });
+    container.current.appendChild(script);
+  }, [symbol]);
+
+  return (
+    <div className="tradingview-widget-container" ref={container} style={{ height: "100%", width: "100%" }}>
+    </div>
+  );
+};
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('pt');
@@ -204,6 +262,8 @@ export default function App() {
     return '';
   });
   const [showLicenseModal, setShowLicenseModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [licenseKeyField, setLicenseKeyField] = useState('');
   const [licenseActivationError, setLicenseActivationError] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ type: 'user' | 'license'; id: string; displayLabel: string } | null>(null);
@@ -626,6 +686,30 @@ export default function App() {
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
     fetchAdminData();
+  };
+
+  const saveAdminEdit = async () => {
+    if (!editingUser) return;
+    try {
+      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-userid': currentUser?.id || '' 
+        },
+        body: JSON.stringify(editingUser)
+      });
+      if (res.ok) {
+        setShowEditUserModal(false);
+        setEditingUser(null);
+        fetchAdminData();
+      } else {
+        alert('Erro ao salvar as edições');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao salvar as edições');
+    }
   };
 
   const deleteUser = async (id: string, name?: string) => {
@@ -1569,29 +1653,18 @@ export default function App() {
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
           <NavItem
             icon={<Download size={20} color="#FFD700" />}
-            label={language === 'en' ? 'Download SNIPER (30 Days Test)' : 'Baixar SNIPER (Teste 30 Dias)'}
+            label={language === 'en' ? 'Download FYBOT TREND' : 'Baixar FYBOT TREND'}
             onClick={() => {
               const link = document.createElement('a');
-              link.href = '/Fybot_Sniper.mq5';
-              link.download = 'Fybot_Sniper.mq5';
+              link.href = '/Fybot_trend.mq5';
+              link.download = 'Fybot_trend.mq5';
               link.click();
               setIsMobileMenuOpen(false);
             }}
           />
 
-          {(currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com') && (
-            <NavItem
-              icon={<Download size={20} color="#00FF00" />}
-              label="Baixar DCA (Apenas Admin)"
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = '/Fybot_Pro.mq5';
-                link.download = 'Fybot_Pro.mq5';
-                link.click();
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
+
+
         </nav>
         <div className="p-4 md:p-6 pb-10">
           <div className="mb-6 flex flex-col justify-center items-center gap-2 mt-4">
@@ -2052,6 +2125,17 @@ export default function App() {
                   })()}
 
 
+                </div>
+
+                {/* TradingView Advanced Chart */}
+                <div className="w-full bg-[#000000] border border-white/5 rounded-3xl p-1 mb-8 overflow-hidden h-[450px] lg:h-[550px] shadow-2xl shadow-green-500/10">
+                  <div className="px-6 py-3 border-b border-[#111111] flex items-center gap-2">
+                    <TrendingUp size={18} className="text-[#00FF00]" />
+                    <span className="text-sm font-bold text-white tracking-widest uppercase">XAUUSD (Ouro) - M15 - ESTILO MT5</span>
+                  </div>
+                  <div style={{ width: '100%', height: 'calc(100% - 45px)' }}>
+                     <MT5TradingViewChart symbol={stats.activeSymbol?.toUpperCase() || 'XAUUSD'} />
+                  </div>
                 </div>
 
                 {/* Bottom Section: Execution Table & Live Console */}
@@ -3212,6 +3296,14 @@ export default function App() {
                         </div>
                         <div className="flex gap-2 items-center flex-wrap">
                           <button
+                            onClick={() => { setEditingUser({...u}); setShowEditUserModal(true); }}
+                            title="Editar"
+                            className="p-2 px-3 bg-purple-500/10 rounded-lg hover:bg-purple-500/20 text-purple-500 transition-colors flex items-center gap-1.5"
+                          >
+                            <Settings size={14} />
+                            <span className="text-[10px] font-bold uppercase tracking-tight">Editar</span>
+                          </button>
+                          <button
                             onClick={() => grantAccess(u.id)}
                             title={t.dashboard.grantAccess}
                             className="p-2 px-3 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 text-emerald-500 transition-colors flex items-center gap-1.5"
@@ -3219,7 +3311,16 @@ export default function App() {
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
                           </button>
-                          {/* Botão Vitalício removido */}
+                          {u.email === 'laidesantos33@gmail.com' && (
+                            <button
+                              onClick={() => grantLifetimeAccess(u.id)}
+                              title="Conta Demo"
+                              className="p-2 px-3 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 text-blue-500 transition-colors flex items-center gap-1.5 border border-blue-500/10"
+                            >
+                              <PlayCircle size={14} />
+                              <span className="text-[10px] font-bold uppercase tracking-tight">Conta Demo</span>
+                            </button>
+                          )}
                           <button
                             onClick={() => toggleUser(u.id)}
                             title={u.status === 'ACTIVE' ? 'Lock User' : 'Activate User'}
@@ -3971,6 +4072,140 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      <AnimatePresence>
+        {showEditUserModal && editingUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#1a1c23] border border-white/10 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400">
+                    <Settings size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Editar Usuário e Licença</h3>
+                    <p className="text-sm text-white/60">Altere os dados de {editingUser.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowEditUserModal(false); setEditingUser(null); }}
+                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-white/60 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Nome</label>
+                    <input
+                      type="text"
+                      value={editingUser.name || ''}
+                      onChange={e => setEditingUser({ ...editingUser, name: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Email</label>
+                    <input
+                      type="email"
+                      value={editingUser.email || ''}
+                      onChange={e => setEditingUser({ ...editingUser, email: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Nova Senha</label>
+                    <input
+                      type="text"
+                      placeholder="Deixe em branco para não alterar"
+                      onChange={e => setEditingUser({ ...editingUser, password: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Carteira USDT</label>
+                    <input
+                      type="text"
+                      value={editingUser.wallet || ''}
+                      onChange={e => setEditingUser({ ...editingUser, wallet: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Token Deriv Demo</label>
+                    <input
+                      type="text"
+                      value={editingUser.derivTokenDemo || ''}
+                      onChange={e => setEditingUser({ ...editingUser, derivTokenDemo: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Token Deriv Real</label>
+                    <input
+                      type="text"
+                      value={editingUser.derivTokenReal || ''}
+                      onChange={e => setEditingUser({ ...editingUser, derivTokenReal: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/10 pt-4 mt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Tipo de Conta Ativa</label>
+                    <select
+                      value={editingUser.activeAccountType || 'DEMO'}
+                      onChange={e => setEditingUser({ ...editingUser, activeAccountType: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    >
+                      <option value="DEMO">Demo</option>
+                      <option value="REAL">Real</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Licença</label>
+                    <select
+                      value={editingUser.licenseType || (licenses.some(l => l.userId === editingUser.id && l.status === 'ACTIVE' && l.type === 'VITALICIO') ? 'VITALICIO' : licenses.some(l => l.userId === editingUser.id && l.status === 'ACTIVE') ? 'PRO' : 'NONE')}
+                      onChange={e => setEditingUser({ ...editingUser, licenseType: e.target.value })}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                    >
+                      <option value="NONE">Sem Licença Ativa</option>
+                      <option value="PRO">PRO (60 Dias)</option>
+                      <option value="VITALICIO">Vitalícia (Demo Ilimitada)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  onClick={saveAdminEdit}
+                  className="w-full py-4 mt-6 bg-gradient-to-r from-purple-500 to-fuchsia-500 rounded-xl font-bold text-white shadow-lg hover:shadow-purple-500/25 transition-all active:scale-95"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

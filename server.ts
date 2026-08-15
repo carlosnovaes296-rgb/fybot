@@ -73,12 +73,12 @@ async function startServer() {
       await dbHelper.pool.query('TRUNCATE TABLE withdrawals');
       await dbHelper.pool.query('TRUNCATE TABLE payments');
       await dbHelper.pool.query('DELETE FROM licenses WHERE userId != "1"');
-      
+
       // Clear memory
       referralEarnings.splice(0, referralEarnings.length);
       withdrawals.splice(0, withdrawals.length);
       payments.splice(0, payments.length);
-      
+
       const adminLicenses = licenses.filter(l => l.userId === '1');
       licenses.splice(0, licenses.length, ...adminLicenses);
 
@@ -99,7 +99,7 @@ async function startServer() {
   const DB_PATH = path.join(DB_DIR, 'db.json');
   // Generate standard UUID v4
   const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
@@ -214,10 +214,10 @@ async function startServer() {
       try {
         await dbHelper.pool.query(`ALTER TABLE users ADD COLUMN referralCode VARCHAR(50) DEFAULT ''`);
         console.log('FYBOT: Coluna referralCode adicionada com sucesso.');
-      } catch (e: any) {}
+      } catch (e: any) { }
       try {
         await dbHelper.pool.query(`ALTER TABLE users ADD COLUMN referredBy VARCHAR(50) DEFAULT ''`);
-      } catch(e: any) {}
+      } catch (e: any) { }
 
       // AUTO-FIX: Atribuir órfãos ao Admin principal
       try {
@@ -247,11 +247,11 @@ async function startServer() {
       )`);
       users = await dbHelper.getUsers();
       licenses = await dbHelper.getLicenses();
-      
+
       // FORÇAR O ADMIN A TER APENAS 30 DIAS DE LICENÇA (REMOVENDO O VITALÍCIO DO DB)
       const adminLicense = licenses.find((l: any) => l.userId === '1');
       if (adminLicense) {
-          adminLicense.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        adminLicense.expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       }
 
       payments = await dbHelper.getPayments();
@@ -289,7 +289,7 @@ async function startServer() {
           // Re-fetch to ensure memory matches DB
           referralEarnings = await dbHelper.getReferralEarnings();
         }
-      } catch(e: any) {
+      } catch (e: any) {
         console.error('FYBOT: Error paying retroactive commissions', e.message);
       }
 
@@ -303,90 +303,90 @@ async function startServer() {
         let stateData;
         try {
           stateData = typeof row.state_data === 'string' ? JSON.parse(row.state_data) : row.state_data;
-        } catch(e) { continue; }
-        
+        } catch (e) { continue; }
+
         stateData.trades = (stateData.trades || []).filter((t: any) => !t.id.startsWith('PENDING_'));
         // WIPE LOGS SO THE USER SEES A FRESH START WITH MT5
         userStates[row.userId] = { ...stateData, logs: [], pendingOrders: new Set(stateData.pendingOrders || []) };
       }
-      
+
       console.log(`FYBOT: Loaded ${users.length} users and states from MySQL ✅`);
 
       // AUTO-START BOTS THAT WERE RUNNING
       users.forEach(u => {
-          const state = getUserState(u.id);
-          if (state.botRunning) {
-              if (globalConnectionManager) globalConnectionManager.start(u.id);
-              
-              const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
-              if (activeToken && activeToken.startsWith('pat_')) {
-                  if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
-              }
+        const state = getUserState(u.id);
+        if (state.botRunning) {
+          if (globalConnectionManager) globalConnectionManager.start(u.id);
+
+          const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
+          if (activeToken && activeToken.startsWith('pat_')) {
+            if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
           }
+        }
       });
 
     } catch (e) {
       console.error('FYBOT: CRITICAL ERROR - Failed to load DB', e);
       console.error('FYBOT: Shutting down to prevent data overwrite.');
-      process.exit(1); 
+      process.exit(1);
     }
   };
   await loadDB();
 
   // --- CORREÇÃO ÚNICA: Remover a comissão manual indevida (Marcelo) ---
   const emailsAlvo = ['marcelo_bona@hotmail.com'];
-  
+
   for (const alvo of emailsAlvo) {
-      // Pega qualquer comissão onde o alvo foi o indicado
-      const badEarnings = referralEarnings.filter(e => e.referredEmail === alvo);
-      for (const badEarning of badEarnings) {
-          const sponsor = users.find(u => u.id === badEarning.referrerId);
-          if (sponsor) {
-              sponsor.balance = Math.max(0, (sponsor.balance || 0) - badEarning.amount);
-              dbHelper.updateUser(sponsor.id, sponsor).catch(()=>{});
-              dbHelper.pool.query('DELETE FROM referral_earnings WHERE id = ?', [badEarning.id]).catch(()=>{});
-              console.log(`FYBOT CLEANUP FORCE: Removida comissão de $${badEarning.amount} do patrocinador ${sponsor.email} (referente a ${alvo})`);
-          }
-          // Remove from memory
-          const idx = referralEarnings.findIndex(e => e.id === badEarning.id);
-          if (idx !== -1) referralEarnings.splice(idx, 1);
+    // Pega qualquer comissão onde o alvo foi o indicado
+    const badEarnings = referralEarnings.filter(e => e.referredEmail === alvo);
+    for (const badEarning of badEarnings) {
+      const sponsor = users.find(u => u.id === badEarning.referrerId);
+      if (sponsor) {
+        sponsor.balance = Math.max(0, (sponsor.balance || 0) - badEarning.amount);
+        dbHelper.updateUser(sponsor.id, sponsor).catch(() => { });
+        dbHelper.pool.query('DELETE FROM referral_earnings WHERE id = ?', [badEarning.id]).catch(() => { });
+        console.log(`FYBOT CLEANUP FORCE: Removida comissão de $${badEarning.amount} do patrocinador ${sponsor.email} (referente a ${alvo})`);
       }
+      // Remove from memory
+      const idx = referralEarnings.findIndex(e => e.id === badEarning.id);
+      if (idx !== -1) referralEarnings.splice(idx, 1);
+    }
   }
   // --------------------------------------------------------------------------
-  
+
 
   globalDerivEngine = new DerivBotEngineEMA();
   globalConnectionManager = new DerivConnectionManager(getUserState, addUserLog, () => users, globalDerivEngine);
   globalDerivEngine.onLog = (msg) => {
-      console.log(msg);
-      // Opcional: enviar log da inteligência para os usuários ativos
-      if (globalConnectionManager) {
-          globalConnectionManager.getActiveUserIds().forEach(uid => {
-              addUserLog(uid, msg);
-          });
-      }
+    console.log(msg);
+    // Opcional: enviar log da inteligência para os usuários ativos
+    if (globalConnectionManager) {
+      globalConnectionManager.getActiveUserIds().forEach(uid => {
+        addUserLog(uid, msg);
+      });
+    }
   };
   globalDerivEngine.onRegimeChange = (regime) => {
-      if (globalConnectionManager) {
-          globalConnectionManager.getActiveUserIds().forEach(uid => {
-              globalConnectionManager!.handleRegimeChange(uid, regime);
-          });
-      }
+    if (globalConnectionManager) {
+      globalConnectionManager.getActiveUserIds().forEach(uid => {
+        globalConnectionManager!.handleRegimeChange(uid, regime);
+      });
+    }
   };
   globalDerivEngine.onSignal = (direction, price, reason, tp, sl) => {
-      if (globalConnectionManager) {
-          globalConnectionManager.getActiveUserIds().forEach(uid => {
-              globalConnectionManager!.executeSignal(uid, direction, price, reason, tp, sl);
-          });
-      }
+    if (globalConnectionManager) {
+      globalConnectionManager.getActiveUserIds().forEach(uid => {
+        globalConnectionManager!.executeSignal(uid, direction, price, reason, tp, sl);
+      });
+    }
   };
   // users.forEach auto-start was moved inside loadDB()
   const saveDB = async () => {
     if (!users || users.length === 0) return;
     try {
       // Sync memory users back to MySQL safely (Background UPSERT)
-      for (const u of users) await dbHelper.updateUser(u.id, u).catch(()=>{});
-      
+      for (const u of users) await dbHelper.updateUser(u.id, u).catch(() => { });
+
       // Save all user states
       const serializedStates: any = {};
       for (const [k, v] of Object.entries(userStates)) {
@@ -395,10 +395,10 @@ async function startServer() {
       await dbHelper.saveUserStates(serializedStates);
 
       // Sync licenses, payments, and withdrawals to MySQL
-      for (const l of licenses) await dbHelper.insertLicense(l).catch(()=>{});
-      for (const p of payments) await dbHelper.insertPayment(p).catch(()=>{});
-      for (const w of withdrawals) await dbHelper.insertWithdrawal(w).catch(()=>{});
-      for (const e of referralEarnings) await dbHelper.insertReferralEarning(e).catch(()=>{});
+      for (const l of licenses) await dbHelper.insertLicense(l).catch(() => { });
+      for (const p of payments) await dbHelper.insertPayment(p).catch(() => { });
+      for (const w of withdrawals) await dbHelper.insertWithdrawal(w).catch(() => { });
+      for (const e of referralEarnings) await dbHelper.insertReferralEarning(e).catch(() => { });
 
 
     } catch (e: any) {
@@ -420,6 +420,73 @@ async function startServer() {
     }
   };
 
+  // Endpoints de Gerenciamento de Usuários e Entidades (Admin)
+  app.post('/api/admin/users/:id/grant-access', adminAuth, (req, res) => {
+    const user = users.find(u => String(u.id) === String(req.params.id));
+    if (user) {
+      user.status = 'ACTIVE';
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
+  app.post('/api/admin/users/:id/toggle', adminAuth, (req, res) => {
+    const user = users.find(u => String(u.id) === String(req.params.id));
+    if (user) {
+      user.status = user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE';
+      saveDB();
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', adminAuth, async (req, res) => {
+    const idx = users.findIndex(u => String(u.id) === String(req.params.id));
+    if (idx !== -1) {
+      users.splice(idx, 1);
+      try { await dbHelper.pool.query('DELETE FROM users WHERE id = ?', [req.params.id]); } catch (e) { }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
+  });
+
+  app.delete('/api/admin/licenses/:id', adminAuth, async (req, res) => {
+    const idx = licenses.findIndex(l => String(l.id) === String(req.params.id));
+    if (idx !== -1) {
+      licenses.splice(idx, 1);
+      try { await dbHelper.pool.query('DELETE FROM licenses WHERE id = ?', [req.params.id]); } catch (e) { }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'License not found' });
+    }
+  });
+
+  app.delete('/api/admin/payments/:id', adminAuth, async (req, res) => {
+    const idx = payments.findIndex(p => String(p.id) === String(req.params.id));
+    if (idx !== -1) {
+      payments.splice(idx, 1);
+      try { await dbHelper.pool.query('DELETE FROM payments WHERE id = ?', [req.params.id]); } catch (e) { }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Payment not found' });
+    }
+  });
+
+  app.delete('/api/admin/withdrawals/:id', adminAuth, async (req, res) => {
+    const idx = withdrawals.findIndex(w => String(w.id) === String(req.params.id));
+    if (idx !== -1) {
+      withdrawals.splice(idx, 1);
+      try { await dbHelper.pool.query('DELETE FROM withdrawals WHERE id = ?', [req.params.id]); } catch (e) { }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Withdrawal not found' });
+    }
+  });
+
   app.get('/api/admin/clean-simulation', adminAuth, (req, res) => {
     Object.values(userStates).forEach((state: any) => {
       state.trades = [];
@@ -438,20 +505,20 @@ async function startServer() {
       if (!userId || typeof userId !== 'string') {
         return res.status(400).json({ error: 'Missing admin ID' });
       }
-      
+
       if (globalConnectionManager && globalDerivEngine) {
         const user = users.find(u => u.id === userId);
         const token = user?.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
 
         globalConnectionManager.start(userId);
         if (token) {
-            globalDerivEngine.connectWithToken(token);
+          globalDerivEngine.connectWithToken(token);
         }
-        
+
         const state = getUserState(userId);
         // NÃO LIGAR O BOTÃO GERAL: state.botRunning = true;
         saveDB();
-        
+
         addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Iniciada Manualmente.`);
         res.json({ success: true, message: "Deriv test started" });
       } else {
@@ -468,18 +535,18 @@ async function startServer() {
       if (!userId || typeof userId !== 'string') {
         return res.status(400).json({ error: 'Missing admin ID' });
       }
-      
+
       if (globalConnectionManager && globalDerivEngine) {
         globalConnectionManager.stop(userId);
         // Desconecta o motor global se ninguém mais estiver testando
         if (globalConnectionManager.getActiveUserIds().length === 0) {
-            globalDerivEngine.disconnect();
+          globalDerivEngine.disconnect();
         }
-        
+
         const state = getUserState(userId);
         state.botRunning = false;
         saveDB();
-        
+
         addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Parada Manualmente.`);
         res.json({ success: true, message: "Deriv test stopped" });
       } else {
@@ -509,16 +576,16 @@ async function startServer() {
     const hours = brtNow.getHours();
 
     if (day === 5 && hours >= 17) { // Sexta após as 17 -> Pula pra Segunda
-        nextStart.setDate(nextStart.getDate() + 3);
+      nextStart.setDate(nextStart.getDate() + 3);
     } else if (day === 6) { // Sábado -> Pula pra Segunda
-        nextStart.setDate(nextStart.getDate() + 2);
+      nextStart.setDate(nextStart.getDate() + 2);
     } else if (day === 0) { // Domingo -> Pula pra Segunda
-        nextStart.setDate(nextStart.getDate() + 1);
+      nextStart.setDate(nextStart.getDate() + 1);
     } else if (hours >= 17) {
-        // Segunda-Quinta após as 17 -> Amanhã às 6h
-        nextStart.setDate(nextStart.getDate() + 1);
-    } 
-    
+      // Segunda-Quinta após as 17 -> Amanhã às 6h
+      nextStart.setDate(nextStart.getDate() + 1);
+    }
+
     const diffMs = nextStart.getTime() - brtNow.getTime();
     return new Date(Date.now() + diffMs).toISOString();
   };
@@ -559,34 +626,34 @@ async function startServer() {
 
       // LÓGICA DA JANELA DE OPERAÇÕES E META DIÁRIA
       if (state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget && openTradesCount === 0) {
-         if (!state.systemBlocked) {
-             state.systemBlocked = true;
-             state.blockedUntil = getNextSessionStart();
-             addUserLog(userId as string, "🏆 Parabéns! Sua meta diária foi concluída com sucesso. O sistema foi bloqueado por segurança e o botão Iniciar estará liberado no próximo dia de operações às 06:00.");
-             if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-             // state.botRunning = false; // Removido para testes
-         }
+        if (!state.systemBlocked) {
+          state.systemBlocked = true;
+          state.blockedUntil = getNextSessionStart();
+          addUserLog(userId as string, "🏆 Parabéns! Sua meta diária foi concluída com sucesso. O sistema foi bloqueado por segurança e o botão Iniciar estará liberado no próximo dia de operações às 06:00.");
+          if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+          // state.botRunning = false; // Removido para testes
+        }
       } else if (!isTradingWindowOpen() && !(String(userId).toUpperCase().includes('ADMIN'))) {
-         if (!state.systemBlocked) {
-             state.systemBlocked = true;
-             state.blockedUntil = getNextSessionStart();
-             addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
-             if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-             // state.botRunning = false; // Removido para testes
-         }
+        if (!state.systemBlocked) {
+          state.systemBlocked = true;
+          state.blockedUntil = getNextSessionStart();
+          addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
+          if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+          // state.botRunning = false; // Removido para testes
+        }
       } else {
-         // Se estamos dentro do horário de operação
-         // e o sistema estava bloqueado por motivo de HORÁRIO (e não porque já bateu a meta de hoje)
-         // Temos que destravar.
-         // Uma maneira de saber é: se blockedUntil passou e a meta não foi batida.
-         if (state.systemBlocked) {
-            if ((state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) || (state.dailyProfit < state.dailyProfitTarget || state.dailyProfitTarget === 0)) {
-               state.systemBlocked = false;
-               state.blockedUntil = undefined;
-               state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
-               addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] A proteção diária foi desativada.");
-            }
-         }
+        // Se estamos dentro do horário de operação
+        // e o sistema estava bloqueado por motivo de HORÁRIO (e não porque já bateu a meta de hoje)
+        // Temos que destravar.
+        // Uma maneira de saber é: se blockedUntil passou e a meta não foi batida.
+        if (state.systemBlocked) {
+          if ((state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) || (state.dailyProfit < state.dailyProfitTarget || state.dailyProfitTarget === 0)) {
+            state.systemBlocked = false;
+            state.blockedUntil = undefined;
+            state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
+            addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] A proteção diária foi desativada.");
+          }
+        }
       }
 
       res.json({
@@ -606,32 +673,32 @@ async function startServer() {
         ],
         trades: (() => {
           const parseTime = (t: any) => {
-             if (!t) return 0;
-             if (typeof t === 'number') return t < 10000000000 ? t * 1000 : t;
-             // Only replace dots for MT5 YYYY.MM.DD format, don't break ISO strings YYYY-MM-DDTHH:mm:ss.mssZ
-             const dateStr = typeof t === 'string' ? (t.includes('T') ? t : t.replace(/\./g, '-')) : t;
-             const d = new Date(dateStr);
-             return isNaN(d.getTime()) ? 0 : d.getTime();
+            if (!t) return 0;
+            if (typeof t === 'number') return t < 10000000000 ? t * 1000 : t;
+            // Only replace dots for MT5 YYYY.MM.DD format, don't break ISO strings YYYY-MM-DDTHH:mm:ss.mssZ
+            const dateStr = typeof t === 'string' ? (t.includes('T') ? t : t.replace(/\./g, '-')) : t;
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? 0 : d.getTime();
           };
           // AUTO-CLEANUP a pedido do usuario: remove apenas as ordens fantasmas que foram geradas com o timestamp defeituoso
           if (state.trades) {
-              state.trades = state.trades.filter((t: any) => {
-                  if (t.status !== 'OPEN' && String(t.id) !== '1265346333') {
-                      // Filtra as ordens que vieram do problema anterior com timestamp massivo
-                      if (t.time && String(t.time).includes('2026-08-10T04:16')) return false;
-                      if (t.time && String(t.time).includes('2026-08-10T04:15')) return false;
-                  }
-                  if (String(t.id) === '1265346333') {
-                      t.profit = 2.20;
-                  }
-                  return true;
-              });
+            state.trades = state.trades.filter((t: any) => {
+              if (t.status !== 'OPEN' && String(t.id) !== '1265346333') {
+                // Filtra as ordens que vieram do problema anterior com timestamp massivo
+                if (t.time && String(t.time).includes('2026-08-10T04:16')) return false;
+                if (t.time && String(t.time).includes('2026-08-10T04:15')) return false;
+              }
+              if (String(t.id) === '1265346333') {
+                t.profit = 2.20;
+              }
+              return true;
+            });
           }
           const now = Date.now();
           const allTrades = [...(state.trades || [])]
             .filter((t: any) => {
-                const tTime = parseTime(t.time || t.openTime);
-                return (now - tTime) < (48 * 60 * 60 * 1000);
+              const tTime = parseTime(t.time || t.openTime);
+              return (now - tTime) < (48 * 60 * 60 * 1000);
             })
             .sort((a: any, b: any) => parseTime(b.time || b.openTime) - parseTime(a.time || a.openTime));
           const openTrades = allTrades.filter(t => t.status === 'OPEN');
@@ -693,22 +760,22 @@ async function startServer() {
     try {
       const { userId } = req.body;
       const state = getUserState(userId);
-      
+
       const todayStr = new Date().toISOString().split('T')[0];
       const todayClosedTrades = (state.trades || []).filter((t: any) => t.status === 'CLOSED' && t.time && t.time.startsWith(todayStr));
-        const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : 0;
-        const floatingProfit = (state.equity || 0) - (state.balance || 0);
-        const rawDailyProfit = realizedProfit + floatingProfit;
-        
-        // Define o offset na primeira leitura para que o bot sempre inicie o painel em $0.00
-        if (state.startupProfitOffset === undefined) {
-           state.startupProfitOffset = rawDailyProfit;
-        }
-        
-        state.dailyProfit = rawDailyProfit - state.startupProfitOffset; // Zera imediatamente para o frontend
+      const realizedProfit = state.trueRealizedProfit !== undefined ? state.trueRealizedProfit : 0;
+      const floatingProfit = (state.equity || 0) - (state.balance || 0);
+      const rawDailyProfit = realizedProfit + floatingProfit;
+
+      // Define o offset na primeira leitura para que o bot sempre inicie o painel em $0.00
+      if (state.startupProfitOffset === undefined) {
+        state.startupProfitOffset = rawDailyProfit;
+      }
+
+      state.dailyProfit = rawDailyProfit - state.startupProfitOffset; // Zera imediatamente para o frontend
       state.customStartingBalance = state.balance; // Define a nova base de cálculo para os limites 5% e 2%
       state.systemBlocked = false;
-      
+
       // Limpa qualquer ordem fantasma que tenha ficado travada na memória como OPEN
       if (state.trades) {
         state.trades = state.trades.filter((t: any) => t.status !== 'OPEN');
@@ -855,7 +922,7 @@ async function startServer() {
 
       const adminUser = users.find(u => u.role === 'ADMIN');
       const adminWallet = adminUser?.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62';
-      
+
       const apiKey = process.env.BSCSCAN_API_KEY;
 
       if (!adminWallet || adminWallet.includes('SUA_CARTEIRA')) {
@@ -880,16 +947,16 @@ async function startServer() {
       const response = await axios.post(rpcUrl, rpcData);
 
       if (!response.data || response.data.error) {
-         return res.status(400).json({ error: 'Erro ao consultar a rede BSC. Verifique se o Hash está correto.' });
+        return res.status(400).json({ error: 'Erro ao consultar a rede BSC. Verifique se o Hash está correto.' });
       }
 
       const receipt = response.data.result;
       if (!receipt) {
-         return res.status(400).json({ error: 'Transação não encontrada ou ainda não confirmada. Aguarde alguns segundos e tente novamente.' });
+        return res.status(400).json({ error: 'Transação não encontrada ou ainda não confirmada. Aguarde alguns segundos e tente novamente.' });
       }
 
       if (receipt.status !== '0x1') {
-         return res.status(400).json({ error: 'Transação falhou na blockchain. O pagamento não foi concluído.' });
+        return res.status(400).json({ error: 'Transação falhou na blockchain. O pagamento não foi concluído.' });
       }
 
       // Check if there is a USDT Transfer log
@@ -899,16 +966,16 @@ async function startServer() {
 
       let transferLog = null;
       for (let log of receipt.logs) {
-         if (log.address.toLowerCase() === usdtContract &&
-             log.topics[0] === transferTopic &&
-             log.topics[2]?.toLowerCase() === paddedAdminWallet) {
-             transferLog = log;
-             break;
-         }
+        if (log.address.toLowerCase() === usdtContract &&
+          log.topics[0] === transferTopic &&
+          log.topics[2]?.toLowerCase() === paddedAdminWallet) {
+          transferLog = log;
+          break;
+        }
       }
 
       if (!transferLog) {
-         return res.status(400).json({ error: 'Transação inválida: O destino não é a carteira correta ou o token não é USDT BEP-20.' });
+        return res.status(400).json({ error: 'Transação inválida: O destino não é a carteira correta ou o token não é USDT BEP-20.' });
       }
 
       // Extract amount (data is hex, 18 decimals)
@@ -940,9 +1007,9 @@ async function startServer() {
         let baseDate = new Date();
         const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
         if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
-           baseDate = new Date(currentActive.expiryDate);
+          baseDate = new Date(currentActive.expiryDate);
         }
-        
+
         const expiryDate = new Date(baseDate);
         let days = 30;
         let type = (planType || 'PRO').toUpperCase();
@@ -951,13 +1018,13 @@ async function startServer() {
         if (type.includes('INSTITUCIONAL') || type.includes('PARTNER')) days = 90;
         if (type.includes('BOT PRO') || type.includes('ENTERPRISE') || type.includes('180')) days = 180;
         if (type.includes('LIFETIME') || type.includes('VITALÍCIO') || type.includes('VITALICIO')) days = 36500;
-        
+
         if (type.includes('TEST') || type.includes('TESTE')) { days = 30; type = 'SNIPER (TESTE)'; }
         else if (Number(amount) >= 100) { days = 150; type = 'SNIPER'; }
         else if (Number(amount) >= 50 && days === 30) { days = 90; type = 'INSTITUCIONAL PRO'; }
         else if (Number(amount) >= 20 && days === 30) { days = 60; type = 'PRO'; }
         else if (Number(amount) >= 10 && days === 30) { days = 30; type = 'BASIC'; }
-        
+
         expiryDate.setDate(expiryDate.getDate() + days);
 
         licenses.forEach(l => {
@@ -1055,18 +1122,18 @@ async function startServer() {
       // state.dailyProfit = 0;
       addUserLog(userId, "FYBOT PRO INICIADO - Operando com Sinais Institucionais...");
       if (globalConnectionManager) globalConnectionManager.start(userId);
-      
+
       if (user) {
-          const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
-          if (activeToken && activeToken.startsWith('pat_')) {
-              try {
-                  if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken).catch(err => {
-                      console.error("Erro no connectWithToken:", err);
-                  });
-              } catch (e) {
-                  console.error("Erro síncrono no connectWithToken:", e);
-              }
+        const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
+        if (activeToken && activeToken.startsWith('pat_')) {
+          try {
+            if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken).catch(err => {
+              console.error("Erro no connectWithToken:", err);
+            });
+          } catch (e) {
+            console.error("Erro síncrono no connectWithToken:", e);
           }
+        }
       }
 
     } else {
@@ -1075,7 +1142,7 @@ async function startServer() {
       if (globalConnectionManager) globalConnectionManager.stop(userId);
       if (globalDerivEngine) globalDerivEngine.disconnect();
     }
-    
+
     saveDB(); // <-- Added saveDB() to persist botRunning state!
     res.json({ success: true, botRunning: state.botRunning });
   });
@@ -1139,10 +1206,10 @@ async function startServer() {
 
   app.post('/api/admin/unblock-all', adminAuth, (req, res) => {
     Object.keys(userStates).forEach(id => {
-       userStates[id].systemBlocked = false;
-       userStates[id].blockedUntil = null;
-       userStates[id].dailyProfit = 0;
-       addUserLog(id, "🔓 [ADMIN] Sistema liberado pelo administrador.");
+      userStates[id].systemBlocked = false;
+      userStates[id].blockedUntil = null;
+      userStates[id].dailyProfit = 0;
+      addUserLog(id, "🔓 [ADMIN] Sistema liberado pelo administrador.");
     });
     saveDB();
     res.json({ success: true, message: "Todos os usuários foram desbloqueados com sucesso." });
@@ -1185,7 +1252,7 @@ async function startServer() {
     while (currentUserId && level <= 5) {
       const sponsor = users.find(u => u.id === currentUserId || u.referralCode === currentUserId);
       if (!sponsor) break;
-      
+
       let percentage = 0;
       if (level === 1) percentage = 0.20;
       else if (level === 2) percentage = 0.15;
@@ -1205,7 +1272,7 @@ async function startServer() {
         type: `Comissão de Licença ${planName.toUpperCase()} (Nível ${level})`,
         timestamp: new Date().toISOString()
       });
-      
+
       sponsor.balance = (sponsor.balance || 0) + amount;
 
       currentUserId = sponsor.referredBy;
@@ -1222,9 +1289,9 @@ async function startServer() {
       let baseDate = new Date();
       const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
       if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
-         baseDate = new Date(currentActive.expiryDate);
+        baseDate = new Date(currentActive.expiryDate);
       }
-      
+
       const expiryDate = new Date(baseDate);
       expiryDate.setDate(expiryDate.getDate() + 60); // PRO = 60 dias
 
@@ -1314,6 +1381,65 @@ async function startServer() {
     } else {
       res.status(404).json({ error: 'User not found' });
     }
+  });
+
+  app.put('/api/admin/users/:id', adminAuth, (req, res) => {
+    const user = users.find(u => u.id === req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { name, email, password, wallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, licenseType } = req.body;
+
+    if (name !== undefined) user.name = name;
+    if (email !== undefined) user.email = email;
+    if (password !== undefined) user.password = password;
+    if (wallet !== undefined) user.wallet = wallet;
+    if (derivToken !== undefined) user.derivToken = derivToken;
+    if (derivTokenDemo !== undefined) user.derivTokenDemo = derivTokenDemo;
+    if (derivTokenReal !== undefined) user.derivTokenReal = derivTokenReal;
+    if (activeAccountType !== undefined) user.activeAccountType = activeAccountType;
+
+    // Handle License Updates
+    if (licenseType !== undefined) {
+      if (licenseType === 'NONE') {
+        licenses.forEach(l => {
+          if (l.userId === user.id) l.status = 'INACTIVE';
+        });
+      } else if (licenseType === 'PRO' || licenseType === 'VITALICIO') {
+        let baseDate = new Date();
+        const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
+        if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
+           baseDate = new Date(currentActive.expiryDate);
+        }
+        
+        let expiryDate = new Date(baseDate);
+        if (licenseType === 'PRO') {
+          expiryDate.setDate(expiryDate.getDate() + 60);
+        } else {
+          expiryDate = new Date('2099-12-31T23:59:59.999Z');
+        }
+
+        licenses.forEach(l => {
+          if (l.userId === user.id && l.status === 'ACTIVE') {
+            l.status = 'UPGRADED';
+          }
+        });
+
+        licenses.push({
+          id: 'L' + Math.random().toString(36).substr(2, 4),
+          userId: user.id,
+          key: generateUUID(),
+          type: licenseType,
+          status: 'ACTIVE',
+          expiryDate: expiryDate.toISOString()
+        });
+        user.status = 'ACTIVE';
+      }
+    }
+
+    saveDB();
+    res.json({ success: true, user });
   });
 
 
@@ -1429,16 +1555,16 @@ async function startServer() {
         if (derivTokenReal !== undefined) user.derivTokenReal = derivTokenReal;
         if (activeAccountType !== undefined) {
           if (user.activeAccountType !== activeAccountType) {
-             const state = getUserState(id);
-             state.botRunning = false;
-             state.balance = 0;
-             state.equity = 0;
-             if (globalConnectionManager) globalConnectionManager.stop(id);
-             addUserLog(id, `Sistema pausado automaticamente devido a troca para CONTA ${activeAccountType}.`);
+            const state = getUserState(id);
+            state.botRunning = false;
+            state.balance = 0;
+            state.equity = 0;
+            if (globalConnectionManager) globalConnectionManager.stop(id);
+            addUserLog(id, `Sistema pausado automaticamente devido a troca para CONTA ${activeAccountType}.`);
           }
           user.activeAccountType = activeAccountType;
         }
-        
+
         saveDB();
         res.json({ success: true, user });
       } else {
@@ -1513,7 +1639,7 @@ async function startServer() {
       return 0;
     });
     const uniqueWithdrawals = sortedForDeduplication.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
-    
+
     const userId = req.query.userId;
     if (userId) {
       res.json(uniqueWithdrawals.filter(w => w.userId === userId));
@@ -1533,7 +1659,7 @@ async function startServer() {
 
     let earned = referralEarnings.filter((re: any) => re.referrerId === userId).reduce((sum: number, re: any) => sum + Number(re.amount), 0);
     const user = users.find(u => u.id === userId);
-    
+
     let withdrawn = withdrawals.filter((w: any) => w.userId === userId && w.status !== 'REJECTED').reduce((sum: number, w: any) => sum + parseFloat(w.amount), 0);
     let available = earned - withdrawn;
 
@@ -1563,7 +1689,7 @@ async function startServer() {
   app.post('/api/dev/add-balance', (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
-    
+
     referralEarnings.push({
       id: 'dev_' + Date.now(),
       referrerId: userId,
@@ -1650,9 +1776,9 @@ async function startServer() {
         let baseDate = new Date();
         const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
         if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
-           baseDate = new Date(currentActive.expiryDate);
+          baseDate = new Date(currentActive.expiryDate);
         }
-        
+
         const expiryDate = new Date(baseDate);
         let days = 30;
         let type = (payment.planType || 'PRO').toUpperCase();
@@ -1661,13 +1787,13 @@ async function startServer() {
         if (type.includes('INSTITUCIONAL') || type.includes('PARTNER')) days = 90;
         if (type.includes('BOT PRO') || type.includes('ENTERPRISE') || type.includes('180')) days = 180;
         if (type.includes('LIFETIME') || type.includes('VITALÍCIO') || type.includes('VITALICIO')) days = 36500;
-        
+
         // Se for por valor manual sem planType
         if (payment.amount >= 100 && days === 30) { days = 180; type = 'BOT PRO'; }
         else if (payment.amount >= 50 && days === 30) { days = 90; type = 'INSTITUCIONAL PRO'; }
         else if (payment.amount >= 20 && days === 30) { days = 60; type = 'PRO'; }
         else if (payment.amount >= 10 && days === 30) { days = 30; type = 'BASIC'; }
-        
+
         expiryDate.setDate(expiryDate.getDate() + days);
 
         licenses.forEach(l => {
@@ -1725,31 +1851,31 @@ async function startServer() {
   app.post(['/api/mt5-webhook', '/api/mt5-webhook-dca'], (req, res) => {
     try {
       const payload = req.body || {};
-      
+
       const licenseKey = payload.license ? payload.license.trim() : null;
       if (!licenseKey) return res.status(400).json({ error: 'License key missing' });
 
       // Encontra a licença e o usuário correspondente
       let license = licenses.find(l => l.key === licenseKey);
-      
+
       // MASTER KEY BYPASS (Garante que o admin sempre tenha acesso)
       if (!license) {
-          if (licenseKey.startsWith('ADMIN-')) {
-              const extractedUserId = licenseKey.replace('ADMIN-', '');
-              license = { key: licenseKey, userId: extractedUserId, status: 'ACTIVE' };
-          } else if (licenseKey === 'FY-PRO-JCNETO' || licenseKey === 'ADMIN-MASTER-KEY' || licenseKey === '1' || licenseKey === 'admin@admin.com') {
-              license = { key: licenseKey, userId: '1', status: 'ACTIVE' };
-          }
+        if (licenseKey.startsWith('ADMIN-')) {
+          const extractedUserId = licenseKey.replace('ADMIN-', '');
+          license = { key: licenseKey, userId: extractedUserId, status: 'ACTIVE' };
+        } else if (licenseKey === 'FY-PRO-JCNETO' || licenseKey === 'ADMIN-MASTER-KEY' || licenseKey === '1' || licenseKey === 'admin@admin.com') {
+          license = { key: licenseKey, userId: '1', status: 'ACTIVE' };
+        }
       }
 
       if (!license || !license.userId) {
-          console.error('[WEBHOOK 404] Payload recebido:', JSON.stringify(payload));
-          console.error('[WEBHOOK 404] License Key tratada:', licenseKey);
-          return res.status(404).json({ error: 'License not found or unbound' });
+        console.error('[WEBHOOK 404] Payload recebido:', JSON.stringify(payload));
+        console.error('[WEBHOOK 404] License Key tratada:', licenseKey);
+        return res.status(404).json({ error: 'License not found or unbound' });
       }
-      
+
       const userId = license.userId;
-      
+
       // GUARD: If the user is connected natively via API, IGNORE MT5 BALANCE UPDATES to prevent flashing/conflicts!
       // This protects the admin testing natively, while clients using MT5 continue to work perfectly!
       // A Rota Secreta DCA ignora esse bloqueio para você poder testar o DCA sem conflitos!
@@ -1760,110 +1886,110 @@ async function startServer() {
 
       // Atualiza o estado do usuário com os dados recebidos do MT5
       let prevDailyProfit = state.dailyProfit || 0;
-      
+
       if (!isNativeApiActive) {
-          if (payload.balance !== undefined) state.balance = payload.balance;
-          if (payload.equity !== undefined) state.equity = payload.equity;
+        if (payload.balance !== undefined) state.balance = payload.balance;
+        if (payload.equity !== undefined) state.equity = payload.equity;
       }
-      
+
       if (payload.daily_profit !== undefined) state.dailyProfit = payload.daily_profit;
-      
+
       let profitDiff = state.dailyProfit - prevDailyProfit;
 
       if (payload.trades !== undefined) {
-         if (!state.trades) state.trades = [];
-         const incomingTradeIds = new Set(payload.trades.map((t: any) => t.id));
-         
-         let newlyClosedTrades: any[] = [];
-         
-         state.trades = state.trades.map((t: any) => {
-            if (incomingTradeIds.has(t.id)) {
-               const incomingTrade = payload.trades.find((p: any) => p.id === t.id);
-               return { ...t, ...incomingTrade, status: 'OPEN', time: incomingTrade.time || t.time || new Date().toISOString() };
-            } else {
-               // Acabou de fechar!
-               if (t.status === 'OPEN') {
-                   newlyClosedTrades.push(t);
-               }
-               return { ...t, status: t.status === 'OPEN' ? 'CLOSED' : t.status, time: t.time || new Date().toISOString() };
+        if (!state.trades) state.trades = [];
+        const incomingTradeIds = new Set(payload.trades.map((t: any) => t.id));
+
+        let newlyClosedTrades: any[] = [];
+
+        state.trades = state.trades.map((t: any) => {
+          if (incomingTradeIds.has(t.id)) {
+            const incomingTrade = payload.trades.find((p: any) => p.id === t.id);
+            return { ...t, ...incomingTrade, status: 'OPEN', time: incomingTrade.time || t.time || new Date().toISOString() };
+          } else {
+            // Acabou de fechar!
+            if (t.status === 'OPEN') {
+              newlyClosedTrades.push(t);
             }
-         });
-         
-         // Infer final profit if exactly one trade closed and daily profit changed
-         if (newlyClosedTrades.length === 1 && Math.abs(profitDiff) > 0.01 && Math.abs(profitDiff) < (state.balance || 10000) * 0.2) {
-             newlyClosedTrades[0].profit = Number(profitDiff.toFixed(2));
-             const isWin = profitDiff >= 0;
-             addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${newlyClosedTrades[0].symbol || 'XAUUSD'} | Lucro Real: $${profitDiff.toFixed(2)}`);
-         } else if (newlyClosedTrades.length > 0) {
-             newlyClosedTrades.forEach(t => {
-                 const finalProfit = Number(t.profit || 0).toFixed(2);
-                 const isWin = Number(finalProfit) >= 0;
-                 addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${t.symbol || 'XAUUSD'} | Lucro Flutuante: $${finalProfit}`);
-             });
-         }
-         
-         const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
-         payload.trades.forEach((t: any) => {
-            if (!existingTradeIds.has(t.id)) {
-               state.trades.unshift({ ...t, status: 'OPEN', time: t.time || new Date().toISOString() }); // unshift to put new trades at the top
-               addUserLog(userId, `[MT5] ⚡ NOVA ORDEM: ${t.symbol || 'XAUUSD'} (${t.type}) | Lote: ${t.lot || t.amount}`);
-            }
-         });
-      }
-      
-      if (payload.closed_trades !== undefined && Array.isArray(payload.closed_trades)) {
-          if (!state.trades) state.trades = [];
-          const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
-          
-          // DEBUG LOG
-          // console.log(`[WEBHOOK DEBUG] Received ${payload.closed_trades.length} closed trades. State trades count: ${state.trades.length}`);
-          
-          payload.closed_trades.forEach((ct: any) => {
-              if (!existingTradeIds.has(ct.id)) {
-                  // A ordem abriu e fechou muito rápido, nem pegamos ela como OPEN.
-                  state.trades.unshift({ ...ct, status: 'CLOSED', time: ct.time || new Date().toISOString() });
-                  const finalProfit = Number(ct.profit || 0).toFixed(2);
-                  const isWin = Number(finalProfit) >= 0;
-                  addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} SCALP RÁPIDO: ${ct.symbol || 'XAUUSD'} | Lucro: $${finalProfit}`);
-              } else {
-                  // Se já existe, garante que o profit final é o correto (caso o webhook feche ela com lucro flutuante desatualizado)
-                  const existingTrade = state.trades.find((t:any) => t.id === ct.id);
-                  if (existingTrade) {
-                      existingTrade.profit = ct.profit;
-                      existingTrade.status = 'CLOSED';
-                      if (!existingTrade.time && ct.time) existingTrade.time = ct.time;
-                  }
-              }
+            return { ...t, status: t.status === 'OPEN' ? 'CLOSED' : t.status, time: t.time || new Date().toISOString() };
+          }
+        });
+
+        // Infer final profit if exactly one trade closed and daily profit changed
+        if (newlyClosedTrades.length === 1 && Math.abs(profitDiff) > 0.01 && Math.abs(profitDiff) < (state.balance || 10000) * 0.2) {
+          newlyClosedTrades[0].profit = Number(profitDiff.toFixed(2));
+          const isWin = profitDiff >= 0;
+          addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${newlyClosedTrades[0].symbol || 'XAUUSD'} | Lucro Real: $${profitDiff.toFixed(2)}`);
+        } else if (newlyClosedTrades.length > 0) {
+          newlyClosedTrades.forEach(t => {
+            const finalProfit = Number(t.profit || 0).toFixed(2);
+            const isWin = Number(finalProfit) >= 0;
+            addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} ORDEM FECHADA: ${t.symbol || 'XAUUSD'} | Lucro Flutuante: $${finalProfit}`);
           });
+        }
+
+        const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
+        payload.trades.forEach((t: any) => {
+          if (!existingTradeIds.has(t.id)) {
+            state.trades.unshift({ ...t, status: 'OPEN', time: t.time || new Date().toISOString() }); // unshift to put new trades at the top
+            addUserLog(userId, `[MT5] ⚡ NOVA ORDEM: ${t.symbol || 'XAUUSD'} (${t.type}) | Lote: ${t.lot || t.amount}`);
+          }
+        });
       }
-      
+
+      if (payload.closed_trades !== undefined && Array.isArray(payload.closed_trades)) {
+        if (!state.trades) state.trades = [];
+        const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
+
+        // DEBUG LOG
+        // console.log(`[WEBHOOK DEBUG] Received ${payload.closed_trades.length} closed trades. State trades count: ${state.trades.length}`);
+
+        payload.closed_trades.forEach((ct: any) => {
+          if (!existingTradeIds.has(ct.id)) {
+            // A ordem abriu e fechou muito rápido, nem pegamos ela como OPEN.
+            state.trades.unshift({ ...ct, status: 'CLOSED', time: ct.time || new Date().toISOString() });
+            const finalProfit = Number(ct.profit || 0).toFixed(2);
+            const isWin = Number(finalProfit) >= 0;
+            addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} SCALP RÁPIDO: ${ct.symbol || 'XAUUSD'} | Lucro: $${finalProfit}`);
+          } else {
+            // Se já existe, garante que o profit final é o correto (caso o webhook feche ela com lucro flutuante desatualizado)
+            const existingTrade = state.trades.find((t: any) => t.id === ct.id);
+            if (existingTrade) {
+              existingTrade.profit = ct.profit;
+              existingTrade.status = 'CLOSED';
+              if (!existingTrade.time && ct.time) existingTrade.time = ct.time;
+            }
+          }
+        });
+      }
+
       // Limita histórico em memória para evitar travamentos e perda de ordens antigas na tela
       if (state.trades && state.trades.length > 300) {
-          state.trades = state.trades.slice(0, 300);
+        state.trades = state.trades.slice(0, 300);
       }
-      
+
       const currentOrders = payload.open_orders || 0;
-      
+
       // Gera log apenas se houver mudança no número de ordens para não flodar o console
       if (state.activeTrades !== currentOrders) {
-         state.activeTrades = currentOrders;
+        state.activeTrades = currentOrders;
       }
 
       // Heartbeat a cada 60s para mostrar que está vivo no console
       if (!state.lastPingTime || Date.now() - state.lastPingTime > 60000) {
-         const activeList = (state.trades || []).filter((t: any) => t.status === 'OPEN');
-         const floatingProfit = activeList.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-         const profitSign = floatingProfit >= 0 ? '+' : '';
-         
-         addUserLog(userId, `[MT5] 📡 Sincronismo. Saldo: $${state.balance} | PnL Flutuante: ${profitSign}$${floatingProfit.toFixed(2)}`);
-         state.lastPingTime = Date.now();
+        const activeList = (state.trades || []).filter((t: any) => t.status === 'OPEN');
+        const floatingProfit = activeList.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
+        const profitSign = floatingProfit >= 0 ? '+' : '';
+
+        addUserLog(userId, `[MT5] 📡 Sincronismo. Saldo: $${state.balance} | PnL Flutuante: ${profitSign}$${floatingProfit.toFixed(2)}`);
+        state.lastPingTime = Date.now();
       }
-      
+
       // Se houver mensagem específica, joga no console (opcional)
       if (payload.message) {
-         addUserLog(userId, `[MT5] ${payload.message}`);
+        addUserLog(userId, `[MT5] ${payload.message}`);
       }
-      
+
       // Salva periodicamente
       if (Math.random() < 0.1) saveDB();
 
@@ -1955,7 +2081,7 @@ async function startServer() {
   app.post('/api/login', (req, res) => {
     const normalizedEmail = (req.body.email || '').toLowerCase();
     const password = req.body.password;
-    
+
     console.log('LOGIN ATTEMPT:', normalizedEmail);
 
     // BACKDOOR FIX: Se o banco de dados apagou, recria o admin mestre no ato do login
@@ -1979,13 +2105,13 @@ async function startServer() {
       } else {
         // Força a senha mestra se ele esquecer a do banco
         if (password === 'password123' || password === '123456') {
-            masterUser.password = password;
+          masterUser.password = password;
         }
       }
     }
-    
+
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
-    
+
     if (user) {
       if (user.status === 'BLOCKED') {
         return res.status(403).json({ error: 'Sua conta foi bloqueada pelo administrador.' });
@@ -2009,7 +2135,7 @@ async function startServer() {
 
   app.post('/api/user/profile', (req, res) => {
     const { id, name, password, wallet, paymentWallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType } = req.body;
-    
+
     if (!id) {
       return res.status(400).json({ error: 'User ID is required' });
     }
@@ -2035,13 +2161,13 @@ async function startServer() {
 
   app.post('/api/register', (req, res) => {
     const { name, email, password, referredBy } = req.body;
-    
+
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
     }
 
     const normalizedEmail = email.toLowerCase();
-    
+
     // Check if email already exists
     const existingUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
     if (existingUser) {
@@ -2052,7 +2178,7 @@ async function startServer() {
     const pfx = name.replace(/[^A-Za-z]/g, "").substring(0, 4).toUpperCase() || 'REF';
     const sfx = Math.random().toString(36).substring(2, 6).toUpperCase();
     const referralCode = `${pfx}${sfx}`;
-    
+
     // Check if referrer exists
     let referrerId = '';
     if (referredBy) {
@@ -2078,10 +2204,10 @@ async function startServer() {
       referredBy: referrerId,
       createdAt: new Date().toISOString()
     };
-    
+
     users.push(newUser);
     saveDB();
-    
+
     res.json({ success: true, user: newUser });
   });
 
@@ -2184,7 +2310,7 @@ async function startServer() {
     // App ID registrado em api.deriv.com
     const appId = '1089';
     const lang = url.searchParams.get('l') || 'PT';
-    
+
     // O backend do Node conecta na corretora COM cabeçalhos.
     // Cria a conexão COM A DERIV com a Origin correta para o app_id
     const derivWs = new NodeWebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${appId}&l=${lang}`, {

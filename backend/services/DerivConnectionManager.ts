@@ -450,58 +450,85 @@ export class DerivConnectionManager {
 
             const closingSet = this.getClosingSet(userId);
 
-            // --- Lógica de DCA e TP/SL Global ---
-            // CORRIGIDO (bug 3): exclui trades já marcadas para fechamento do cálculo de
-            // "ordens abertas" usado pelo DCA — sem isso, o bot pode abrir uma nova ordem
-            // DCA no mesmo tick em que está encerrando a ordem mestra.
+            // --- Lógica Fybot Sniper API: Trailing Stop & Proteção ---
             const openTrades = state.trades
               .filter((t: any) => t.status === 'OPEN' && !closingSet.has(String(t.id)))
               .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
             const currentSpot = contract.current_spot;
             if (openTrades.length > 0 && currentSpot) {
-              const masterTrade = openTrades[0];
-              const drawdownPct = masterTrade.type === 'BUY'
-                ? (masterTrade.openPrice - currentSpot) / masterTrade.openPrice
-                : (currentSpot - masterTrade.openPrice) / masterTrade.openPrice;
+              const trade = openTrades[0]; // Apenas 1 trade gerenciado
+              
+              if (trade.peakPrice === undefined) trade.peakPrice = trade.openPrice;
+              if (trade.exhaustionTriggered === undefined) trade.exhaustionTriggered = false;
+              if (trade.beSet === undefined) trade.beSet = false;
 
-              // 1. DCA Lógica
-              if (drawdownPct >= 0.0004 && openTrades.length === 1) {
-                this.addUserLog(userId, `📉 [DCA] Recuo de 0.04% atingido. Abrindo Ordem 2!`);
-                this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
-              } else if (drawdownPct >= 0.0008 && openTrades.length === 2) {
-                this.addUserLog(userId, `📉 [DCA] Recuo de 0.08% atingido. Abrindo Ordem 3!`);
-                this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
-              } else if (drawdownPct >= 0.0012 && openTrades.length === 3) {
-                this.addUserLog(userId, `📉 [DCA] Recuo de 0.12% atingido. Abrindo Ordem 4!`);
-                this.placeOrder(userId, state, masterTrade.type, currentSpot, 0, 0);
+              // 1. Atualiza o Pico de Preço a favor da ordem
+              if (trade.type === 'BUY' && currentSpot > trade.peakPrice) trade.peakPrice = currentSpot;
+              if (trade.type === 'SELL' && currentSpot < trade.peakPrice) trade.peakPrice = currentSpot;
+
+              // 2. Detecção de Exaustão (Wick Ratio / Vela de Rejeição contra a posição)
+              const marketState = this.engine?.getMarketState();
+              if (marketState && !trade.exhaustionTriggered) {
+                  const c1 = marketState.lastClosedCandle;
+                  if (c1) {
+                      const body = Math.abs(c1.close - c1.open);
+                      const upperWick = c1.high - Math.max(c1.open, c1.close);
+                      const lowerWick = Math.min(c1.open, c1.close) - c1.low;
+                      const ratio = 2.0; // InpExhaustionWickRatio
+                      
+                      let isExhaustion = false;
+                      if (trade.type === 'BUY') {
+                          isExhaustion = (body > 0 && upperWick >= body * ratio && upperWick > lowerWick);
+                      } else {
+                          isExhaustion = (body > 0 && lowerWick >= body * ratio && lowerWick > upperWick);
+                      }
+                      
+                      if (isExhaustion) {
+                          trade.exhaustionTriggered = true;
+                          this.addUserLog(userId, `⚠️ [EXAUSTÃO] Rejeição detectada. Apertando Trailing Stop ao máximo!`);
+                      }
+                  }
               }
 
-              // 2. TP / SL Global
-              const totalLot = openTrades.reduce((sum: number, t: any) => sum + t.lot, 0);
-              const avgPrice = openTrades.reduce((sum: number, t: any) => sum + (t.openPrice * t.lot), 0) / totalLot;
+              // 3. Define a folga do Trailing Stop
+              // No modo exaustão, a folga cai para o mínimo possível (0.50 pts). Modo normal: 1.50 pts.
+              const buffer = trade.exhaustionTriggered ? 0.50 : 1.50; 
+              
+              const avancoPts = trade.type === 'BUY' ? (trade.peakPrice - trade.openPrice) : (trade.openPrice - trade.peakPrice);
+              
+              // 4. Piso de Breakeven
+              if (avancoPts >= 1.00 && !trade.beSet) {
+                  trade.beSet = true;
+                  this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro protegido. O Stop Loss foi movido para o preço de entrada.`);
+              }
 
-              const profitPct = masterTrade.type === 'BUY'
-                ? (currentSpot - avgPrice) / avgPrice
-                : (avgPrice - currentSpot) / avgPrice;
-
+              const newLevel = trade.type === 'BUY' ? (trade.peakPrice - buffer) : (trade.peakPrice + buffer);
+              const isHit = trade.type === 'BUY' ? (currentSpot <= newLevel) : (currentSpot >= newLevel);
+              const isBreakEvenHit = trade.beSet && (trade.type === 'BUY' ? (currentSpot <= trade.openPrice + 0.10) : (currentSpot >= trade.openPrice - 0.10));
+              
               const now = Date.now();
               if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
-                if (profitPct >= 0.0004) {
-                  state.lastSmartCloseTime = now;
-                  this.addUserLog(userId, `🏆 [TP GLOBAL] Lucro alvo atingido no Preço Médio! Fechando a cesta.`);
-                  openTrades.forEach((t: any) => {
-                    closingSet.add(String(t.id));
-                    this.closeTrade(userId, String(t.id));
-                  });
-                } else if (drawdownPct >= 0.0020) {
-                  state.lastSmartCloseTime = now;
-                  this.addUserLog(userId, `🛑 [SL GLOBAL] Perda máxima de 0.20% atingida na Ordem Mestra. Protegendo capital!`);
-                  openTrades.forEach((t: any) => {
-                    closingSet.add(String(t.id));
-                    this.closeTrade(userId, String(t.id));
-                  });
-                }
+                  if (isHit && avancoPts > buffer) { 
+                      state.lastSmartCloseTime = now;
+                      this.addUserLog(userId, `🏆 [TRAILING STOP] Fechando operação a favor do lucro. Pico: $${trade.peakPrice.toFixed(2)}`);
+                      closingSet.add(String(trade.id));
+                      this.closeTrade(userId, String(trade.id));
+                  } else if (isBreakEvenHit) {
+                      state.lastSmartCloseTime = now;
+                      this.addUserLog(userId, `🛡️ [SAÍDA BREAKEVEN] A operação recuou até a entrada e foi fechada no zero a zero.`);
+                      closingSet.add(String(trade.id));
+                      this.closeTrade(userId, String(trade.id));
+                  } else if (avancoPts < 1.00) {
+                      // SL Inicial Estrutural: 2.50 pts
+                      const slInicialHit = trade.type === 'BUY' ? (currentSpot <= trade.openPrice - 2.50) : (currentSpot >= trade.openPrice + 2.50);
+                      if (slInicialHit) {
+                          state.lastSmartCloseTime = now;
+                          this.addUserLog(userId, `🛑 [STOP LOSS] Perda máxima atingida. Protegendo capital.`);
+                          closingSet.add(String(trade.id));
+                          this.closeTrade(userId, String(trade.id));
+                      }
+                  }
               }
             }
             // -------------------------------------
