@@ -50,8 +50,8 @@ conn.on('ready', async () => {
     console.log('🛑 Cleaning PM2 and old processes...');
     // Safely delete PM2 processes first
     await runCmd('pm2 delete all || true').catch(() => {});
-    // Kill port 3000 using lsof/kill which is much safer than fuser
-    await runCmd('kill -9 $(lsof -t -i:3000) || true').catch(() => {});
+    // Kill port 3000 using fuser/lsof/kill
+    await runCmd('fuser -k 3000/tcp || kill -9 $(lsof -t -i:3000) || true').catch(() => {});
     
     console.log('🧹 Recreating remote dist directories...');
     await runCmd('rm -rf /root/fybot/dist && mkdir -p /root/fybot/dist/assets /root/fybot/dist/downloads').catch(() => {});

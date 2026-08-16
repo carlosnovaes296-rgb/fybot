@@ -25,15 +25,19 @@ export function TradingScheduleTimer() {
       // Logica de status
       if (day === 5 && hour >= 17) {
         currentStatus = 'WEEKEND';
-        targetDate.setDate(brTime.getDate() + 2); // Sexta -> Domingo
-        targetDate.setHours(21, 0, 0);
+        targetDate.setDate(brTime.getDate() + 3); // Sexta -> Segunda
+        targetDate.setHours(6, 0, 0);
       } else if (day === 6) {
         currentStatus = 'WEEKEND';
-        targetDate.setDate(brTime.getDate() + 1); // Sabado -> Domingo
-        targetDate.setHours(21, 0, 0);
-      } else if (day === 0 && hour < 21) {
+        targetDate.setDate(brTime.getDate() + 2); // Sabado -> Segunda
+        targetDate.setHours(6, 0, 0);
+      } else if (day === 0) {
         currentStatus = 'WEEKEND';
-        targetDate.setHours(21, 0, 0); // Domingo antes das 21
+        targetDate.setDate(brTime.getDate() + 1); // Domingo -> Segunda
+        targetDate.setHours(6, 0, 0);
+      } else if (day === 1 && hour < 6) {
+        currentStatus = 'WEEKEND';
+        targetDate.setHours(6, 0, 0); // Segunda antes das 6
       } else if (hour >= 17 && hour < 21) {
         currentStatus = 'PAUSED';
         targetDate.setHours(21, 0, 0); // Pausa diária
@@ -52,7 +56,7 @@ export function TradingScheduleTimer() {
       } else if (currentStatus === 'PAUSED') {
         setTargetLabel('Pausa Estratégica - Robô retoma em:');
       } else {
-        setTargetLabel('Mercado Fechado - Abertura (Dom 21:00) em:');
+        setTargetLabel('Mercado Fechado - Abertura (Seg 06:00) em:');
       }
 
       const diffMs = targetDate.getTime() - brTime.getTime();

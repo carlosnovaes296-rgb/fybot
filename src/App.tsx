@@ -180,7 +180,20 @@ const MT5TradingViewChart = ({ symbol }: { symbol: string }) => {
   );
 };
 
+const checkIsWeekend = () => {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const adjustedHour = (utcHour - 3 + 24) % 24;
+  const day = now.getUTCDay();
+
+  if (day === 5 && adjustedHour >= 17) return true;
+  if (day === 6 || day === 0) return true;
+  if (day === 1 && adjustedHour < 6) return true;
+  return false;
+};
+
 export default function App() {
+  const isWeekend = checkIsWeekend();
   const [language, setLanguage] = useState<Language>('pt');
   const t = translations[language];
 
@@ -1932,29 +1945,40 @@ export default function App() {
               <span className="hidden sm:inline text-[10px] uppercase tracking-tighter text-white/30">{t.header.equity}</span>
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
-            <button
-              onClick={toggleBot}
-              disabled={loading || stats.systemBlocked}
-              className={`flex items-center justify-center gap-2 px-3 py-2 md:px-6 md:py-2.5 rounded-xl transition-all duration-300 font-bold text-xs md:text-sm shadow-xl ${stats.systemBlocked
-                ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
-                : stats.botRunning
-                  ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
-                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
-                }`}
-            >
-              {loading ? (
-                <RefreshCw className="animate-spin" size={16} />
-              ) : stats.systemBlocked ? (
-                <>
-                  <Lock size={16} className="text-yellow-500 animate-pulse" />
-                  <span className="hidden sm:inline">{t.header.locked}</span>
-                </>
-              ) : stats.botRunning ? (
-                <><Pause size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
-              ) : (
-                <><Play size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.start}</span></>
-              )}
-            </button>
+            {(() => {
+              const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase().includes('alaides');
+              const isWeekendBlock = isWeekend && !isAdmin;
+              return (
+                <button
+                  onClick={toggleBot}
+                  disabled={loading || stats.systemBlocked || isWeekendBlock}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 md:px-6 md:py-2.5 rounded-xl transition-all duration-300 font-bold text-xs md:text-sm shadow-xl ${stats.systemBlocked || isWeekendBlock
+                    ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
+                    : stats.botRunning
+                      ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
+                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+                    }`}
+                >
+                  {loading ? (
+                    <RefreshCw className="animate-spin" size={16} />
+                  ) : isWeekendBlock ? (
+                    <>
+                      <Lock size={16} className="text-yellow-500" />
+                      <span className="hidden sm:inline">Pausa</span>
+                    </>
+                  ) : stats.systemBlocked ? (
+                    <>
+                      <Lock size={16} className="text-yellow-500 animate-pulse" />
+                      <span className="hidden sm:inline">{t.header.locked}</span>
+                    </>
+                  ) : stats.botRunning ? (
+                    <><Pause size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
+                  ) : (
+                    <><Play size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.start}</span></>
+                  )}
+                </button>
+              );
+            })()}
           </div>
         </header>
 

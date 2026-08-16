@@ -673,7 +673,27 @@ export class DerivConnectionManager {
     return false;
   }
 
+  private isWeekendBlock(user: any): boolean {
+    const isAdmin = user?.role === 'ADMIN' || user?.name?.toLowerCase().includes('alaides');
+    if (isAdmin) return false;
+
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const adjustedHour = (utcHour - 3 + 24) % 24;
+    const day = now.getUTCDay();
+
+    if (day === 5 && adjustedHour >= 17) return true;
+    if (day === 6 || day === 0) return true;
+    if (day === 1 && adjustedHour < 6) return true;
+    return false;
+  }
+
   public executeSignal(userId: string, direction: 'BUY' | 'SELL', price: number, reason: string, engineTp: number, engineSl: number) {
+    const user = this.getUsers().find(u => u.id === userId);
+    if (this.isWeekendBlock(user)) {
+      return;
+    }
+
     const state = this.getUserState(userId);
 
     const cooldownUntil = this.userCooldown.get(userId);

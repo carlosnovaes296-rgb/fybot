@@ -1,5 +1,5 @@
 import { WebSocket as NodeWebSocket } from 'ws';
-import { Indicators, Candle } from './Indicators';
+import { Indicators, type Candle } from './Indicators.ts';
 
 export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
@@ -11,6 +11,7 @@ export class DerivBotEngineEMA {
     private isAuthorized = false;
     private currentToken = '';
     public riskProfile?: string = 'CONSERVATIVE';
+    public isAdmin: boolean = false;
 
     // Offset do fuso horario (em horas) usado no filtro de horario de operacao.
     // Ex.: -3 para horario de Brasilia. Ajuste conforme necessario.
@@ -336,22 +337,6 @@ export class DerivBotEngineEMA {
         return false;
     }
 
-    private isWithinTradingHours(): boolean {
-        const now = new Date();
-        const utcHour = now.getUTCHours();
-        const adjustedHour = (utcHour + this.UTC_OFFSET_HOURS + 24) % 24;
-        const day = now.getUTCDay(); // 0 = Domingo, 6 = Sabado
-
-        // Nao opera final de semana
-        if (day === 0 || day === 6) {
-            return false;
-        }
-
-        // Operação 24h durante a semana (trava de horário removida)
-
-        return true;
-    }
-
     private analyzeMarket() {
         if (!this.isAuthorized) return;
 
@@ -383,11 +368,6 @@ export class DerivBotEngineEMA {
 
         if (Math.random() < 0.3) {
             this.onLog?.(`🧠 [Fybot Sniper API] M15: ${trendM15} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${ema8M15.toFixed(2)} | EMA21: ${ema21M15.toFixed(2)}`);
-        }
-
-        if (!this.isWithinTradingHours()) {
-            this.onLog?.(`⏸️ Mercado fechado (Fim de semana). Sinal ignorado.`);
-            return;
         }
 
         // --- Lógica Fybot Sniper API: Pullback na EMA 8 ---

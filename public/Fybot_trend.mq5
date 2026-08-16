@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                                Fybot_Sniper.mq5 |
-//|                     AuraTrend - Tendencia EMA8/EMA21 + Pullback  |
+//|                     Fybot Trend - Tendencia EMA8/EMA21 + Pullback  |
 //|                          (Integrado com licenciamento/webhook)   |
 //+------------------------------------------------------------------+
 #property copyright "Fybot Sniper"
