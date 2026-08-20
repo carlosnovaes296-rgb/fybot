@@ -1272,6 +1272,19 @@ export default function App() {
       return;
     }
 
+    // License check
+    if (!stats.botRunning && !stats.activeLicense && !isUserAdmin) {
+      alert(
+        language === 'en'
+          ? "You need an active license to start the robot. Please request a license in the plans menu."
+          : language === 'es'
+            ? "Necesita una licencia activa para iniciar el robot. Por favor solicite una licencia en el menú de planes."
+            : "Você precisa de uma licença ativa para iniciar o robô. Por favor, adquira uma licença no menu inferior."
+      );
+      setActiveTab('plans');
+      return;
+    }
+
     // Market Closed Check (Mon-Fri 06:00 - 17:00 BRT)
     // REMOVIDO A PEDIDO DO USUÁRIO - OPERAÇÃO 24H LIBERADA
     if (!stats.botRunning && !isUserAdmin) {
