@@ -429,7 +429,7 @@ export class DerivBotEngineEMA {
         }
 
         // --- Lógica Fybot Sniper API: Pullback na EMA 8 ---
-        const MAX_PROXIMITY_USD = 3.00; // Equivalente a InpEma8ProximityPoints = 300.0 no XAUUSD
+        const MAX_PROXIMITY_USD = 7.00; // Equivalente a InpEma8ProximityPoints = 700.0 no XAUUSD (Modo Meio-Termo)
         const distAbs = Math.abs(currentPrice - ema8M15);
         const isNearEma8 = distAbs <= MAX_PROXIMITY_USD;
 
