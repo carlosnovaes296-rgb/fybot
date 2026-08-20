@@ -851,6 +851,8 @@ async function startServer() {
 
   // PIX payment removed - Sistema usa apenas USDT BEP-20
 
+  const processingHashes = new Set<string>();
+
   app.post('/api/payment/usdt/verify', async (req, res) => {
     try {
       const { txHash, userId, planType, amount, email } = req.body;
@@ -867,11 +869,18 @@ async function startServer() {
         return res.status(500).json({ error: 'USDT Payments not configured on server (.env missing or wallet not set)' });
       }
 
-      // Replay prevention
-      const existingPayment = payments.find(p => p.txHash?.toLowerCase() === txHash.toLowerCase());
+      // Replay & Race Condition prevention
+      const lowerHash = txHash.trim().toLowerCase();
+      if (processingHashes.has(lowerHash)) {
+        return res.status(409).json({ error: 'Processando pagamento. Por favor, aguarde.' });
+      }
+      
+      const existingPayment = payments.find(p => (p.txHash || p.hash)?.toLowerCase() === lowerHash);
       if (existingPayment) {
         return res.status(400).json({ error: 'Transaction Hash already used for a payment.' });
       }
+
+      processingHashes.add(lowerHash);
 
       // Direct BSC Node RPC call (No API Key required, no rate limits for single Tx)
       const rpcUrl = 'https://bsc-dataseed.binance.org/';
@@ -983,9 +992,13 @@ async function startServer() {
       }
       saveDB();
 
+      processingHashes.delete(lowerHash);
       res.json({ success: true, message: 'Pagamento recebido e licença ativada com sucesso!' });
     } catch (e: any) {
       console.error('USDT Verify Error:', e.message);
+      if (req.body?.txHash) {
+        processingHashes.delete(req.body.txHash.trim().toLowerCase());
+      }
       res.status(500).json({ error: 'Erro ao verificar pagamento USDT' });
     }
   });
@@ -1001,15 +1014,24 @@ async function startServer() {
         return res.status(400).json({ error: 'userId and txHash are required' });
       }
 
+      const lowerHash = txHash.trim().toLowerCase();
+      if (processingHashes.has(lowerHash)) {
+        return res.status(409).json({ error: 'Processando pagamento. Por favor, aguarde.' });
+      }
+
       // 🔒 PROTEÇÃO: Verifica se essa TxHash já foi usada por qualquer usuário
-      const existingPaymentWithHash = payments.find(
-        (p: any) => p.txHash && p.txHash.toLowerCase() === txHash.toLowerCase() && p.status !== 'REJECTED'
-      );
+      const existingPaymentWithHash = payments.find((p: any) => {
+        const h = p.txHash || p.hash;
+        return h && h.toLowerCase() === lowerHash && p.status !== 'REJECTED';
+      });
+      
       if (existingPaymentWithHash) {
         return res.status(409).json({
           error: 'Esta Hash de Transação já foi utilizada para ativar uma licença. Cada transação só pode ser usada uma vez.'
         });
       }
+      
+      processingHashes.add(lowerHash);
 
       const newPayment = {
         id: generateUUID(),
