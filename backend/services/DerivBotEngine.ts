@@ -213,7 +213,9 @@ export class DerivBotEngineEMA {
             this.isConnected = true;
 
             if (this.onLog) this.onLog('📊 Feed conectado. Autorizando conta...');
-            this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
+            if (this.ws && this.ws.readyState === this.ws.OPEN) {
+                this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
+            }
         });
 
         this.ws.on('message', (data: string) => {
