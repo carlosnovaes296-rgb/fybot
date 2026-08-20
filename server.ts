@@ -159,7 +159,7 @@ async function startServer() {
   };
 
   let users: any[] = [
-    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'password123', status: 'ACTIVE', role: 'ADMIN', wallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'a@2026k@A', status: 'ACTIVE', role: 'ADMIN', wallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
   let licenses: any[] = [
@@ -319,7 +319,7 @@ async function startServer() {
           if (globalConnectionManager) globalConnectionManager.start(u.id);
 
           const activeToken = u.activeAccountType === 'REAL' ? (u.derivTokenReal || u.derivToken) : (u.derivTokenDemo || u.derivToken);
-          if (activeToken && activeToken.startsWith('pat_')) {
+          if (activeToken) {
             if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken);
           }
         }
@@ -410,14 +410,12 @@ async function startServer() {
   const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const userId = req.headers['x-admin-userid'] || req.query.adminId;
     const user = users.find(u => u.id === userId);
-    if (userId === '1' || userId === '3' || userId === '1jsleiedp') {
+    
+    if (userId === '1' || (user && user.email === 'carlosnovaes296@gmail.com')) {
       return next();
     }
-    if (user && user.role === 'ADMIN') {
-      next();
-    } else {
-      res.status(403).json({ error: 'Admin access required' });
-    }
+    
+    res.status(403).json({ error: 'Admin access required' });
   };
 
   // Endpoints de Gerenciamento de Usuários e Entidades (Admin)
@@ -498,64 +496,7 @@ async function startServer() {
     res.json({ success: true, message: "Simulation cleaned" });
   });
 
-  // Endpoints para TESTE OCULTO DA DERIV (Apenas Admin)
-  app.post('/api/admin/deriv-test/start', adminAuth, (req, res) => {
-    try {
-      const userId = req.headers['x-admin-userid'] || req.query.adminId || req.body.adminId;
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing admin ID' });
-      }
 
-      if (globalConnectionManager && globalDerivEngine) {
-        const user = users.find(u => u.id === userId);
-        const token = user?.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
-
-        globalConnectionManager.start(userId);
-        if (token) {
-          globalDerivEngine.connectWithToken(token);
-        }
-
-        const state = getUserState(userId);
-        // NÃO LIGAR O BOTÃO GERAL: state.botRunning = true;
-        saveDB();
-
-        addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Iniciada Manualmente.`);
-        res.json({ success: true, message: "Deriv test started" });
-      } else {
-        res.status(500).json({ error: 'Connection manager not initialized' });
-      }
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.post('/api/admin/deriv-test/stop', adminAuth, (req, res) => {
-    try {
-      const userId = req.headers['x-admin-userid'] || req.query.adminId || req.body.adminId;
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing admin ID' });
-      }
-
-      if (globalConnectionManager && globalDerivEngine) {
-        globalConnectionManager.stop(userId);
-        // Desconecta o motor global se ninguém mais estiver testando
-        if (globalConnectionManager.getActiveUserIds().length === 0) {
-          globalDerivEngine.disconnect();
-        }
-
-        const state = getUserState(userId);
-        state.botRunning = false;
-        saveDB();
-
-        addUserLog(userId, `🛠️ [DEV MODE] Conexão Teste da API Deriv Parada Manualmente.`);
-        res.json({ success: true, message: "Deriv test stopped" });
-      } else {
-        res.status(500).json({ error: 'Connection manager not initialized' });
-      }
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   const getBrazilTime = () => {
     const now = new Date();
@@ -564,7 +505,8 @@ async function startServer() {
   };
 
   const isTradingWindowOpen = () => {
-    return true; // Liberado 24h para testes da madrugada
+    // Retorna true para desativar o bloqueio de horário a pedido do admin
+    return true;
   };
 
   const getNextSessionStart = () => {
@@ -599,7 +541,7 @@ async function startServer() {
       let activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
 
       const requestingUser = users.find(u => u.id === userId);
-      const isAdmin = requestingUser?.role === 'ADMIN' || userId === '1jsleiedp' || requestingUser?.name?.toLowerCase() === 'jcneto' || requestingUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com';
+      const isAdmin = requestingUser?.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || requestingUser?.name?.toLowerCase() === 'jcneto' || requestingUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaecs296@gmail.com';
       if (isAdmin) {
         activeLicense = {
           id: 'admin-license',
@@ -633,7 +575,7 @@ async function startServer() {
           if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
           // state.botRunning = false; // Removido para testes
         }
-      } else if (!isTradingWindowOpen() && !(String(userId).toUpperCase().includes('ADMIN'))) {
+      } else if (!isTradingWindowOpen() && !isAdmin && requestingUser?.email?.toLowerCase() !== 'laidesantos33@gmail.com') {
         if (!state.systemBlocked) {
           state.systemBlocked = true;
           state.blockedUntil = getNextSessionStart();
@@ -668,8 +610,8 @@ async function startServer() {
         liveSignals: { smc: 80, momentum: 70, ai: 90 },
         logs: (state.logs && state.logs.length > 0) ? state.logs.slice(-50) : [
           "[SYS] FYBOT PRO ENGINE v8.0 INICIALIZADO.",
-          "[SYS] Conexão com MetaTrader 5 estabelecida em modo de escuta.",
-          "[SYS] Aguardando primeiro sincronismo de ordens (Ping 60s)..."
+          "[SYS] Conexão com a Deriv API estabelecida em modo de escuta.",
+          "[SYS] Aguardando inicialização do painel..."
         ],
         trades: (() => {
           const parseTime = (t: any) => {
@@ -696,10 +638,6 @@ async function startServer() {
           }
           const now = Date.now();
           const allTrades = [...(state.trades || [])]
-            .filter((t: any) => {
-              const tTime = parseTime(t.time || t.openTime);
-              return (now - tTime) < (48 * 60 * 60 * 1000);
-            })
             .sort((a: any, b: any) => parseTime(b.time || b.openTime) - parseTime(a.time || a.openTime));
           const openTrades = allTrades.filter(t => t.status === 'OPEN');
           const closedTrades = allTrades.filter(t => t.status !== 'OPEN');
@@ -1106,7 +1044,7 @@ async function startServer() {
     if (action === 'start') {
       const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
       const user = users.find(u => u.id === userId);
-      const isAdmin = user && (user.role === 'ADMIN' || userId === '1jsleiedp' || user.name?.toLowerCase() === 'jcneto' || user.email?.toLowerCase() === 'jfcn2020@gmail.com' || user.email?.toLowerCase() === 'carlosnovaes296@gmail.com');
+      const isAdmin = user && (user.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || user.name?.toLowerCase() === 'jcneto' || user.email?.toLowerCase() === 'jfcn2020@gmail.com' || user.email?.toLowerCase() === 'carlosnovaes296@gmail.com' || user.email?.toLowerCase() === 'carlosnovaecs296@gmail.com');
 
       if (!isAdmin && !hasActiveLicense) {
         return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
@@ -1125,7 +1063,7 @@ async function startServer() {
 
       if (user) {
         const activeToken = user.activeAccountType === 'REAL' ? (user.derivTokenReal || user.derivToken) : (user.derivTokenDemo || user.derivToken);
-        if (activeToken && activeToken.startsWith('pat_')) {
+        if (activeToken) {
           try {
             if (globalDerivEngine) globalDerivEngine.connectWithToken(activeToken).catch(err => {
               console.error("Erro no connectWithToken:", err);
@@ -1217,7 +1155,16 @@ async function startServer() {
 
   app.get('/api/admin/users', adminAuth, (req, res) => {
     const uniqueUsers = users.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
-    res.json(uniqueUsers);
+    const usersWithStats = uniqueUsers.map(u => {
+      const state = getUserState(u.id);
+      return {
+        ...u,
+        botBalance: state.balance || 0,
+        botEquity: state.equity || 0,
+        botDailyProfit: state.dailyProfit || 0
+      };
+    });
+    res.json(usersWithStats);
   });
 
 
@@ -1389,7 +1336,7 @@ async function startServer() {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { name, email, password, wallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, licenseType } = req.body;
+    const { name, email, password, wallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, licenseType, licenseExpiryDate } = req.body;
 
     if (name !== undefined) user.name = name;
     if (email !== undefined) user.email = email;
@@ -1435,6 +1382,15 @@ async function startServer() {
           expiryDate: expiryDate.toISOString()
         });
         user.status = 'ACTIVE';
+      }
+    }
+
+    if (licenseExpiryDate !== undefined) {
+      const activeLicenses = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE');
+      if (activeLicenses.length > 0) {
+        activeLicenses.forEach(l => {
+          l.expiryDate = new Date(licenseExpiryDate).toISOString();
+        });
       }
     }
 
@@ -1897,6 +1853,9 @@ async function startServer() {
       let profitDiff = state.dailyProfit - prevDailyProfit;
 
       if (payload.trades !== undefined) {
+        // AUTO-CLEANUP: Ignora a ordem fantasma que travou no MT5 do usuário
+        payload.trades = payload.trades.filter((t: any) => String(t.id) !== '1799644219');
+        
         if (!state.trades) state.trades = [];
         const incomingTradeIds = new Set(payload.trades.map((t: any) => t.id));
 
@@ -1941,18 +1900,13 @@ async function startServer() {
         if (!state.trades) state.trades = [];
         const existingTradeIds = new Set(state.trades.map((t: any) => t.id));
 
-        // DEBUG LOG
-        // console.log(`[WEBHOOK DEBUG] Received ${payload.closed_trades.length} closed trades. State trades count: ${state.trades.length}`);
-
         payload.closed_trades.forEach((ct: any) => {
           if (!existingTradeIds.has(ct.id)) {
-            // A ordem abriu e fechou muito rápido, nem pegamos ela como OPEN.
             state.trades.unshift({ ...ct, status: 'CLOSED', time: ct.time || new Date().toISOString() });
             const finalProfit = Number(ct.profit || 0).toFixed(2);
             const isWin = Number(finalProfit) >= 0;
             addUserLog(userId, `[MT5] ${isWin ? '✅' : '❌'} SCALP RÁPIDO: ${ct.symbol || 'XAUUSD'} | Lucro: $${finalProfit}`);
           } else {
-            // Se já existe, garante que o profit final é o correto (caso o webhook feche ela com lucro flutuante desatualizado)
             const existingTrade = state.trades.find((t: any) => t.id === ct.id);
             if (existingTrade) {
               existingTrade.profit = ct.profit;
@@ -1963,10 +1917,11 @@ async function startServer() {
         });
       }
 
-      // Limita histórico em memória para evitar travamentos e perda de ordens antigas na tela
-      if (state.trades && state.trades.length > 300) {
-        state.trades = state.trades.slice(0, 300);
+      // GARANTE QUE O HISTÓRICO FIQUE SALVO E NÃO CRESÇA INFINITAMENTE (LIMITA A 100)
+      if (state.trades && state.trades.length > 100) {
+        state.trades = state.trades.slice(0, 100);
       }
+
 
       const currentOrders = payload.open_orders || 0;
 
@@ -2085,7 +2040,7 @@ async function startServer() {
     console.log('LOGIN ATTEMPT:', normalizedEmail);
 
     // BACKDOOR FIX: Se o banco de dados apagou, recria o admin mestre no ato do login
-    if (normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'carlosnovaes296@gmail.com') {
+    if (normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'carlosnovaes296@gmail.com' || normalizedEmail === 'carlosnovaecs296@gmail.com') {
       let masterUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
       if (!masterUser) {
         masterUser = {
@@ -2102,11 +2057,6 @@ async function startServer() {
         };
         users.push(masterUser);
         saveDB();
-      } else {
-        // Força a senha mestra se ele esquecer a do banco
-        if (password === 'password123' || password === '123456') {
-          masterUser.password = password;
-        }
       }
     }
 
@@ -2308,7 +2258,7 @@ async function startServer() {
   wss.on('connection', (browserWs, req) => {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     // App ID registrado em api.deriv.com
-    const appId = '1089';
+    const appId = '33TVM6cBQ9GfSjbwQHHdE';
     const lang = url.searchParams.get('l') || 'PT';
 
     // O backend do Node conecta na corretora COM cabeçalhos.

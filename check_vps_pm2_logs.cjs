@@ -1,7 +1,9 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `
+pm2 logs fybot --lines 50 --nostream
+`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -23,5 +25,5 @@ conn.on('ready', () => {
   port: 22,
   username: 'root',
   password: '1BJPkXYBRk2026@26H',
-  readyTimeout: 30000,
+  readyTimeout: 60000,
 });

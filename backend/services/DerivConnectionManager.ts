@@ -292,8 +292,9 @@ export class DerivConnectionManager {
       portfolioInterval = setInterval(() => {
         if (ws.readyState === ws.OPEN) {
           ws.send(JSON.stringify({ portfolio: 1 }));
+          ws.send(JSON.stringify({ profit_table: 1, description: 1, limit: 100, sort: "DESC" }));
         }
-      }, 20000);
+      }, 5000);
 
       if (needsAuthCommand) {
         ws.send(JSON.stringify({ authorize: tokenToUse }));
@@ -417,25 +418,27 @@ export class DerivConnectionManager {
         if (data.msg_type === 'sell') {
           if (data.error) {
             this.addUserLog(userId, `🚨 [ERRO AO VENDER] Falha ao fechar contrato: ${data.error.message}`);
-            // CORRIGIDO: data.error.details.contract_id não é um campo garantido pela
-            // API da Deriv — em muitos casos de erro esse objeto vem vazio, e o ID
-            // ficava preso para sempre no closingSet (a ordem nunca mais seria
-            // reavaliada pelo trailing/SL nem contada certo no DCA). O "echo_req" é
-            // sempre devolvido, com ou sem erro, contendo a requisição original —
-            // é dali que pegamos o ID de forma confiável.
             const failedId = data.echo_req?.sell;
             if (failedId != null) this.getClosingSet(userId).delete(String(failedId));
           } else if (data.sell) {
-            this.addUserLog(userId, `✅ [VENDA CONFIRMADA] Contrato ${data.sell.contract_id ?? ''} enviado para fechamento com sucesso.`);
+            this.addUserLog(userId, `✅ [VENDA CONFIRMADA] Contrato ${data.sell.contract_id ?? ''} fechado com sucesso na corretora.`);
+            const contractId = String(data.sell.contract_id);
+            const state = this.getUserState(userId);
+            const trade = state.trades.find((t: any) => String(t.id) === contractId);
+            if (trade && trade.status !== 'CLOSED') {
+              // Do not mark CLOSED here, wait for proposal_open_contract final update 
+              // so we can get the exact final profit. Just remove from closing set.
+              this.getClosingSet(userId).delete(contractId);
+            }
           }
         }
 
         if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
           const state = this.getUserState(userId);
           const contract = data.proposal_open_contract;
-          const profit = contract.profit;
+          const profit = Number(contract.profit || 0);
           const contractId = String(contract.contract_id);
-          const isSold = contract.is_sold === 1;
+          const isSold = contract.is_sold === 1 || contract.status === 'sold' || contract.status === 'won' || contract.status === 'lost';
 
           state.equity = state.balance + profit;
 
@@ -445,7 +448,17 @@ export class DerivConnectionManager {
             trade.profit = profit;
 
             if (!trade.openPrice || trade.openPrice === 0) {
-              trade.openPrice = contract.entry_spot || contract.current_spot || 0;
+              trade.openPrice = parseFloat(contract.entry_spot) || parseFloat(contract.current_spot) || 0;
+            }
+
+            if ((!trade.tp || trade.tp === 0) && trade.openPrice > 0) {
+              if (trade.type === 'BUY') {
+                trade.tp = trade.openPrice + 3.00;
+                trade.sl = trade.openPrice - 1.50;
+              } else {
+                trade.tp = trade.openPrice - 3.00;
+                trade.sl = trade.openPrice + 1.50;
+              }
             }
 
             const closingSet = this.getClosingSet(userId);
@@ -455,80 +468,96 @@ export class DerivConnectionManager {
               .filter((t: any) => t.status === 'OPEN' && !closingSet.has(String(t.id)))
               .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-            const currentSpot = contract.current_spot;
-            if (openTrades.length > 0 && currentSpot) {
-              const trade = openTrades[0]; // Apenas 1 trade gerenciado
-              
-              if (trade.peakPrice === undefined) trade.peakPrice = trade.openPrice;
-              if (trade.exhaustionTriggered === undefined) trade.exhaustionTriggered = false;
-              if (trade.beSet === undefined) trade.beSet = false;
+            const currentSpot = parseFloat(contract.current_spot);
+            if (openTrades.length > 0 && !isNaN(currentSpot)) {
+              const managedTrade = openTrades[0]; // Apenas 1 trade gerenciado
+
+              if (managedTrade.peakPrice === undefined) managedTrade.peakPrice = parseFloat(managedTrade.openPrice) || currentSpot;
+              if (managedTrade.exhaustionTriggered === undefined) managedTrade.exhaustionTriggered = false;
+              if (managedTrade.beSet === undefined) managedTrade.beSet = false;
 
               // 1. Atualiza o Pico de Preço a favor da ordem
-              if (trade.type === 'BUY' && currentSpot > trade.peakPrice) trade.peakPrice = currentSpot;
-              if (trade.type === 'SELL' && currentSpot < trade.peakPrice) trade.peakPrice = currentSpot;
+              if (managedTrade.type === 'BUY' && currentSpot > managedTrade.peakPrice) managedTrade.peakPrice = currentSpot;
+              if (managedTrade.type === 'SELL' && currentSpot < managedTrade.peakPrice) managedTrade.peakPrice = currentSpot;
 
               // 2. Detecção de Exaustão (Wick Ratio / Vela de Rejeição contra a posição)
               const marketState = this.engine?.getMarketState();
-              if (marketState && !trade.exhaustionTriggered) {
-                  const c1 = marketState.lastClosedCandle;
-                  if (c1) {
-                      const body = Math.abs(c1.close - c1.open);
-                      const upperWick = c1.high - Math.max(c1.open, c1.close);
-                      const lowerWick = Math.min(c1.open, c1.close) - c1.low;
-                      const ratio = 2.0; // InpExhaustionWickRatio
-                      
-                      let isExhaustion = false;
-                      if (trade.type === 'BUY') {
-                          isExhaustion = (body > 0 && upperWick >= body * ratio && upperWick > lowerWick);
-                      } else {
-                          isExhaustion = (body > 0 && lowerWick >= body * ratio && lowerWick > upperWick);
-                      }
-                      
-                      if (isExhaustion) {
-                          trade.exhaustionTriggered = true;
-                          this.addUserLog(userId, `⚠️ [EXAUSTÃO] Rejeição detectada. Apertando Trailing Stop ao máximo!`);
-                      }
+              if (marketState && !managedTrade.exhaustionTriggered) {
+                const c1 = marketState.lastClosedCandle;
+                if (c1) {
+                  const body = Math.abs(c1.close - c1.open);
+                  const upperWick = c1.high - Math.max(c1.open, c1.close);
+                  const lowerWick = Math.min(c1.open, c1.close) - c1.low;
+                  const ratio = 2.0; // InpExhaustionWickRatio
+
+                  let isExhaustion = false;
+                  if (managedTrade.type === 'BUY') {
+                    isExhaustion = (body > 0 && upperWick >= body * ratio && upperWick > lowerWick);
+                  } else {
+                    isExhaustion = (body > 0 && lowerWick >= body * ratio && lowerWick > upperWick);
                   }
+
+                  if (isExhaustion) {
+                    managedTrade.exhaustionTriggered = true;
+                    this.addUserLog(userId, `⚠️ [EXAUSTÃO] Rejeição detectada. Apertando Trailing Stop ao máximo!`);
+                  }
+                }
               }
 
-              // 3. Define a folga do Trailing Stop
-              // No modo exaustão, a folga cai para o mínimo possível (0.50 pts). Modo normal: 1.50 pts.
-              const buffer = trade.exhaustionTriggered ? 0.50 : 1.50; 
-              
-              const avancoPts = trade.type === 'BUY' ? (trade.peakPrice - trade.openPrice) : (trade.openPrice - trade.peakPrice);
-              
+              // 3. Define a folga do Trailing Stop (sobre o avanço do preço a favor)
+              // Para evitar fechamento por ruído no primeiro centavo, mantemos um piso de 1.00 ponto
+              const avancoPts = managedTrade.type === 'BUY' ? (managedTrade.peakPrice - managedTrade.openPrice) : (managedTrade.openPrice - managedTrade.peakPrice);
+
+              let buffer = 1.00;
+              if (avancoPts > 0) {
+                buffer = Math.max(1.00, avancoPts * 0.40);
+              }
+
               // 4. Piso de Breakeven
-              if (avancoPts >= 1.00 && !trade.beSet) {
-                  trade.beSet = true;
-                  this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro protegido. O Stop Loss foi movido para o preço de entrada.`);
+              if (avancoPts >= 1.00 && !managedTrade.beSet) {
+                managedTrade.beSet = true;
+                this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro protegido. O Stop Loss foi movido para o preço de entrada.`);
               }
 
-              const newLevel = trade.type === 'BUY' ? (trade.peakPrice - buffer) : (trade.peakPrice + buffer);
-              const isHit = trade.type === 'BUY' ? (currentSpot <= newLevel) : (currentSpot >= newLevel);
-              const isBreakEvenHit = trade.beSet && (trade.type === 'BUY' ? (currentSpot <= trade.openPrice + 0.10) : (currentSpot >= trade.openPrice - 0.10));
-              
+              const newLevel = managedTrade.type === 'BUY' ? (managedTrade.peakPrice - buffer) : (managedTrade.peakPrice + buffer);
+              const isHit = managedTrade.type === 'BUY' ? (currentSpot <= newLevel) : (currentSpot >= newLevel);
+              const isBreakEvenHit = managedTrade.beSet && (managedTrade.type === 'BUY' ? (currentSpot <= managedTrade.openPrice + 0.10) : (currentSpot >= managedTrade.openPrice - 0.10));
+
               const now = Date.now();
-              if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
-                  if (isHit && avancoPts > buffer) { 
-                      state.lastSmartCloseTime = now;
-                      this.addUserLog(userId, `🏆 [TRAILING STOP] Fechando operação a favor do lucro. Pico: $${trade.peakPrice.toFixed(2)}`);
-                      closingSet.add(String(trade.id));
-                      this.closeTrade(userId, String(trade.id));
-                  } else if (isBreakEvenHit) {
-                      state.lastSmartCloseTime = now;
-                      this.addUserLog(userId, `🛡️ [SAÍDA BREAKEVEN] A operação recuou até a entrada e foi fechada no zero a zero.`);
-                      closingSet.add(String(trade.id));
-                      this.closeTrade(userId, String(trade.id));
-                  } else if (avancoPts < 1.00) {
-                      // SL Inicial Estrutural: 2.50 pts
-                      const slInicialHit = trade.type === 'BUY' ? (currentSpot <= trade.openPrice - 2.50) : (currentSpot >= trade.openPrice + 2.50);
-                      if (slInicialHit) {
-                          state.lastSmartCloseTime = now;
-                          this.addUserLog(userId, `🛑 [STOP LOSS] Perda máxima atingida. Protegendo capital.`);
-                          closingSet.add(String(trade.id));
-                          this.closeTrade(userId, String(trade.id));
-                      }
-                  }
+
+              // CORRIGIDO (bug principal): a trava de Stop Loss de 15% do valor da ordem
+              // estava dentro do MESMO if/elseif/else do trailing stop e do breakeven,
+              // atrás do MESMO cooldown de 3s guardado em state.lastSmartCloseTime
+              // (compartilhado com toda proteção do usuário, inclusive de trades
+              // anteriores já fechados). Duas consequências:
+              //   1) Se uma operação anterior tivesse fechado há menos de 3s, a nova
+              //      ordem já nascia com a trava de 15% bloqueada por até 3s.
+              //   2) Por ser if/elseif/else, bastava isHit ou isBreakEvenHit oscilarem
+              //      por ruído de preço para "roubar" o ciclo e o SL de 15% nunca ser
+              //      avaliado naquele tick.
+              // Agora o SL de 30% é a PRIMEIRA coisa avaliada a cada tick, tem seu
+              // próprio cooldown curto (500ms, só para não mandar 'sell' duplicado) e
+              // não depende do estado de trailing/breakeven nem do timer do usuário.
+              const maxLossUSD = -(managedTrade.lot * 0.30);
+              const slCooldownOk = !managedTrade.lastSlCheck || now - managedTrade.lastSlCheck > 500;
+
+              if (managedTrade.profit <= maxLossUSD && slCooldownOk) {
+                managedTrade.lastSlCheck = now;
+                this.addUserLog(userId, `🛑 [STOP LOSS] Perda máxima de 30% da ordem atingida ($${managedTrade.profit.toFixed(2)}). Protegendo capital.`);
+                closingSet.add(String(managedTrade.id));
+                this.closeTrade(userId, String(managedTrade.id));
+              } else if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
+                if (isHit && avancoPts > buffer) {
+                  state.lastSmartCloseTime = now;
+                  this.addUserLog(userId, `🏆 [TRAILING STOP] Fechando operação a favor do lucro. Pico: $${managedTrade.peakPrice.toFixed(2)}`);
+                  closingSet.add(String(managedTrade.id));
+                  this.closeTrade(userId, String(managedTrade.id));
+                } else if (isBreakEvenHit) {
+                  state.lastSmartCloseTime = now;
+                  this.addUserLog(userId, `🛡️ [SAÍDA BREAKEVEN] A operação recuou até a entrada e foi fechada no zero a zero.`);
+                  closingSet.add(String(managedTrade.id));
+                  this.closeTrade(userId, String(managedTrade.id));
+                }
               }
             }
             // -------------------------------------
@@ -558,6 +587,7 @@ export class DerivConnectionManager {
               if (trade.status !== 'CLOSED') {
                 trade.status = 'CLOSED';
                 state.dailyProfit += profit;
+                trade.profit = profit; // Save final profit
                 this.openContractIds.get(userId)?.delete(contractId);
                 closingSet.delete(contractId);
                 this.addUserLog(userId, `💵 [FECHADO] Contrato ${contractId} fechado com ${profit >= 0 ? 'LUCRO' : 'PREJUÍZO'} de $${profit.toFixed(2)}`);
@@ -653,12 +683,20 @@ export class DerivConnectionManager {
     // Nunca tenta vender uma ordem que ainda não recebeu ID real da corretora
     if (contractId.startsWith('PENDING_')) {
       this.addUserLog(userId, `⏳ Ordem ${contractId} ainda não confirmada pela corretora — fechamento adiado.`);
+      // CORRIGIDO: antes o ID "PENDING_..." ficava preso para sempre dentro de
+      // closingSet (só o caminho "WS offline" fazia essa limpeza). Isso não travava
+      // o fechamento (o ID real substitui o PENDING_ e não herda essa entrada), mas
+      // deixava lixo se acumulando no Set do usuário. Removemos aqui também, por
+      // consistência e para permitir nova tentativa imediata caso o ID seja resolvido
+      // antes do próximo tick de proteção.
+      this.getClosingSet(userId).delete(contractId);
       return false;
     }
 
     const numericId = Number(contractId);
     if (Number.isNaN(numericId)) {
       this.addUserLog(userId, `⚠️ [ERRO] ID de contrato inválido para fechamento: ${contractId}`);
+      this.getClosingSet(userId).delete(contractId);
       return false;
     }
 
@@ -677,14 +715,7 @@ export class DerivConnectionManager {
     const isAdmin = user?.role === 'ADMIN' || user?.name?.toLowerCase().includes('alaides');
     if (isAdmin) return false;
 
-    const now = new Date();
-    const utcHour = now.getUTCHours();
-    const adjustedHour = (utcHour - 3 + 24) % 24;
-    const day = now.getUTCDay();
-
-    if (day === 5 && adjustedHour >= 17) return true;
-    if (day === 6 || day === 0) return true;
-    if (day === 1 && adjustedHour < 6) return true;
+    // Desativado a pedido do admin para liberar as operações de todos os usuários
     return false;
   }
 
@@ -716,9 +747,9 @@ export class DerivConnectionManager {
     }
 
     if (openTradesCount >= 1) {
-      // Já existe 1 ordem aberta, modo DCA assumiu, o motor ignora novos sinais.
+      // Já existe 1 ordem aberta, o motor ignora novos sinais.
       if (Math.random() < 0.2) {
-        this.addUserLog(userId, `⚠️ Sinal recebido, mas já existe 1 ordem aberta. Aguardando fechamento (Modo 1x1).`);
+        this.addUserLog(userId, `⚠️ Sinal recebido, mas já existe 1 ordem aberta. Aguardando fechamento.`);
       }
       return;
     }
@@ -741,7 +772,11 @@ export class DerivConnectionManager {
     const manualStake = this.manualStakes.get(userId);
     const multiplierValue = 100;
 
-    let dynamicStake = 10.00; // 10 dólares fixos por ordem conforme estratégia Sniper 1x1
+    // CORRIGIDO: setAutoStakePercent() definia o percentual em this.autoStakePercent,
+    // mas esse valor nunca era lido aqui — o cálculo automático ficava sempre fixo em
+    // 5% da banca, ignorando silenciosamente a configuração do usuário.
+    const stakePercent = this.autoStakePercent.get(userId) ?? 0.05;
+    let dynamicStake = balance * stakePercent;
 
     let finalStake = manualStake && manualStake > 0 ? manualStake : dynamicStake;
 

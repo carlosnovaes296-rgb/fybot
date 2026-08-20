@@ -32,6 +32,7 @@ double         currentLotSize = InpLotSize;
 datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 int            currentDay = -1; // CORRIGIDO: usado para detectar virada de dia
+datetime       lastLogTime = 0; // Added for log control
 
 // Configurações do DCA (Máximo de 4 ordens -> 3 DCAs)
 double         DCADrops[3] = {0.0005, 0.0010, 0.0015};
@@ -300,7 +301,11 @@ void OnTick()
       if(currentAsk > ema[0]) trend = "TREND_UP";
       else if(currentBid < ema[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M1): ", DoubleToString(rsi[0], 1));
+      if(currentM5Time != lastLogTime)
+        {
+         Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | RSI(M1): ", DoubleToString(rsi[0], 1));
+         lastLogTime = currentM5Time;
+        }
 
       double tpDist = currentAsk * (InpTakeProfitPct / 100.0);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);

@@ -14,7 +14,7 @@ function base64URLEncode(str: Buffer): string {
 
 export const derivController = {
   handleConnect: (req: Request, res: Response) => {
-    const appId = '33NJDNR9tjLaaXmiaY04n'; // V2 Client ID
+    const appId = process.env.DERIV_APP_ID; // V2 Client ID
     const redirectUri = 'https://fybot.life/api/deriv/oauth/callback';
     
     // Gerar PKCE verifier e challenge (Segurança V2)
@@ -55,7 +55,7 @@ export const derivController = {
       
       pkceStore.delete(state as string);
 
-      const appId = '33NJDNR9tjLaaXmiaY04n';
+      const appId = process.env.DERIV_APP_ID;
       const redirectUri = 'https://fybot.life/api/deriv/oauth/callback';
 
       // Trocar o código pelo Access Token no servidor da Deriv

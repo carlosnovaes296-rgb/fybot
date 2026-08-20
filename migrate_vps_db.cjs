@@ -1,7 +1,14 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `pm2 stop fybot &&
+mysql -u root -p'Fybot2026!' fybot_db -e "
+UPDATE users SET referredBy = '1' WHERE referredBy = '1jsleiedp';
+UPDATE users SET referredBy = 'ADMIN123' WHERE referredBy = 'ADMIN1UIH';
+UPDATE referral_earnings SET sponsorId = '1' WHERE sponsorId = '1jsleiedp';
+UPDATE payments SET userId = '1' WHERE userId = '1jsleiedp';
+" &&
+pm2 start fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -11,8 +18,6 @@ conn.on('ready', () => {
       console.log(out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

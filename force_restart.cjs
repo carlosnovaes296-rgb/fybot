@@ -1,18 +1,16 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
     if (err) throw err;
     let out = '';
     stream.on('close', (code, signal) => {
-      console.log(out);
+      console.log('RESTART DONE', out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

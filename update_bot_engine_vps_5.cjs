@@ -1,7 +1,13 @@
 const { Client } = require('ssh2');
 const conn = new Client();
+const fs = require('fs');
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const localFileContent = fs.readFileSync('c:\\Users\\sobit\\OneDrive\\Área de Trabalho\\Fybot pro\\backend\\services\\DerivBotEngine.ts', 'utf8');
+
+const cmd = `cat << 'EOF' > /root/fybot/backend/services/DerivBotEngine.ts
+${localFileContent.replace(/\$/g, '\\$')}
+EOF
+cd /root/fybot && npm run build && pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -11,8 +17,6 @@ conn.on('ready', () => {
       console.log(out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

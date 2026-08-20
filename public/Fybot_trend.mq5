@@ -13,8 +13,8 @@
 //====================== ENUMS =======================================
 enum ENUM_LOT_MODE
   {
-   LOT_FIXED   = 0,  // Lote Fixo
-   LOT_DYNAMIC = 1   // Lote Dinamico (Risco % da Banca)
+   LOTE_FIXO        = 0, // Lote Fixo
+   RISCO_PERCENTUAL = 1  // Risco por Percentual
   };
 
 enum EA_STATE
@@ -42,9 +42,9 @@ input double            InpEma8ProximityPoints = 150.0;   // Distancia maxima (p
 input double            InpInitialStopLossPoints = 0.0;   // SL inicial (pontos). 0 = usa a distancia minima da corretora
 
 input group "=== Lote / Risco ==="
-input ENUM_LOT_MODE    InpLotMode  = LOT_DYNAMIC; // Modo de calculo do lote
-input double            InpFixedLot = 0.01;        // Lote fixo (usado quando InpLotMode = LOT_FIXED)
-input double            InpRiskPct  = 1.0;         // % do saldo arriscado por operacao (usado quando InpLotMode = LOT_DYNAMIC)
+input ENUM_LOT_MODE    InpModoLote        = RISCO_PERCENTUAL; // Modo de calculo do lote
+input double            InpLoteFixo        = 0.02;              // Lote fixo (usado quando ModoLote = Lote Fixo)
+input double            InpRiscoPercentual = 1.0;               // % do saldo arriscado (usado quando ModoLote = Risco %)
 
 input group "=== Limites e Protecoes ==="
 input int      InpMaxTrades           = 1;      // Numero maximo de posicoes simultaneas geridas pelo bot
@@ -218,9 +218,9 @@ double CalcLot(double slPoints)
    double maxLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
    double step   = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
 
-   if(InpLotMode == LOT_FIXED)
+   if(InpModoLote == LOTE_FIXO)
      {
-      double lot = MathFloor(InpFixedLot / step) * step;
+      double lot = MathFloor(InpLoteFixo / step) * step;
       return NormalizeDouble(MathMax(minLot, MathMin(maxLot, lot)), 2);
      }
 
@@ -235,7 +235,7 @@ double CalcLot(double slPoints)
       return minLot;
 
    double balance      = AccountInfoDouble(ACCOUNT_BALANCE);
-   double riskMoney    = balance * (InpRiskPct / 100.0);
+   double riskMoney    = balance * (InpRiscoPercentual / 100.0);
    double moneyPerPoint= (tickValue / tickSize) * point;
    double stopMoney    = slPoints * moneyPerPoint;
    if(stopMoney <= 0)

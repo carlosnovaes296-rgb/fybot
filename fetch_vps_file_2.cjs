@@ -1,14 +1,15 @@
 const { Client } = require('ssh2');
 const conn = new Client();
+const fs = require('fs');
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `cat /root/fybot/backend/services/DerivBotEngine.ts`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
     if (err) throw err;
     let out = '';
     stream.on('close', (code, signal) => {
-      console.log(out);
+      fs.writeFileSync('c:\\Users\\sobit\\OneDrive\\Área de Trabalho\\Fybot pro\\vps_deriv.ts', out);
       conn.end();
     }).on('data', (data) => {
       out += data.toString();

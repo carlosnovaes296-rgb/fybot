@@ -168,9 +168,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
       const rawType = String(trade.type).toUpperCase();
       const isBuy = rawType === 'BUY' || rawType === 'CALL' || rawType === 'MULTUP';
       const openColor = isBuy ? '#10b981' : '#ef4444'; // Verde ou Vermelho
-      const price = Number(trade.entryPrice || trade.openPrice || 0);
+      const price = Number(trade.entryPrice || trade.openPrice || trade.price || trade.open_price || trade.entry_price || 0);
       const lot = trade.amount || trade.lot || 0;
-      const profit = trade.profit || 0;
+      const profit = Number(trade.profit || 0);
 
       if (price > 0) {
         // 1. Linha de Entrada (OPEN)
@@ -188,9 +188,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
       }
 
       // 2. Take Profit (TP)
-      if (trade.tp && trade.tp > 0) {
+      let tpValue = trade.tp;
+      if (!tpValue || tpValue <= 0) {
+        // fallback: add 3% of price for BUY, subtract for SELL
+        if (isBuy) {
+          tpValue = price * 1.007; // approx +0.7%
+        } else {
+          tpValue = price * 0.993; // approx -0.7%
+        }
+      }
+      if (tpValue && tpValue > 0) {
         const tpLine = seriesRef.current?.createPriceLine({
-          price: trade.tp,
+          price: tpValue,
           color: '#10b981', 
           lineWidth: 2,
           lineStyle: 2, // 2 = Dashed
@@ -203,9 +212,17 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
       }
 
       // 3. Stop Loss (SL)
-      if (trade.sl && trade.sl > 0) {
+      let slValue = trade.sl;
+      if (!slValue || slValue <= 0) {
+        if (isBuy) {
+          slValue = price * 0.993; // approx -0.7%
+        } else {
+          slValue = price * 1.007; // approx +0.7%
+        }
+      }
+      if (slValue && slValue > 0) {
         const slLine = seriesRef.current?.createPriceLine({
-          price: trade.sl,
+          price: slValue,
           color: '#ef4444', 
           lineWidth: 2,
           lineStyle: 2,

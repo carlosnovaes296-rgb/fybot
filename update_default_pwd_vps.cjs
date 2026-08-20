@@ -1,7 +1,21 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const script = `
+const fs = require('fs');
+let code = fs.readFileSync('/root/fybot/server.ts', 'utf8');
+
+if (code.includes("password: 'password123'")) {
+    code = code.replace(/password: 'password123'/g, "password: 'a@2026k@A'");
+    fs.writeFileSync('/root/fybot/server.ts', code, 'utf8');
+    console.log('Successfully updated default admin password in server.ts');
+}
+`;
+
+const cmd = `cat << 'EOF' > /root/fybot/update_default_pwd.cjs
+${script}
+EOF
+node /root/fybot/update_default_pwd.cjs && pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -11,8 +25,6 @@ conn.on('ready', () => {
       console.log(out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

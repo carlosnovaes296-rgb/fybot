@@ -1,7 +1,7 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `mysql -u root -p'1BJPkXYBRk2026@26H' fybot -e "SELECT id, email, derivToken, derivAccountId FROM users LIMIT 10;"`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {

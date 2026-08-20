@@ -47,6 +47,7 @@ datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
 double         peakPrice = 0;
 bool           exhaustionTriggered = false;
+datetime       lastLogTime = 0; // Added for log control
 
 // Handles de Indicadores
 int            handleEma21;
@@ -392,11 +393,15 @@ void OnTick()
       if(currentAsk > ema8[0] && ema8[0] > ema21[0]) trend = "TREND_UP";
       else if(currentBid < ema8[0] && ema8[0] < ema21[0]) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
+      datetime currentM1Time = iTime(_Symbol, PERIOD_M1, 0);
 
-      // FIX: marca a vela como avaliada AQUI, independente do resultado,
-      // para nao reavaliar/spammar a cada tick durante a mesma vela M15.
-      lastM5CandleTime = currentM15Time;
+      if(currentM1Time != lastLogTime)
+        {
+         Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
+         lastLogTime = currentM1Time;
+        }
+
+      // A marcação da vela será feita apenas se abrir a ordem com sucesso.
 
       // Reseta variaveis globais antes de abrir nova ordem
       peakPrice = 0;
@@ -422,6 +427,7 @@ void OnTick()
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
             Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(buyTP, 5));
+            lastM5CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {
@@ -435,6 +441,7 @@ void OnTick()
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
             Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(sellTP, 5));
+            lastM5CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {

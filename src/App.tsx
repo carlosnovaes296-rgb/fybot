@@ -59,6 +59,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 // import DailyTargetSystem from './components/DailyTargetSystem';
+import { TradingChart } from './components/TradingChart';
 
 import {
   User,
@@ -238,6 +239,8 @@ export default function App() {
   const [showReferralHistoryModal, setShowReferralHistoryModal] = useState(false);
   const [adminWithdrawals, setAdminWithdrawals] = useState<any[]>([]);
   const [adminCommissions, setAdminCommissions] = useState<any[]>([]);
+
+
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawWallet, setWithdrawWallet] = useState('');
   const [withdrawalLoading, setWithdrawalLoading] = useState(false);
@@ -259,6 +262,8 @@ export default function App() {
       return null;
     }
   });
+
+  const isAdminUser = currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.id === '1';
 
   const baseEarned = referralHistory.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const withdrawnSum = withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -464,6 +469,7 @@ export default function App() {
     if (search.includes('token1=')) {
       const params = new URLSearchParams(search.replace('#', '?'));
 
+      // Inicialização dos tokens (Corrigido)
       let derivTokenDemo = '';
       let derivTokenReal = '';
       let defaultToken = '';
@@ -659,7 +665,7 @@ export default function App() {
   }, [stats.systemBlocked, stats.blockedUntil]);
 
   const fetchAdminData = async () => {
-    if (!isLoggedIn || currentUser?.role !== 'ADMIN') return;
+    if (!isLoggedIn || !isAdminUser) return;
     const t = Date.now();
     const headers = { 'x-admin-userid': currentUser?.id || '' };
     const adminId = currentUser?.id || '';
@@ -699,6 +705,27 @@ export default function App() {
       headers: { 'x-admin-userid': currentUser?.id || '' }
     });
     fetchAdminData();
+  };
+
+  const resetDailyTarget = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja zerar a meta diária (desbloquear robô) para este usuário?')) return;
+    try {
+      const res = await fetch('/api/daily-target/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Meta zerada e robô desbloqueado com sucesso!');
+        fetchAdminData();
+      } else {
+        alert('Erro ao zerar meta: ' + data.error);
+      }
+    } catch(e) {
+      console.error(e);
+      alert('Erro de conexão');
+    }
   };
 
   const saveAdminEdit = async () => {
@@ -1368,14 +1395,14 @@ export default function App() {
     fetchStatus();
     fetchConfig();
     fetchReferrals();
-    if (currentUser?.role === 'ADMIN') {
+    if (isAdminUser) {
       fetchAdminData();
     }
 
     const interval = setInterval(() => {
       fetchStatus();
       fetchReferrals();
-      if (currentUser?.role === 'ADMIN') {
+      if (isAdminUser) {
         fetchAdminData();
       }
     }, 1000);
@@ -1631,50 +1658,12 @@ export default function App() {
           {/* History menu item removed by request */}
           <NavItem icon={<CreditCard size={20} />} label={t.sidebar.licenses} active={activeTab === 'plans'} onClick={() => { setActiveTab('plans'); setIsMobileMenuOpen(false); }} />
           <NavItem icon={<Share2 size={20} />} label={t.sidebar.affiliates} active={activeTab === 'affiliates'} onClick={() => { setActiveTab('affiliates'); setIsMobileMenuOpen(false); }} />
-          {currentUser?.role === 'ADMIN' && (
+          {isAdminUser && (
             <>
               <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
-              <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-                <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2 flex items-center gap-1"><AlertTriangle size={12} /> DEV MODE</p>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => {
-                      fetch('/api/admin/deriv-test/start', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-admin-userid': currentUser.id },
-                      }).then(r => r.json()).then(d => alert(d.message || d.error)).catch(e => alert(e.message));
-                    }} 
-                    className="flex-1 py-2 bg-green-500/20 text-green-400 text-xs font-bold rounded hover:bg-green-500/40 transition"
-                  >
-                    ▶ Teste Deriv
-                  </button>
-                  <button 
-                    onClick={() => {
-                      fetch('/api/admin/deriv-test/stop', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'x-admin-userid': currentUser.id },
-                      }).then(r => r.json()).then(d => alert(d.message || d.error)).catch(e => alert(e.message));
-                    }} 
-                    className="flex-1 py-2 bg-red-500/20 text-red-400 text-xs font-bold rounded hover:bg-red-500/40 transition"
-                  >
-                    ⏹ Parar Teste
-                  </button>
-                </div>
-              </div>
             </>
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
-          <NavItem
-            icon={<Download size={20} color="#FFD700" />}
-            label={language === 'en' ? 'Download FYBOT TREND' : 'Baixar FYBOT TREND'}
-            onClick={() => {
-              const link = document.createElement('a');
-              link.href = '/Fybot_trend.mq5';
-              link.download = 'Fybot_trend.mq5';
-              link.click();
-              setIsMobileMenuOpen(false);
-            }}
-          />
 
 
 
@@ -1697,7 +1686,7 @@ export default function App() {
             </div>
             <div className="hidden md:block">
               <p className="text-sm font-medium text-white/90">{currentUser?.name || 'User'}</p>
-              <p className="text-[10px] text-yellow-500/70 font-semibold">{currentUser?.role === 'ADMIN' ? 'Administrator' : t.common.proAccount}</p>
+              <p className="text-[10px] text-yellow-500/70 font-semibold">{isAdminUser ? 'Administrator' : t.common.proAccount}</p>
             </div>
           </div>
 
@@ -1946,8 +1935,7 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
             {(() => {
-              const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase().includes('alaides');
-              const isWeekendBlock = isWeekend && !isAdmin;
+              const isWeekendBlock = isWeekend && !isAdminUser;
               return (
                 <button
                   onClick={toggleBot}
@@ -1989,7 +1977,7 @@ export default function App() {
             <span className="text-[10px] font-black text-white uppercase tracking-widest">{stats.botRunning ? t.header.active : t.header.idle}</span>
           </div>
           <div className="flex items-center bg-[#0a0a0c] border border-white/10 rounded-full p-1 overflow-hidden shadow-inner">
-            {(currentUser?.role === 'ADMIN' || currentUser?.name?.toLowerCase().includes('alaides')) && (
+            {(isAdminUser) && (
               <button
                 onClick={toggleAccountType}
                 disabled={loading || currentUser?.activeAccountType === 'DEMO'}
@@ -2158,7 +2146,7 @@ export default function App() {
                     <span className="text-sm font-bold text-white tracking-widest uppercase">XAUUSD (Ouro) - M15 - ESTILO MT5</span>
                   </div>
                   <div style={{ width: '100%', height: 'calc(100% - 45px)' }}>
-                     <MT5TradingViewChart symbol={stats.activeSymbol?.toUpperCase() || 'XAUUSD'} />
+                     <TradingChart trades={stats.trades || []} symbol={stats.activeSymbol?.toUpperCase() || 'XAUUSD'} />
                   </div>
                 </div>
 
@@ -2166,7 +2154,7 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
 
                   {/* Left: Execution Table (takes 2 columns if admin, else 3) */}
-                  <div className={currentUser?.role === 'ADMIN' ? 'lg:col-span-2' : 'lg:col-span-3'}>
+                  <div className={isAdminUser ? 'lg:col-span-2' : 'lg:col-span-3'}>
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 w-full flex flex-col shadow-xl">
                       <div className="flex items-center justify-between mb-5">
                         <h3 className="font-bold flex items-center gap-2 uppercase tracking-widest text-base text-white/60">
@@ -2310,7 +2298,7 @@ export default function App() {
                   </div>
 
                   {/* Right: Live Console (takes 1 column) */}
-                  {currentUser?.role === 'ADMIN' && (
+                  {isAdminUser && (
                     <div className="lg:col-span-1 h-full">
                       {/* <DailyTargetSystem stats={stats} language={language} fetchStatus={fetchStatus} isAdmin={currentUser?.role === 'ADMIN'} userId={currentUser?.id} /> */}
 
@@ -3287,7 +3275,7 @@ export default function App() {
               </motion.div>
             )}
 
-            {activeTab === 'admin' && currentUser?.role === 'ADMIN' && (
+            {activeTab === 'admin' && isAdminUser && (
               <motion.div
                 key="admin"
                 initial={{ opacity: 0, y: 20 }}
@@ -3295,6 +3283,28 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
+                {/* Admin Dashboard Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
+                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Usuários Ativos</p>
+                    <p className="text-3xl font-black text-emerald-400">
+                      {users.filter(u => u.status === 'ACTIVE').length}
+                    </p>
+                  </div>
+                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
+                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Usuários Inativos</p>
+                    <p className="text-3xl font-black text-red-400">
+                      {users.filter(u => u.status !== 'ACTIVE').length}
+                    </p>
+                  </div>
+                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
+                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Valores em Operação</p>
+                    <p className="text-3xl font-black text-yellow-400">
+                      ${users.filter(u => u.status === 'ACTIVE').reduce((sum, u) => sum + (Number((u as any).botBalance) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
+
                 {/* Users Management */}
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8">
                   <div className="flex items-center justify-between mb-8">
@@ -3312,11 +3322,23 @@ export default function App() {
                           </div>
                           <div>
                             <p className="font-bold text-sm">{u.name}</p>
-                            <p className="text-xs text-white/40">{u.email}</p>
+                            <p className="text-xs text-white/40 mb-1">{u.email}</p>
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                                {u.status}
+                              </span>
+                              {typeof (u as any).botBalance !== 'undefined' && (
+                                <>
+                                  <span className="text-[10px] font-bold text-white/60 bg-white/5 px-2 py-0.5 rounded-full">
+                                    Banca: <span className="text-white">${Number((u as any).botBalance).toFixed(2)}</span>
+                                  </span>
+                                  <span className="text-[10px] font-bold text-white/60 bg-white/5 px-2 py-0.5 rounded-full">
+                                    Lucro: <span className={(u as any).botDailyProfit >= 0 ? "text-emerald-400" : "text-red-400"}>${Number((u as any).botDailyProfit || 0).toFixed(2)}</span>
+                                  </span>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                            {u.status}
-                          </span>
                         </div>
                         <div className="flex gap-2 items-center flex-wrap">
                           <button
@@ -3335,7 +3357,15 @@ export default function App() {
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
                           </button>
-                          {u.email === 'laidesantos33@gmail.com' && (
+                          <button
+                            onClick={() => resetDailyTarget(u.id)}
+                            title="Zerar Meta Diária e Desbloquear"
+                            className="p-2 px-3 bg-yellow-500/10 rounded-lg hover:bg-yellow-500/20 text-yellow-500 transition-colors flex items-center gap-1.5 border border-yellow-500/10"
+                          >
+                            <RefreshCw size={14} />
+                            <span className="text-[10px] font-bold uppercase tracking-tight">Zerar Meta</span>
+                          </button>
+                          {(currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.id === '1') && (
                             <button
                               onClick={() => grantLifetimeAccess(u.id)}
                               title="Conta Demo"
@@ -3759,7 +3789,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className={`grid grid-cols-1 ${currentUser?.role === 'ADMIN' ? 'lg:grid-cols-2' : 'max-w-2xl mx-auto w-full'} gap-8`}
+                className={`grid grid-cols-1 ${isAdminUser ? 'lg:grid-cols-2' : 'max-w-2xl mx-auto w-full'} gap-8`}
               >
                 <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
                   <div>
@@ -3801,29 +3831,27 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Deriv Connection (Apenas ADMIN para testes) */}
-                    {(currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com') && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest pl-1">Token Deriv (Conta Real)</label>
-                          <input
-                            type="text"
-                            value={profileForm.derivTokenReal}
-                            onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
-                            placeholder="pat_..."
-                            className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-emerald-100 placeholder-emerald-900/50"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-amber-400 tracking-widest pl-1">Token Deriv (Conta Demo)</label>
-                          <input
-                            type="text"
-                            value={profileForm.derivTokenDemo}
-                            onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
-                            placeholder="pat_..."
-                            className="w-full bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none text-amber-100 placeholder-amber-900/50"
-                          />
-                        </div>
+                    {/* Deriv Connection Token */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest pl-1">Token Deriv (Conta Real)</label>
+                      <input
+                        type="text"
+                        value={profileForm.derivTokenReal}
+                        onChange={(e) => setProfileForm(f => ({ ...f, derivTokenReal: e.target.value }))}
+                        placeholder="pat_..."
+                        className="w-full bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-emerald-100 placeholder-emerald-900/50"
+                      />
+                    </div>
+                    {isAdminUser && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-bold text-amber-400 tracking-widest pl-1">Token Deriv (Conta Demo)</label>
+                        <input
+                          type="text"
+                          value={profileForm.derivTokenDemo}
+                          onChange={(e) => setProfileForm(f => ({ ...f, derivTokenDemo: e.target.value }))}
+                          placeholder="pat_..."
+                          className="w-full bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-sm focus:border-amber-500 outline-none text-amber-100 placeholder-amber-900/50"
+                        />
                       </div>
                     )}
                     <div className="space-y-2">
@@ -4172,16 +4200,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Token Deriv Demo</label>
-                    <input
-                      type="text"
-                      value={editingUser.derivTokenDemo || ''}
-                      onChange={e => setEditingUser({ ...editingUser, derivTokenDemo: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition-colors"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-white/60 mb-2 uppercase">Token Deriv Real</label>
                     <input

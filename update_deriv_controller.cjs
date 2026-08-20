@@ -1,7 +1,7 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `sed -i "s/const appId = '33NJDNR9tjLaaXmiaY04n';/const appId = process.env.DERIV_APP_ID;/g" /root/fybot/backend/controllers/derivController.ts && cd /root/fybot && npm run build && pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -23,5 +23,5 @@ conn.on('ready', () => {
   port: 22,
   username: 'root',
   password: '1BJPkXYBRk2026@26H',
-  readyTimeout: 30000,
+  readyTimeout: 60000,
 });

@@ -1,7 +1,7 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `sed -i 's/DERIV_APP_ID=33PZwcDs8NqrvpUw1vQIF/DERIV_APP_ID=33TVM6cBQ9GfSjbwQHHdE/g' /root/fybot/.env && cd /root/fybot && pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {

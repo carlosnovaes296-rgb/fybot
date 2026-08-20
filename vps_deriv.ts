@@ -86,10 +86,8 @@ export class DerivBotEngineEMA {
         }
         this.currentToken = token;
 
-        console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=${this.appId})...`);
-        // Deriv WebSocket API requires app_id to be a valid numeric integer (e.g., 1089).
-        // Using a custom string API key here will cause the WebSocket to reject with 401.
-        let finalWsUrl = `wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT`;
+        console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=\${this.appId})...`);
+        let finalWsUrl = `wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT`;
         let isMagic = false;
 
         if (this.currentToken) {
@@ -103,7 +101,7 @@ export class DerivBotEngineEMA {
                     'User-Agent': userAgent
                 };
 
-                let authHeader = this.currentToken.startsWith('Bearer ') ? this.currentToken : `Bearer ${this.currentToken}`;
+                let authHeader = this.currentToken.startsWith('Bearer ') ? this.currentToken : `Bearer \${this.currentToken}`;
                 let resContas = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
                     headers: { ...baseHeaders, 'Authorization': authHeader }
                 });
@@ -131,12 +129,12 @@ export class DerivBotEngineEMA {
                     const foundAccountId = contaAlvo ? (contaAlvo.loginid || contaAlvo.account_id || contaAlvo.id) : null;
 
                     if (foundAccountId) {
-                        const otpUrl = `https://api.derivws.com/trading/v1/options/accounts/${foundAccountId}/otp`;
+                        const otpUrl = `https://api.derivws.com/trading/v1/options/accounts/\${foundAccountId}/otp`;
                         const otpBody = {
                             client_id: this.appId,
                             token: this.currentToken.replace(/^Bearer\s+/i, '')
                         };
-                        console.log(`[DerivBotEngine] Solicitando OTP em: ${otpUrl} com body:`, otpBody);
+                        console.log(`[DerivBotEngine] Solicitando OTP em: \${otpUrl} com body:`, otpBody);
                         
                         const resOtp = await fetch(otpUrl, {
                             method: 'POST',
@@ -144,7 +142,7 @@ export class DerivBotEngineEMA {
                             body: JSON.stringify(otpBody)
                         });
 
-                        console.log(`[DerivBotEngine] Resposta OTP Status: ${resOtp.status}`);
+                        console.log(`[DerivBotEngine] Resposta OTP Status: \${resOtp.status}`);
                         const respText = await resOtp.text();
                         console.log(`[DerivBotEngine] Resposta OTP Body:`, respText);
 
@@ -166,14 +164,14 @@ export class DerivBotEngineEMA {
                     }
                 } else {
                     const errorText = await resContas.text();
-                    console.log(`[DerivBotEngine] Erro ao buscar contas. Status: ${resContas.status}, Body: ${errorText}`);
+                    console.log(`[DerivBotEngine] Erro ao buscar contas. Status: \${resContas.status}, Body: \${errorText}`);
                 }
             } catch (err) {
                 console.error("[DerivBotEngine] Erro ao obter OTP via REST:", err);
             }
         }
 
-        console.log(`[DerivBotEngine] Conectando WebSocket na URL: ${isMagic ? 'URL Segura (Oculta)' : finalWsUrl}`);
+        console.log(`[DerivBotEngine] Conectando WebSocket na URL: \${isMagic ? 'URL Segura (Oculta)' : finalWsUrl}`);
 
         this.ws = new NodeWebSocket(finalWsUrl, {
             headers: {
@@ -231,7 +229,7 @@ export class DerivBotEngineEMA {
 
                 if (response.error) {
                     console.error('[DerivBotEngine] Erro da Deriv:', response.error);
-                    if (this.onLog) this.onLog(`[SYS] Erro Deriv: ${response.error.message || JSON.stringify(response.error)}`);
+                    if (this.onLog) this.onLog(`[SYS] Erro Deriv: \${response.error.message || JSON.stringify(response.error)}`);
                     if (response.msg_type === 'authorize') {
                         // [CORRIGIDO] antes disso o socket ficava pendurado (isConnected=true,
                         // isAuthorized=false, sem tentativa de reconexao). Agora forcamos o
@@ -245,8 +243,8 @@ export class DerivBotEngineEMA {
 
                 if (response.msg_type === 'authorize') {
                     this.isAuthorized = true;
-                    console.log(`[DerivBotEngine] Autorizado com sucesso. Conta: ${response.authorize?.loginid}`);
-                    if (this.onLog) this.onLog(`✅ Conta autorizada: ${response.authorize?.loginid}`);
+                    console.log(`[DerivBotEngine] Autorizado com sucesso. Conta: \${response.authorize?.loginid}`);
+                    if (this.onLog) this.onLog(`✅ Conta autorizada: \${response.authorize?.loginid}`);
                     if (this.onAuthorized) this.onAuthorized(response.authorize);
                     // [CORRIGIDO] o historico de velas so e pedido depois da autorizacao confirmada,
                     // e nao mais otimisticamente no 'open'.
@@ -260,7 +258,7 @@ export class DerivBotEngineEMA {
                     }));
                     if (response.req_id === 300) {
                         this.candlesM15 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico M15: ${this.candlesM15.length} velas`);
+                        console.log(`[DerivBotEngine] Carregado historico M15: \${this.candlesM15.length} velas`);
                         if (this.candlesM15.length > 50 && this.onLog) {
                             this.onLog(`[SYS] Histórico M15 carregado! Analisando mercado imediatamente...`);
                             this.analyzeMarket();
@@ -291,7 +289,7 @@ export class DerivBotEngineEMA {
 
         this.ws.on('close', (code: number, reason: Buffer) => {
             const reasonStr = reason ? reason.toString() : 'Desconhecido';
-            console.log(`[DerivBotEngine] Conexao com feed fechada. Codigo: ${code}, Motivo: ${reasonStr}`);
+            console.log(`[DerivBotEngine] Conexao com feed fechada. Codigo: \${code}, Motivo: \${reasonStr}`);
             if (this.enginePingInterval) clearInterval(this.enginePingInterval);
             if (this.pongTimeout) {
                 clearTimeout(this.pongTimeout);
@@ -414,11 +412,11 @@ export class DerivBotEngineEMA {
         const isLateral = emaDist < 0.50;
 
         if (shouldLog) { // Loga a cada 60s
-            let statusLog = `M15: ${trendM15} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${ema8M15.toFixed(2)} | EMA21: ${ema21M15.toFixed(2)}`;
-            if (!isTimeValid) statusLog = `⏳ Fora do Horário (Atual: ${currentHour}h) | ` + statusLog;
-            else if (isLateral) statusLog = `🚧 Mercado Lateral (Abertura: $${emaDist.toFixed(2)}) | ` + statusLog;
+            let statusLog = `M15: \${trendM15} | Preço: \${currentPrice.toFixed(2)} | EMA8: \${ema8M15.toFixed(2)} | EMA21: \${ema21M15.toFixed(2)}`;
+            if (!isTimeValid) statusLog = `⏳ Fora do Horário (Atual: \${currentHour}h) | ` + statusLog;
+            else if (isLateral) statusLog = `🚧 Mercado Lateral (Abertura: \$\${emaDist.toFixed(2)}) | ` + statusLog;
             
-            this.onLog?.(`🧠 [Fybot Sniper API] ${statusLog}`);
+            this.onLog?.(`🧠 [Fybot Sniper API] \${statusLog}`);
             this.lastMonitorLogTime = now;
         }
 
@@ -441,13 +439,13 @@ export class DerivBotEngineEMA {
 
         if (trendM15 === 'TREND_UP' && isNearEma8 && currentPrice >= ema8M15) {
             signal = 'BUY';
-            reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
+            reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 detectado. Distância: \$\${distAbs.toFixed(2)}`;
             engineTp = currentPrice + percDist;
             engineSl = currentPrice - percDist;
         }
         else if (trendM15 === 'TREND_DOWN' && isNearEma8 && currentPrice <= ema8M15) {
             signal = 'SELL';
-            reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
+            reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 detectado. Distância: \$\${distAbs.toFixed(2)}`;
             engineTp = currentPrice - percDist;
             engineSl = currentPrice + percDist;
         }

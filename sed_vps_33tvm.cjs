@@ -1,7 +1,7 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `cd /root/fybot && sed -i 's/1089/33TVM6cBQ9GfSjbwQHHdE/g' backend/deriv/config.ts backend/services/DerivBotEngine.ts backend/services/DerivBotEngineEMA.ts backend/services/DerivConnectionManager.ts server.ts && pm2 restart fybot`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -11,8 +11,6 @@ conn.on('ready', () => {
       console.log(out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

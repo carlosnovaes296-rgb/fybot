@@ -1,7 +1,22 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const script = `
+const fs = require('fs');
+try {
+    const raw = fs.readFileSync('/root/fybot/data/db.json', 'utf8');
+    const db = JSON.parse(raw);
+    const admins = db.users.filter(u => u.role === 'ADMIN' || u.email.includes('jfcn2020') || u.email.includes('carlosnovaes296'));
+    console.log(JSON.stringify(admins, null, 2));
+} catch (e) {
+    console.error(e);
+}
+`;
+
+const cmd = `cat << 'EOF' > /root/fybot/check_db_pwd.cjs
+${script}
+EOF
+node /root/fybot/check_db_pwd.cjs`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -11,8 +26,6 @@ conn.on('ready', () => {
       console.log(out);
       conn.end();
     }).on('data', (data) => {
-      out += data.toString();
-    }).stderr.on('data', (data) => {
       out += data.toString();
     });
   });

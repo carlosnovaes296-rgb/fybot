@@ -1,7 +1,15 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `cat << 'EOF' > /root/test_ws.js
+const WebSocket = require('ws');
+const ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT', {
+    headers: { 'Origin': 'https://fybot.life' }
+});
+ws.on('open', () => { console.log('OPENED!'); ws.close(); });
+ws.on('error', (err) => console.log('ERROR:', err.message));
+EOF
+node /root/test_ws.js`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {

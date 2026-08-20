@@ -1,7 +1,13 @@
 const { Client } = require('ssh2');
 const conn = new Client();
 
-const cmd = `pm2 logs fybot --lines 50 --nostream`;
+const cmd = `
+sed -i 's/if (openTradesCount >= 3)/if (openTradesCount >= 1)/g' /root/fybot/backend/services/DerivConnectionManager.ts
+sed -i 's/já existem 3 ordens/já existe 1 ordem/g' /root/fybot/backend/services/DerivConnectionManager.ts
+sed -i 's/dynamicStake = balance \\* 0.01/dynamicStake = balance \\* 0.05/g' /root/fybot/backend/services/DerivConnectionManager.ts
+
+cd /root/fybot && npm run build && pm2 restart fybot
+`;
 
 conn.on('ready', () => {
   conn.exec(cmd, (err, stream) => {
@@ -23,5 +29,5 @@ conn.on('ready', () => {
   port: 22,
   username: 'root',
   password: '1BJPkXYBRk2026@26H',
-  readyTimeout: 30000,
+  readyTimeout: 60000,
 });
