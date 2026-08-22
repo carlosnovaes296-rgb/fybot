@@ -120,26 +120,36 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
           seriesRef.current.setData(historicalData);
         }
 
-        // Live WS
-        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbolToUse.toLowerCase()}@kline_${interval}`);
-        ws.onmessage = (msg) => {
-          const parsed = JSON.parse(msg.data);
-          if (parsed.e === 'kline') {
-            const k = parsed.k;
-            setCurrentPrice(parseFloat(k.c));
-            if (onPriceUpdate) onPriceUpdate(parseFloat(k.c)); // Sincroniza o preço do topo da dashboard!
-            
-            if (seriesRef.current) {
-              seriesRef.current.update({
-                time: (k.t / 1000) as Time,
-                open: parseFloat(k.o),
-                high: parseFloat(k.h),
-                low: parseFloat(k.l),
-                close: parseFloat(k.c)
-              });
+        // Live WS com Auto-Reconnect
+        let reconnectTimeout: any;
+        const connectWs = () => {
+          ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbolToUse.toLowerCase()}@kline_${interval}`);
+          ws.onmessage = (msg) => {
+            const parsed = JSON.parse(msg.data);
+            if (parsed.e === 'kline') {
+              const k = parsed.k;
+              setCurrentPrice(parseFloat(k.c));
+              if (onPriceUpdate) onPriceUpdate(parseFloat(k.c)); // Sincroniza o preço do topo da dashboard!
+              
+              if (seriesRef.current) {
+                seriesRef.current.update({
+                  time: (k.t / 1000) as Time,
+                  open: parseFloat(k.o),
+                  high: parseFloat(k.h),
+                  low: parseFloat(k.l),
+                  close: parseFloat(k.c)
+                });
+              }
             }
-          }
+          };
+          
+          ws.onclose = () => {
+            // Tenta reconectar a cada 2 segundos se a conexão cair (ex: tela bloqueada)
+            reconnectTimeout = setTimeout(connectWs, 2000);
+          };
         };
+
+        connectWs();
       } catch (err) {
         console.error("Binance error", err);
       }

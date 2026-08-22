@@ -438,20 +438,20 @@ export class DerivBotEngineEMA {
         let engineTp = 0;
         let engineSl = 0;
 
-        // Lógica 1x1: 0.05% de alvo e 0.05% de stop
-        const percDist = currentPrice * 0.0005; // 0.05%
+        // SL Protetivo Inicial (0.15%). O TP é 0 (livre) para o Trailing Stop gerenciar.
+        const percDistSL = currentPrice * 0.0015; // 0.15%
 
         if (trendM15 === 'TREND_UP' && isNearEma8 && currentPrice >= ema8M15) {
             signal = 'BUY';
             reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
-            engineTp = currentPrice + percDist;
-            engineSl = currentPrice - percDist;
+            engineTp = 0; // Alvo livre
+            engineSl = currentPrice - percDistSL;
         }
         else if (trendM15 === 'TREND_DOWN' && isNearEma8 && currentPrice <= ema8M15) {
             signal = 'SELL';
             reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
-            engineTp = currentPrice - percDist;
-            engineSl = currentPrice + percDist;
+            engineTp = 0; // Alvo livre
+            engineSl = currentPrice + percDistSL;
         }
 
         if (signal && this.onSignal && (now - this.lastSignalTime) >= 5000) {

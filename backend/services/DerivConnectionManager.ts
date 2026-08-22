@@ -451,15 +451,7 @@ export class DerivConnectionManager {
               trade.openPrice = parseFloat(contract.entry_spot) || parseFloat(contract.current_spot) || 0;
             }
 
-            if ((!trade.tp || trade.tp === 0) && trade.openPrice > 0) {
-              if (trade.type === 'BUY') {
-                trade.tp = trade.openPrice + 3.00;
-                trade.sl = trade.openPrice - 1.50;
-              } else {
-                trade.tp = trade.openPrice - 3.00;
-                trade.sl = trade.openPrice + 1.50;
-              }
-            }
+            // [REMOVIDO] A injeção estática de TP de $3.00 foi retirada para permitir o Trailing Stop livre
 
             const closingSet = this.getClosingSet(userId);
 
@@ -504,17 +496,20 @@ export class DerivConnectionManager {
                 }
               }
 
-              // 3. Define a folga do Trailing Stop (sobre o avanço do preço a favor)
-              // Para evitar fechamento por ruído no primeiro centavo, mantemos um piso de 1.00 ponto
+              // 3. Define a folga do Trailing Stop (Apenas sobre o Lucro)
               const avancoPts = managedTrade.type === 'BUY' ? (managedTrade.peakPrice - managedTrade.openPrice) : (managedTrade.openPrice - managedTrade.peakPrice);
 
-              let buffer = 1.00;
-              if (avancoPts > 0) {
-                buffer = Math.max(1.00, avancoPts * 0.40);
+              // Inicialmente, o robô não coloca nenhuma trava curta. Ele deixa a ordem livre para balançar no negativo.
+              let buffer = 999999; 
+
+              // Assim que a ordem engatar uma SUPER tendência (15.00 pontos de avanço), ligamos o Trailing Stop!
+              if (avancoPts >= 15.00) {
+                // A distância de fechamento será 35% do lucro máximo (com um respiro enorme de 8.00 pontos para não ser violinado)
+                buffer = Math.max(8.00, avancoPts * 0.35);
               }
 
-              // 4. Piso de Breakeven
-              if (avancoPts >= 1.00 && !managedTrade.beSet) {
+              // 4. Piso de Breakeven (Só protege no zero a zero quando andar pelo menos 5.00 pontos a favor)
+              if (avancoPts >= 5.00 && !managedTrade.beSet) {
                 managedTrade.beSet = true;
                 this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro protegido. O Stop Loss foi movido para o preço de entrada.`);
               }
@@ -535,18 +530,7 @@ export class DerivConnectionManager {
               //   2) Por ser if/elseif/else, bastava isHit ou isBreakEvenHit oscilarem
               //      por ruído de preço para "roubar" o ciclo e o SL de 15% nunca ser
               //      avaliado naquele tick.
-              // Agora o SL de 30% é a PRIMEIRA coisa avaliada a cada tick, tem seu
-              // próprio cooldown curto (500ms, só para não mandar 'sell' duplicado) e
-              // não depende do estado de trailing/breakeven nem do timer do usuário.
-              const maxLossUSD = -(managedTrade.lot * 0.30);
-              const slCooldownOk = !managedTrade.lastSlCheck || now - managedTrade.lastSlCheck > 500;
-
-              if (managedTrade.profit <= maxLossUSD && slCooldownOk) {
-                managedTrade.lastSlCheck = now;
-                this.addUserLog(userId, `🛑 [STOP LOSS] Perda máxima de 30% da ordem atingida ($${managedTrade.profit.toFixed(2)}). Protegendo capital.`);
-                closingSet.add(String(managedTrade.id));
-                this.closeTrade(userId, String(managedTrade.id));
-              } else if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
+              if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
                 if (isHit && avancoPts > buffer) {
                   state.lastSmartCloseTime = now;
                   this.addUserLog(userId, `🏆 [TRAILING STOP] Fechando operação a favor do lucro. Pico: $${managedTrade.peakPrice.toFixed(2)}`);
@@ -562,26 +546,6 @@ export class DerivConnectionManager {
             }
             // -------------------------------------
 
-            if (state.dailyProfit >= this.getDailyTarget(state)) {
-              // CORRIGIDO (bug 2): exclui trades já em fechamento — o profit delas é real,
-              // não sentinela, então isso é mais para evitar contar duas vezes a mesma
-              // intenção de fechamento, não para evitar corrupção (que já não existe mais).
-              const openTradesForLoss = state.trades.filter((t: any) => t.status === 'OPEN' && !closingSet.has(String(t.id)));
-              const floatingPnL = openTradesForLoss.reduce((sum: number, t: any) => sum + (t.profit || 0), 0);
-              const maxAllowedLoss = -(state.dailyProfit * 0.05);
-
-              if (floatingPnL <= maxAllowedLoss) {
-                const now = Date.now();
-                if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
-                  state.lastSmartCloseTime = now;
-                  this.addUserLog(userId, `🏆 [TRAVA DE PROTEÇÃO] Meta atingida e prejuízo aberto bateu 5% do lucro diário. Cortando posições!`);
-                  openTradesForLoss.forEach((t: any) => {
-                    closingSet.add(String(t.id));
-                    this.closeTrade(userId, String(t.id));
-                  });
-                }
-              }
-            }
 
             if (isSold) {
               if (trade.status !== 'CLOSED') {
@@ -619,7 +583,7 @@ export class DerivConnectionManager {
             }
           } else {
             const contractId = String(data.buy.contract_id || data.buy.transaction_id);
-            this.addUserLog(userId, `🚀 Ordem Sniper (1x1) aberta na corretora com sucesso! ID: ${contractId}`);
+            this.addUserLog(userId, `🚀 Ordem Sniper (Dinâmica) aberta na corretora com sucesso! ID: ${contractId}`);
 
             if (!this.openContractIds.has(userId)) this.openContractIds.set(userId, new Set());
             this.openContractIds.get(userId)!.add(contractId);
@@ -711,17 +675,28 @@ export class DerivConnectionManager {
     return false;
   }
 
-  private isWeekendBlock(user: any): boolean {
-    const isAdmin = user?.role === 'ADMIN' || user?.name?.toLowerCase().includes('alaides');
-    if (isAdmin) return false;
+  private isScheduleBlocked(userId: string): boolean {
+    const now = new Date();
+    // Usa o horário local do servidor (que deve estar em UTC-3)
+    const hour = now.getHours();
+    const day = now.getDay(); // 0 = Domingo, 6 = Sábado
 
-    // Desativado a pedido do admin para liberar as operações de todos os usuários
+    if (day === 0 || day === 6) {
+      if (Math.random() < 0.2) this.addUserLog(userId, `🚫 [MERCADO FECHADO] O robô só opera de Segunda a Sexta.`);
+      return true;
+    }
+
+    if (hour < 6 || hour >= 17) {
+      if (Math.random() < 0.2) this.addUserLog(userId, `⏰ [FORA DE HORÁRIO] O robô só opera das 06:00 às 17:00.`);
+      return true;
+    }
+
     return false;
   }
 
   public executeSignal(userId: string, direction: 'BUY' | 'SELL', price: number, reason: string, engineTp: number, engineSl: number) {
     const user = this.getUsers().find(u => u.id === userId);
-    if (this.isWeekendBlock(user)) {
+    if (this.isScheduleBlocked(userId)) {
       return;
     }
 
@@ -739,13 +714,8 @@ export class DerivConnectionManager {
 
     const openTradesCount = state.trades.filter((t: any) => t.status === 'OPEN').length;
 
-    const dailyTarget = this.getDailyTarget(state);
-
-    if (state.dailyProfit >= dailyTarget) {
-      this.addUserLog(userId, `🏆 [META BATIDA] Meta diária ($${dailyTarget.toFixed(2)}) atingida. O robô aguardará as ordens abertas fecharem.`);
-      return;
-    }
-
+    // A trava de meta diária foi completamente removida a pedido do usuário.
+    // Todos os usuários operam sem limite de ganho diário.
     if (openTradesCount >= 1) {
       // Já existe 1 ordem aberta, o motor ignora novos sinais.
       if (Math.random() < 0.2) {
@@ -775,7 +745,15 @@ export class DerivConnectionManager {
     // CORRIGIDO: setAutoStakePercent() definia o percentual em this.autoStakePercent,
     // mas esse valor nunca era lido aqui — o cálculo automático ficava sempre fixo em
     // 5% da banca, ignorando silenciosamente a configuração do usuário.
-    const stakePercent = this.autoStakePercent.get(userId) ?? 0.05;
+    let stakePercent = this.autoStakePercent.get(userId);
+    if (!stakePercent) {
+      // Pedido do usuário: 2% sobre banca de 300 a 10000
+      if (balance >= 300 && balance <= 10000) {
+        stakePercent = 0.02;
+      } else {
+        stakePercent = 0.05; // Mantém 5% como fallback para fora desse range
+      }
+    }
     let dynamicStake = balance * stakePercent;
 
     let finalStake = manualStake && manualStake > 0 ? manualStake : dynamicStake;

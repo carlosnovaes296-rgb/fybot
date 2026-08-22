@@ -26,6 +26,9 @@ input double   InpDailyTargetPct = 4.0;      // Meta Diária de Lucro (%)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
 
+input group "=== Trailing Stop ==="
+input int      InpTrailingStart = 15;        // Gatilho Trailing (em pontos)
+input int      InpTrailingDist  = 8;         // Distância Trailing (em pontos)
 CTrade         trade;
 double         initialBalance = 0;
 double         currentLotSize = InpLotSize;
@@ -127,20 +130,7 @@ double GetDailyProfit()
    return totalProfit;
   }
 
-//+------------------------------------------------------------------+
-//| Função para atualizar TP de todas as posições DCA                |
-//+------------------------------------------------------------------+
-void UpdateAllPositionsTP(double newTP)
-  {
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-     {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-        {
-         trade.PositionModify(ticket, PositionGetDouble(POSITION_SL), newTP);
-        }
-     }
-  }
+
 
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -180,6 +170,48 @@ void OnTick()
 
          openOrders++;
          floatingPnL += posPnL;
+        }
+     }
+
+   // -------------------------------------------------------------
+   // TRAILING STOP (Gatilho: 15 pontos | Distância: 8 pontos)
+   // -------------------------------------------------------------
+   double tsStart = InpTrailingStart * _Point;
+   double tsDist = InpTrailingDist * _Point;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+        {
+         long posType = PositionGetInteger(POSITION_TYPE);
+         double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+         double currentSL = PositionGetDouble(POSITION_SL);
+         
+         if(posType == POSITION_TYPE_BUY)
+           {
+            if(currentBid - openPrice >= tsStart)
+              {
+               double newSL = currentBid - tsDist;
+               if((currentSL < newSL || currentSL == 0) && (currentBid - newSL >= minStopDist))
+                 {
+                  if(trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP)))
+                     Print("🟢 Trailing Stop Atualizado (COMPRA) - Ticket: ", ticket, " | Novo SL: ", newSL);
+                 }
+              }
+           }
+         else if(posType == POSITION_TYPE_SELL)
+           {
+            if(openPrice - currentAsk >= tsStart)
+              {
+               double newSL = currentAsk + tsDist;
+               if((currentSL > newSL || currentSL == 0) && (newSL - currentAsk >= minStopDist))
+                 {
+                  if(trade.PositionModify(ticket, newSL, PositionGetDouble(POSITION_TP)))
+                     Print("🔴 Trailing Stop Atualizado (VENDA) - Ticket: ", ticket, " | Novo SL: ", newSL);
+                 }
+              }
+           }
         }
      }
 

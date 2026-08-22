@@ -505,8 +505,9 @@ async function startServer() {
   };
 
   const isTradingWindowOpen = () => {
-    // Retorna true para desativar o bloqueio de horário a pedido do admin
-    return true;
+    const brtNow = getBrazilTime();
+    const hours = brtNow.getHours();
+    return hours >= 6 && hours < 17;
   };
 
   const getNextSessionStart = () => {
@@ -566,35 +567,22 @@ async function startServer() {
 
       const openTradesCount = (state.trades || []).filter((t: any) => t.status === 'OPEN').length;
 
-      // LÓGICA DA JANELA DE OPERAÇÕES E META DIÁRIA
-      if (state.dailyProfitTarget > 0 && state.dailyProfit >= state.dailyProfitTarget && openTradesCount === 0) {
-        if (!state.systemBlocked) {
-          state.systemBlocked = true;
-          state.blockedUntil = getNextSessionStart();
-          addUserLog(userId as string, "🏆 Parabéns! Sua meta diária foi concluída com sucesso. O sistema foi bloqueado por segurança e o botão Iniciar estará liberado no próximo dia de operações às 06:00.");
-          if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-          // state.botRunning = false; // Removido para testes
-        }
-      } else if (!isTradingWindowOpen() && !isAdmin && requestingUser?.email?.toLowerCase() !== 'laidesantos33@gmail.com') {
+      // LÓGICA DA JANELA DE OPERAÇÕES
+      if (!isTradingWindowOpen() && !isAdmin && requestingUser?.email?.toLowerCase() !== 'laidesantos33@gmail.com') {
         if (!state.systemBlocked) {
           state.systemBlocked = true;
           state.blockedUntil = getNextSessionStart();
           addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
           if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
-          // state.botRunning = false; // Removido para testes
         }
       } else {
-        // Se estamos dentro do horário de operação
-        // e o sistema estava bloqueado por motivo de HORÁRIO (e não porque já bateu a meta de hoje)
-        // Temos que destravar.
-        // Uma maneira de saber é: se blockedUntil passou e a meta não foi batida.
+        // Dentro do horário de operação: sempre garante que o sistema está destravado (pois a meta diária foi removida)
         if (state.systemBlocked) {
-          if ((state.blockedUntil && new Date(state.blockedUntil).getTime() <= Date.now()) || (state.dailyProfit < state.dailyProfitTarget || state.dailyProfitTarget === 0)) {
-            state.systemBlocked = false;
-            state.blockedUntil = undefined;
-            state.dailyProfit = 0; // Reseta o lucro diário ao abrir a nova janela
-            addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] A proteção diária foi desativada.");
-          }
+          state.systemBlocked = false;
+          state.blockedUntil = undefined;
+          // Reseta o lucro diário apenas se quiser, mas como a trava acabou, tanto faz.
+          // state.dailyProfit = 0; 
+          addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] Você está dentro do horário operacional e livre para operar.");
         }
       }
 
@@ -1175,6 +1163,77 @@ async function startServer() {
     res.json({ success: true, message: "Todos os usuários foram desbloqueados com sucesso." });
   });
 
+  app.get('/api/admin/leader-network-stats', adminAuth, (req, res) => {
+    try {
+      const { leaderQuery } = req.query;
+      if (!leaderQuery) return res.status(400).json({ error: 'leaderQuery is required' });
+
+      // Buscar líder por nome ou email (suporta pesquisa parcial)
+      const q = (leaderQuery as string).toLowerCase();
+      const leader = users.find(u => (u.name && u.name.toLowerCase().includes(q)) || (u.email && u.email.toLowerCase() === q));
+      
+      if (!leader) {
+        return res.status(404).json({ error: 'Líder não encontrado' });
+      }
+
+      const networkMembers: any[] = [];
+      const visited = new Set<string>();
+
+      const traverse = (uId: string, level: number) => {
+        if (level > 5) return;
+        const sponsorUser = users.find((u: any) => u.id === uId);
+        const descendants = users.filter((u: any) => u.referredBy === uId || (sponsorUser && u.referredBy === sponsorUser.referralCode));
+        descendants.forEach((desc: any) => {
+          if (!visited.has(desc.id)) {
+            visited.add(desc.id);
+            const hasLicense = licenses.some(l => l.userId === desc.id && l.status === 'ACTIVE');
+            const state = getUserState(desc.id);
+            networkMembers.push({
+              id: desc.id,
+              name: desc.name,
+              email: desc.email,
+              level: level,
+              status: desc.status || 'ACTIVE',
+              hasActiveLicense: hasLicense,
+              balance: state.balance || 0,
+              createdAt: desc.createdAt || new Date().toISOString()
+            });
+            traverse(desc.id, level + 1);
+          }
+        });
+      };
+      
+      traverse(leader.id, 1);
+
+      // Comissões
+      const stored: any[] = referralEarnings.filter((r: any) => r.referrerId === leader.id);
+      const totalCommissions = stored.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+      const totalAffiliates = networkMembers.length;
+      const activeAffiliates = networkMembers.filter(m => m.hasActiveLicense).length;
+      const inactiveAffiliates = totalAffiliates - activeAffiliates;
+      const totalNetworkBalance = networkMembers.reduce((acc, curr) => acc + curr.balance, 0);
+
+      res.json({
+        leader: {
+          id: leader.id,
+          name: leader.name,
+          email: leader.email
+        },
+        stats: {
+          totalAffiliates,
+          activeAffiliates,
+          inactiveAffiliates,
+          totalNetworkBalance,
+          totalCommissions
+        },
+        network: networkMembers.sort((a, b) => a.level - b.level)
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || 'Error fetching leader stats' });
+    }
+  });
+
   app.get('/api/admin/users', adminAuth, (req, res) => {
     const uniqueUsers = users.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
     const usersWithStats = uniqueUsers.map(u => {
@@ -1218,31 +1277,38 @@ async function startServer() {
     if (!buyer) return;
     let currentUserId = buyer.referredBy;
     let level = 1;
+    let paidSponsors = new Set<string>();
+
     while (currentUserId && level <= 5) {
       const sponsor = users.find(u => u.id === currentUserId || u.referralCode === currentUserId);
       if (!sponsor) break;
 
-      let percentage = 0;
-      if (level === 1) percentage = 0.20;
-      else if (level === 2) percentage = 0.15;
-      else if (level === 3) percentage = 0.10;
-      else if (level === 4) percentage = 0.03;
-      else if (level === 5) percentage = 0.02;
+      // Se já pagou pra essa pessoa na mesma transação (loop/duplicidade), ignora e sobe
+      if (!paidSponsors.has(sponsor.id)) {
+        paidSponsors.add(sponsor.id);
 
-      let amount = Number((licenseValue * percentage).toFixed(2));
+        let percentage = 0;
+        if (level === 1) percentage = 0.20;
+        else if (level === 2) percentage = 0.15;
+        else if (level === 3) percentage = 0.10;
+        else if (level === 4) percentage = 0.03;
+        else if (level === 5) percentage = 0.02;
 
-      referralEarnings.push({
-        id: 're_' + Math.random().toString(36).substr(2, 9),
-        referrerId: sponsor.id,
-        referredName: buyer.name,
-        referredEmail: buyer.email,
-        level: level,
-        amount: amount,
-        type: `Comissão de Licença ${planName.toUpperCase()} (Nível ${level})`,
-        timestamp: new Date().toISOString()
-      });
+        let amount = Number((licenseValue * percentage).toFixed(2));
 
-      sponsor.balance = (sponsor.balance || 0) + amount;
+        referralEarnings.push({
+          id: 're_' + Math.random().toString(36).substr(2, 9),
+          referrerId: sponsor.id,
+          referredName: buyer.name,
+          referredEmail: buyer.email,
+          level: level,
+          amount: amount,
+          type: `Comissão de Licença ${planName.toUpperCase()} (Nível ${level})`,
+          timestamp: new Date().toISOString()
+        });
+
+        sponsor.balance = (sponsor.balance || 0) + amount;
+      }
 
       currentUserId = sponsor.referredBy;
       level++;

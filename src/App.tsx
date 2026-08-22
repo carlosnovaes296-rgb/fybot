@@ -187,9 +187,11 @@ const checkIsWeekend = () => {
   const adjustedHour = (utcHour - 3 + 24) % 24;
   const day = now.getUTCDay();
 
-  if (day === 5 && adjustedHour >= 17) return true;
-  if (day === 6 || day === 0) return true;
-  if (day === 1 && adjustedHour < 6) return true;
+  // Fim de semana (Domingo = 0, Sábado = 6)
+  if (day === 0 || day === 6) return true;
+  // Fora do horário (06:00 até 16:59:59)
+  if (adjustedHour < 6 || adjustedHour >= 17) return true;
+
   return false;
 };
 
@@ -252,6 +254,9 @@ export default function App() {
   const [showPaymentModal, setShowPaymentModal] = useState<any>(null);
   const [pixData, setPixData] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<'USDT' | 'PIX'>('USDT');
+  const [leaderQuery, setLeaderQuery] = useState('MARCELO BONANI DA SILVA');
+  const [leaderStats, setLeaderStats] = useState<any>(null);
+  const [loadingLeader, setLoadingLeader] = useState(false);
   const [usdtTxHash, setUsdtTxHash] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -681,6 +686,21 @@ export default function App() {
     if (pData) setPayments(pData);
     if (wData) setAdminWithdrawals(wData);
     if (cData) setAdminCommissions(cData);
+  };
+
+  const fetchLeaderStats = async () => {
+    if (!leaderQuery) return;
+    setLoadingLeader(true);
+    const data = await safeFetch(`/api/admin/leader-network-stats?leaderQuery=${encodeURIComponent(leaderQuery)}&t=${Date.now()}`, {
+      headers: { 'x-admin-userid': currentUser?.id || '' }
+    });
+    if (data && !data.error) {
+      setLeaderStats(data);
+    } else {
+      setLeaderStats(null);
+      alert(data?.error || 'Líder não encontrado');
+    }
+    setLoadingLeader(false);
   };
 
   const toggleUser = async (id: string) => {
@@ -1260,14 +1280,14 @@ export default function App() {
   const toggleBot = async () => {
     const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com';
 
-    // If system is blocked by daily target, prevent starting the robot
+    // If system is blocked, it's because it's outside trading hours
     if (!stats.botRunning && stats.systemBlocked) {
       alert(
         language === 'en'
-          ? "System locked! Your Daily Profit Target is already saved and secured on the VPS."
+          ? "Market Closed! The robot only operates from 06:00 to 17:00 (Mon-Fri)."
           : language === 'es'
-            ? "¡Sistema bloqueado! Su meta de ganancias diarias ya está guardada y protegida en el VPS."
-            : "Sistema Bloqueado! Sua meta de lucro diário já foi batida e está totalmente protegida no VPS. O sistema só aceita novos arranques após a virada do cronômetro diário."
+            ? "¡Mercado Cerrado! El robot solo opera de 06:00 a 17:00 (Lun-Vie)."
+            : "Mercado Fechado! O sistema só permite operações de Segunda a Sexta, das 06:00 às 17:00."
       );
       return;
     }
@@ -1674,6 +1694,7 @@ export default function App() {
           {isAdminUser && (
             <>
               <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
+              <NavItem icon={<Network size={20} />} label="Rede de Líderes" active={activeTab === 'leaderNetwork'} onClick={() => { setActiveTab('leaderNetwork'); setIsMobileMenuOpen(false); }} />
             </>
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
@@ -1682,16 +1703,7 @@ export default function App() {
 
         </nav>
         <div className="p-4 md:p-6 pb-10">
-          <div className="mb-6 flex flex-col justify-center items-center gap-2 mt-4">
-            <a href="https://wa.me/5577999483349?text=Olá,%20sou%20membro%20do%20FYBOT%20PRO%20e%20preciso%20de%20ajuda."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:scale-110 transition-transform duration-200 flex flex-col items-center"
-              title="Grupo Fybot WhatsApp">
-              <img src="/whatsapp-logo.webp.webp" alt="WhatsApp" className="w-16 h-16 object-contain drop-shadow-md mb-2" />
-              <span className="text-xs font-semibold text-emerald-400 uppercase tracking-widest">Grupo Oficial Fybot</span>
-            </a>
-          </div>
+
 
           <div className="md:bg-white/5 rounded-2xl p-4 flex items-center gap-3 border border-white/5 hover:border-yellow-500/20 transition-all">
             <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-500 font-bold text-xs uppercase border border-yellow-500/20">
@@ -2670,13 +2682,13 @@ export default function App() {
                       />
                       <PricingCard
                         title={t.plans.card2Title}
-                        price={20}
+                        price={15}
                         recommended
                         features={t.plans.card2Features}
                         language={language}
                         image="/fybot-logo.png.png"
                         hideButton={!isLaunched}
-                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card2Title, price: 20 }) : undefined}
+                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card2Title, price: 15 }) : undefined}
                       />
                       <PricingCard
                         title={t.plans.card3Title}
@@ -2688,16 +2700,16 @@ export default function App() {
                         onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card3Title, price: 50 }) : undefined}
                       />
                       <PricingCard
-                        title={t.plans.card6Title || "SNIPER 1X1"}
+                        title={t.plans.card6Title || "Licença Sniper"}
                         price={100}
-                        desc="120 Dias de Acesso Completo"
-                        features={t.plans.card6Features || ["Licença Válida por 120 Dias", "Scalping de Alta Frequência", "Lucro Diário Rápido"]}
+                        desc="365 Dias de Acesso Completo"
+                        features={t.plans.card6Features || ["Duração 365 dias"]}
                         language={language}
                         image="/snaper1x1.png.png"
                         isVip={true}
                         titleColor="text-[#f59e0b] drop-shadow-[0_0_10px_rgba(245,158,11,0.6)]"
                         hideButton={!isLaunched}
-                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card6Title || "SNIPER 1X1", price: 100, planType: "SNIPER" }) : undefined}
+                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card6Title || "Licença Sniper", price: 100, planType: "SNIPER" }) : undefined}
                       />
                     </div>
                   );
@@ -3796,6 +3808,117 @@ export default function App() {
               </motion.div>
             )}
 
+            {activeTab === 'leaderNetwork' && isAdminUser && (
+              <motion.div
+                key="leaderNetwork"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-8"
+              >
+                <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8 shadow-xl">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Painel da Rede de Líderes</h2>
+                    <p className="text-white/40 text-sm">Pesquise por nome ou e-mail de um líder para visualizar todas as estatísticas da sua rede de afiliados e comissões ganhas.</p>
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <input 
+                      type="text"
+                      value={leaderQuery}
+                      onChange={(e) => setLeaderQuery(e.target.value)}
+                      placeholder="Nome ou Email do líder (ex: MARCELO BONANI)"
+                      className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500/50"
+                    />
+                    <button 
+                      onClick={fetchLeaderStats}
+                      disabled={loadingLeader}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-black font-bold px-8 py-3 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {loadingLeader ? 'Buscando...' : 'Buscar Líder'}
+                    </button>
+                  </div>
+
+                  {leaderStats && leaderStats.leader && (
+                    <div className="space-y-8 animate-fade-in">
+                      <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-emerald-500/20">
+                        <h3 className="text-lg font-bold text-white">Líder: <span className="text-emerald-400">{leaderStats.leader.name}</span></h3>
+                        <p className="text-sm text-white/50">{leaderStats.leader.email}</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-black/40 border border-white/5 rounded-2xl p-6">
+                          <p className="text-xs text-white/40 uppercase font-bold tracking-wider mb-2">Afiliados Diretos/Rede</p>
+                          <p className="text-2xl font-black text-white">{leaderStats.stats.totalAffiliates}</p>
+                          <div className="flex gap-2 mt-2 text-xs">
+                            <span className="text-emerald-400">{leaderStats.stats.activeAffiliates} Ativos</span>
+                            <span className="text-white/20">|</span>
+                            <span className="text-red-400">{leaderStats.stats.inactiveAffiliates} Inativos</span>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-black/40 border border-white/5 rounded-2xl p-6">
+                          <p className="text-xs text-white/40 uppercase font-bold tracking-wider mb-2">Banca Total da Rede</p>
+                          <p className="text-2xl font-black text-yellow-400">${leaderStats.stats.totalNetworkBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-white/40 mt-2">Soma do saldo de todos afiliados</p>
+                        </div>
+                        
+                        <div className="bg-black/40 border border-white/5 rounded-2xl p-6 lg:col-span-2">
+                          <p className="text-xs text-white/40 uppercase font-bold tracking-wider mb-2">Comissões Históricas (Total Recebido)</p>
+                          <p className="text-2xl font-black text-emerald-400">${leaderStats.stats.totalCommissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                          <p className="text-xs text-white/40 mt-2">Soma de todas as comissões pagas para este líder</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-bold mb-4">Membros da Rede ({leaderStats.network.length})</h3>
+                        <div className="overflow-x-auto rounded-xl border border-white/5">
+                          <table className="w-full text-left text-sm whitespace-nowrap">
+                            <thead className="bg-white/5 text-xs uppercase tracking-wider text-white/40">
+                              <tr>
+                                <th className="px-6 py-4">Nível</th>
+                                <th className="px-6 py-4">Nome / Email</th>
+                                <th className="px-6 py-4">Status</th>
+                                <th className="px-6 py-4 text-right">Banca atual</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {leaderStats.network.map((item: any) => (
+                                <tr key={item.id} className="hover:bg-white/[0.02]">
+                                  <td className="px-6 py-4">
+                                    <span className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs font-bold">Lvl {item.level}</span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <p className="font-bold">{item.name}</p>
+                                    <p className="text-xs text-white/40">{item.email}</p>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {item.hasActiveLicense ? (
+                                      <span className="text-emerald-400 text-xs font-bold px-2 py-1 rounded bg-emerald-400/10">ATIVO</span>
+                                    ) : (
+                                      <span className="text-red-400 text-xs font-bold px-2 py-1 rounded bg-red-400/10">INATIVO</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 text-right font-mono text-yellow-400">
+                                    ${Number(item.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                              {leaderStats.network.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="px-6 py-8 text-center text-white/40 italic">Nenhum afiliado encontrado.</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === 'settings' && config && (
               <motion.div
                 key="settings"
@@ -3901,6 +4024,26 @@ export default function App() {
 
                 {currentUser?.role === 'ADMIN' && (
                   <>
+                    {/* Botão de Download Exclusivo para Admin */}
+                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-6 mb-8 mt-6">
+                      <div>
+                        <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
+                          ⬇️ Baixar Robô MT5 (Somente Admin)
+                        </h2>
+                        <p className="text-sm text-white/40 mt-1">
+                          Faça o download do arquivo fonte (.mq5) para operar manualmente no MetaTrader 5.
+                        </p>
+                      </div>
+                      <div className="flex gap-4">
+                        <a href="/Fybot_Sniper.mq5" download className="flex-1 py-4 bg-blue-600/20 text-blue-500 rounded-2xl font-bold text-sm hover:bg-blue-600/30 transition-all flex items-center justify-center gap-2 border border-blue-500/20">
+                          Baixar Fybot_Sniper.mq5
+                        </a>
+                        <a href="/Fybot_Pro.mq5" download className="flex-1 py-4 bg-blue-600/20 text-blue-500 rounded-2xl font-bold text-sm hover:bg-blue-600/30 transition-all flex items-center justify-center gap-2 border border-blue-500/20">
+                          Baixar Fybot_Pro.mq5
+                        </a>
+                      </div>
+                    </div>
+
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
                       <div>
                         <h2 className="text-xl font-bold flex items-center gap-2 mt-2">

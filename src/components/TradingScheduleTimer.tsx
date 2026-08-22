@@ -38,25 +38,26 @@ export function TradingScheduleTimer() {
       } else if (day === 1 && hour < 6) {
         currentStatus = 'WEEKEND';
         targetDate.setHours(6, 0, 0); // Segunda antes das 6
-      } else if (hour >= 17 && hour < 21) {
+      } else if (hour >= 17) {
         currentStatus = 'PAUSED';
-        targetDate.setHours(21, 0, 0); // Pausa diária
+        targetDate.setDate(brTime.getDate() + 1); // Volta amanhã
+        targetDate.setHours(6, 0, 0);
+      } else if (hour < 6) {
+        currentStatus = 'PAUSED';
+        targetDate.setHours(6, 0, 0); // Volta hoje às 06h
       } else {
         currentStatus = 'ACTIVE';
-        if (hour >= 21) {
-          targetDate.setDate(brTime.getDate() + 1);
-        }
-        targetDate.setHours(17, 0, 0);
+        targetDate.setHours(17, 0, 0); // Fecha às 17h
       }
 
       setStatus(currentStatus);
 
       if (currentStatus === 'ACTIVE') {
-        setTargetLabel('Mercado Ativo - Próxima pausa em:');
+        setTargetLabel('Mercado Ativo - Fechamento às 17:00 em:');
       } else if (currentStatus === 'PAUSED') {
-        setTargetLabel('Pausa Estratégica - Robô retoma em:');
+        setTargetLabel('Mercado Fechado - Robô retoma às 06:00 em:');
       } else {
-        setTargetLabel('Mercado Fechado - Abertura (Seg 06:00) em:');
+        setTargetLabel('Fim de Semana - Abertura (Seg 06:00) em:');
       }
 
       const diffMs = targetDate.getTime() - brTime.getTime();
