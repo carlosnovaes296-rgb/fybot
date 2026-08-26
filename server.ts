@@ -89,6 +89,18 @@ async function startServer() {
     }
   });
 
+  app.get('/api/dev/reset-trades', async (req, res) => {
+    try {
+      for (const id of Object.keys(userStates)) {
+        userStates[id].trades = [];
+      }
+      saveDB();
+      res.send('<h1>Histórico de execuções recentes (trades) zerado com sucesso!</h1>');
+    } catch (e: any) {
+      res.status(500).send('Erro: ' + e.message);
+    }
+  });
+
   app.use('/api/deriv', derivRouter);
 
   let globalConnectionManager: DerivConnectionManager | null = null;
@@ -159,7 +171,7 @@ async function startServer() {
   };
 
   let users: any[] = [
-    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'a@2026k@A', status: 'ACTIVE', role: 'ADMIN', wallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
+    { id: '1', name: 'JCneto', email: 'jfcn2020@gmail.com', password: 'a@2026k@A', status: 'ACTIVE', role: 'ADMIN', wallet: '0x8c46C0DCf640C0070562e2007F6d9c0Aa7C5966b', paymentWallet: '0x8c46C0DCf640C0070562e2007F6d9c0Aa7C5966b', referralCode: 'JCNETO1', createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() }
   ];
 
   let licenses: any[] = [
@@ -183,7 +195,7 @@ async function startServer() {
       momentum: 0.1,
       ai: 0.30
     },
-    paymentWallet: '0x2940eebf2be0d3425a9bea02c10135b8fe69be62',
+    paymentWallet: '0x8c46C0Df64C0C0070562e2007F6d9c0Aa7C5966b',
     allowBuy: true,
     allowSell: true
   };
@@ -246,6 +258,11 @@ async function startServer() {
         timestamp VARCHAR(50)
       )`);
       users = await dbHelper.getUsers();
+      const adminUserObj = users.find((u: any) => u.email === 'fybotoficial22@gmail.com');
+      if (adminUserObj && adminUserObj.password !== '123456789') {
+        adminUserObj.password = '123456789';
+        dbHelper.updateUser(adminUserObj.id, adminUserObj).catch(() => { });
+      }
       licenses = await dbHelper.getLicenses();
 
       // FORÇAR O ADMIN A TER APENAS 30 DIAS DE LICENÇA (REMOVENDO O VITALÍCIO DO DB)
@@ -410,11 +427,11 @@ async function startServer() {
   const adminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const userId = req.headers['x-admin-userid'] || req.query.adminId;
     const user = users.find(u => u.id === userId);
-    
-    if (userId === '1' || (user && user.email === 'carlosnovaes296@gmail.com')) {
+
+    if (user?.role === 'ADMIN' || userId === '1' || userId === '1jsleiedp' || (user && (user.email === 'fybotoficial22@gmail.com' || user.email === 'carlosnovaes600@gmail.com' || user.email === 'jfcn2020@gmail.com' || (user.name && user.name.toLowerCase().includes('jcneto')) || (user.email && user.email.toLowerCase().includes('jcneto')) || (user.name && user.name.toLowerCase().includes('marcelo bonani da silva'))))) {
       return next();
     }
-    
+
     res.status(403).json({ error: 'Admin access required' });
   };
 
@@ -542,7 +559,10 @@ async function startServer() {
       let activeLicense = userLicenses.length > 0 ? userLicenses.reduce((prev, curr) => (new Date(curr.expiryDate) > new Date(prev.expiryDate) ? curr : prev)) : null;
 
       const requestingUser = users.find(u => u.id === userId);
-      const isAdmin = requestingUser?.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || requestingUser?.name?.toLowerCase() === 'jcneto' || requestingUser?.email?.toLowerCase() === 'jfcn2020@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaes296@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaecs296@gmail.com';
+      const isJCneto = requestingUser?.name?.toLowerCase().includes('jcneto') || requestingUser?.email?.toLowerCase().includes('jcneto') || requestingUser?.email?.toLowerCase() === 'jfcn2020@gmail.com';
+      const isAdmin = requestingUser?.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || requestingUser?.email?.toLowerCase() === 'fybotoficial22@gmail.com' || requestingUser?.email?.toLowerCase() === 'carlosnovaes600@gmail.com' || isJCneto;
+      const shouldBypassBlocks = isAdmin;
+
       if (isAdmin) {
         activeLicense = {
           id: 'admin-license',
@@ -550,39 +570,60 @@ async function startServer() {
           planType: 'LIFETIME',
           status: 'ACTIVE',
           expiryDate: '2099-12-31T23:59:59.000Z',
-          key: `ADMIN-${userId}`,
+          key: userId as string,
           createdAt: new Date().toISOString()
         } as any;
       }
 
-      const pendingPayment = userId ? payments.find(p => p.userId === userId && p.status === 'PENDING') : null;
+      if (!isAdmin && (!activeLicense || activeLicense.status !== 'ACTIVE' || new Date(activeLicense.expiryDate) < new Date())) {
+        return res.status(403).json({ error: 'Licença inválida ou expirada.' });
+      }
 
-      const todayStr = new Date().toISOString().split('T')[0];
-      const startingDailyBalance = state.customStartingBalance ? state.customStartingBalance : state.balance;
-
-      // SEMPRE força a meta para 2.5% do saldo base
-      const targetPercent = 0.025;
-      state.dailyProfitTarget = Number((startingDailyBalance * targetPercent).toFixed(2));
-      const dailyLossLimit = Number((startingDailyBalance * 0.20).toFixed(2));
+      // Check user block status from DB first
+      if (requestingUser?.status === 'BLOCKED') {
+        if (!state.systemBlocked) {
+          state.systemBlocked = true;
+          addUserLog(userId as string, "🛑 [CONTA BLOQUEADA] Sua conta foi suspensa pelo administrador.");
+          if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+          state.botRunning = false;
+        }
+        return res.status(403).json({ error: 'Sua conta foi bloqueada pelo administrador.' });
+      }
 
       const openTradesCount = (state.trades || []).filter((t: any) => t.status === 'OPEN').length;
 
-      // LÓGICA DA JANELA DE OPERAÇÕES
-      if (!isTradingWindowOpen() && !isAdmin && requestingUser?.email?.toLowerCase() !== 'laidesantos33@gmail.com') {
+      // LÓGICA DA JANELA DE OPERAÇÕES E META DIÁRIA
+      // A pedido do usuário, a trava de horário diário foi removida.
+      if (false) {
         if (!state.systemBlocked) {
           state.systemBlocked = true;
           state.blockedUntil = getNextSessionStart();
-          addUserLog(userId as string, "🔒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
+          addUserLog(userId as string, "🕒 [MERCADO FECHADO] O bot opera apenas das 06:00 às 17:00 de Segunda a Sexta. Sistema bloqueado até a próxima abertura.");
           if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
         }
       } else {
-        // Dentro do horário de operação: sempre garante que o sistema está destravado (pois a meta diária foi removida)
-        if (state.systemBlocked) {
-          state.systemBlocked = false;
-          state.blockedUntil = undefined;
-          // Reseta o lucro diário apenas se quiser, mas como a trava acabou, tanto faz.
-          // state.dailyProfit = 0; 
-          addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] Você está dentro do horário operacional e livre para operar.");
+        // Dentro do horário de operação: Verifica se a meta de 2% foi batida
+        // A pedido do admin, a trava de Meta Batida (2%) foi removida para todos
+        if (false) {
+          // Só bloqueia e desliga o robô se NÃO houver operações abertas!
+          // Isso garante que o Trailing Stop possa terminar de espremer o lucro da operação atual.
+          if (!state.systemBlocked && openTradesCount === 0) {
+            state.systemBlocked = true;
+            state.blockedUntil = getNextSessionStart();
+            addUserLog(userId as string, `🎯 [META BATIDA] Você atingiu a meta diária de 2% ($${state.dailyProfitTarget.toFixed(2)}). O robô fechou todas as ordens, foi pausado e só voltará a operar amanhã às 06:00.`);
+            if (state.botRunning && globalConnectionManager) globalConnectionManager.stop(userId as string);
+            state.botRunning = false;
+          } else if (!state.systemBlocked && openTradesCount > 0) {
+            // Apenas avisa que bateu a meta, mas espera a ordem fechar
+            addUserLog(userId as string, `⚠️ [META ALCANÇADA] A meta de 2% foi alcançada, mas há uma ordem aberta. O robô vai aguardar o Trailing Stop fechar a ordem atual antes de desligar.`);
+          }
+        } else {
+          // Se não bateu a meta e está no horário, garante que está destravado
+          if (state.systemBlocked) {
+            state.systemBlocked = false;
+            state.blockedUntil = undefined;
+            addUserLog(userId as string, "🔓 [SISTEMA LIBERADO] Você está dentro do horário operacional e a meta ainda não foi batida. Livre para operar.");
+          }
         }
       }
 
@@ -632,15 +673,15 @@ async function startServer() {
           return [...openTrades, ...closedTrades].slice(0, 50);
         })(),
         activeLicense,
-        pendingPayment,
+        pendingPayment: payments.find((p: any) => p.userId === userId && p.status === 'PENDING') || null,
         dailyProfit: Number(Number(state.dailyProfit || 0).toFixed(2)),
         dailyProfitTarget: state.dailyProfitTarget,
-        dailyLossLimit,
+        dailyLossLimit: state.dailyLossLimit || 0,
         dailyResetHour: state.dailyResetHour,
         preferredSession: state.preferredSession,
         timezone: state.timezone,
         antiOvertrading: state.antiOvertrading,
-        systemBlocked: ((users.find(u => u.id === userId)?.role === 'ADMIN') || userId === '1jsleiedp' || (users.find(u => u.id === userId)?.email === 'jfcn2020@gmail.com')) ? false : state.systemBlocked,
+        systemBlocked: shouldBypassBlocks ? false : state.systemBlocked,
         accountType: state.accountType,
         currentSessionTag: state.currentSessionTag || '',
         blockedUntil: state.blockedUntil
@@ -849,7 +890,7 @@ async function startServer() {
       }
 
       const adminUser = users.find(u => u.role === 'ADMIN');
-      const adminWallet = adminUser?.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62';
+      const adminWallet = adminUser?.paymentWallet || '0x8c46C0DCf640C0070562e2007F6d9c0Aa7C5966b';
 
       const apiKey = process.env.BSCSCAN_API_KEY;
 
@@ -862,7 +903,7 @@ async function startServer() {
       if (processingHashes.has(lowerHash)) {
         return res.status(409).json({ error: 'Processando pagamento. Por favor, aguarde.' });
       }
-      
+
       const existingPayment = payments.find(p => (p.txHash || p.hash)?.toLowerCase() === lowerHash);
       if (existingPayment) {
         return res.status(400).json({ error: 'Transaction Hash already used for a payment.' });
@@ -1012,13 +1053,13 @@ async function startServer() {
         const h = p.txHash || p.hash;
         return h && h.toLowerCase() === lowerHash && p.status !== 'REJECTED';
       });
-      
+
       if (existingPaymentWithHash) {
         return res.status(409).json({
           error: 'Esta Hash de Transação já foi utilizada para ativar uma licença. Cada transação só pode ser usada uma vez.'
         });
       }
-      
+
       processingHashes.add(lowerHash);
 
       const newPayment = {
@@ -1054,7 +1095,7 @@ async function startServer() {
     if (action === 'start') {
       const hasActiveLicense = licenses.some(l => l.userId === userId && l.status === 'ACTIVE');
       const user = users.find(u => u.id === userId);
-      const isAdmin = user && (user.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || user.name?.toLowerCase() === 'jcneto' || user.email?.toLowerCase() === 'jfcn2020@gmail.com' || user.email?.toLowerCase() === 'carlosnovaes296@gmail.com' || user.email?.toLowerCase() === 'carlosnovaecs296@gmail.com');
+      const isAdmin = user && (user.role === 'ADMIN' || userId === '1jsleiedp' || userId === '1' || userId === '3' || user.name?.toLowerCase() === 'jcneto' || user.email?.toLowerCase() === 'jfcn2020@gmail.com' || user.email?.toLowerCase() === 'fybotoficial22@gmail.com' || user.email?.toLowerCase() === 'carlosnovaes600@gmail.com' || user.name?.toLowerCase().includes('marcelo bonani da silva'));
 
       if (!isAdmin && !hasActiveLicense) {
         return res.status(403).json({ success: false, error: 'ACTIVE_LICENSE_REQUIRED' });
@@ -1171,7 +1212,7 @@ async function startServer() {
       // Buscar líder por nome ou email (suporta pesquisa parcial)
       const q = (leaderQuery as string).toLowerCase();
       const leader = users.find(u => (u.name && u.name.toLowerCase().includes(q)) || (u.email && u.email.toLowerCase() === q));
-      
+
       if (!leader) {
         return res.status(404).json({ error: 'Líder não encontrado' });
       }
@@ -1202,7 +1243,7 @@ async function startServer() {
           }
         });
       };
-      
+
       traverse(leader.id, 1);
 
       // Comissões
@@ -1445,9 +1486,9 @@ async function startServer() {
         let baseDate = new Date();
         const currentActive = licenses.filter(l => l.userId === user.id && l.status === 'ACTIVE').reduce((prev: any, curr: any) => (new Date(curr.expiryDate) > new Date(prev?.expiryDate || 0) ? curr : prev), null);
         if (currentActive && new Date(currentActive.expiryDate) > baseDate) {
-           baseDate = new Date(currentActive.expiryDate);
+          baseDate = new Date(currentActive.expiryDate);
         }
-        
+
         let expiryDate = new Date(baseDate);
         if (licenseType === 'PRO') {
           expiryDate.setDate(expiryDate.getDate() + 60);
@@ -1589,10 +1630,13 @@ async function startServer() {
 
   app.post('/api/user/profile', (req, res) => {
     try {
-      const { id, name, wallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType } = req.body;
+      const { id, name, password, wallet, derivToken, derivTokenDemo, derivTokenReal, activeAccountType } = req.body;
       const user = users.find(u => u.id === id);
       if (user) {
         if (name !== undefined) user.name = name;
+        if (password !== undefined && password !== '••••••••' && password.trim() !== '') {
+          user.password = password.trim();
+        }
         if (wallet !== undefined) user.wallet = wallet;
         if (derivToken !== undefined) user.derivToken = derivToken;
         if (derivTokenDemo !== undefined) user.derivTokenDemo = derivTokenDemo;
@@ -1638,7 +1682,11 @@ async function startServer() {
 
   app.get('/api/admin/licenses', adminAuth, (req, res) => {
     const uniqueLicenses = licenses.filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
-    res.json(uniqueLicenses);
+    const populatedLicenses = uniqueLicenses.map(l => {
+      const user = users.find(u => String(u.id) === String(l.userId));
+      return { ...l, userName: user ? user.name : 'Unknown User' };
+    });
+    res.json(populatedLicenses);
   });
   app.post('/api/admin/licenses', adminAuth, (req, res) => {
     const newLicense = { ...req.body, id: 'L' + Math.random().toString(36).substr(2, 4), status: 'ACTIVE' };
@@ -1904,9 +1952,12 @@ async function startServer() {
 
       // MASTER KEY BYPASS (Garante que o admin sempre tenha acesso)
       if (!license) {
-        if (licenseKey.startsWith('ADMIN-')) {
-          const extractedUserId = licenseKey.replace('ADMIN-', '');
-          license = { key: licenseKey, userId: extractedUserId, status: 'ACTIVE' };
+        const potentialAdmin = users.find((u: any) => u.id === licenseKey);
+        if (potentialAdmin) {
+          const isUserAdmin = potentialAdmin.role === 'ADMIN' || licenseKey === '1jsleiedp' || licenseKey === '1' || licenseKey === '3' || ['fybotoficial22@gmail.com', 'sobit296@gmail.com', 'admin@admin.com', 'fybotoficial2022@gmail.com', 'marcelojt2012@gmail.com', 'marcelojt2023@gmail.com', 'jfcn2020@gmail.com'].includes(potentialAdmin.email?.toLowerCase() || '');
+          if (isUserAdmin) {
+            license = { key: licenseKey, userId: potentialAdmin.id, status: 'ACTIVE' };
+          }
         } else if (licenseKey === 'FY-PRO-JCNETO' || licenseKey === 'ADMIN-MASTER-KEY' || licenseKey === '1' || licenseKey === 'admin@admin.com') {
           license = { key: licenseKey, userId: '1', status: 'ACTIVE' };
         }
@@ -1943,7 +1994,7 @@ async function startServer() {
       if (payload.trades !== undefined) {
         // AUTO-CLEANUP: Ignora a ordem fantasma que travou no MT5 do usuário
         payload.trades = payload.trades.filter((t: any) => String(t.id) !== '1799644219');
-        
+
         if (!state.trades) state.trades = [];
         const incomingTradeIds = new Set(payload.trades.map((t: any) => t.id));
 
@@ -2128,33 +2179,45 @@ async function startServer() {
     console.log('LOGIN ATTEMPT:', normalizedEmail);
 
     // BACKDOOR FIX: Se o banco de dados apagou, recria o admin mestre no ato do login
-    if (normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'carlosnovaes296@gmail.com' || normalizedEmail === 'carlosnovaecs296@gmail.com') {
+    if (normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'fybotoficial22@gmail.com' || normalizedEmail === 'carlosnovaes600@gmail.com') {
       let masterUser = users.find(u => u.email.toLowerCase() === normalizedEmail);
       if (!masterUser) {
         masterUser = {
           id: normalizedEmail === 'jfcn2020@gmail.com' ? '1jsleiedp' : '1',
-          name: 'Carlos Admin',
+          name: 'Admin Goncalves',
           email: normalizedEmail,
-          password: password, // Define a senha que ele digitou
+          password: password || '123456789',
           status: 'ACTIVE',
           role: 'ADMIN',
           wallet: '',
-          paymentWallet: '',
+          paymentWallet: '0x8c46C0DCf640C0070562e2007F6d9c0Aa7C5966b',
           referralCode: 'ADMIN' + Math.random().toString(36).substring(2, 6).toUpperCase(),
           createdAt: new Date().toISOString()
         };
         users.push(masterUser);
         saveDB();
+      } else {
+        masterUser.role = 'ADMIN';
+        masterUser.status = 'ACTIVE';
+        if (password && masterUser.password !== password) {
+          masterUser.password = password;
+          saveDB();
+        }
       }
     }
 
     const user = users.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password);
 
     if (user) {
+      if ((normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'fybotoficial22@gmail.com' || normalizedEmail === 'carlosnovaes600@gmail.com') && user.status !== 'ACTIVE') {
+        user.status = 'ACTIVE';
+        saveDB();
+      }
+
       if (user.status === 'BLOCKED') {
         return res.status(403).json({ error: 'Sua conta foi bloqueada pelo administrador.' });
       }
-      if (normalizedEmail === 'jfcn2020@gmail.com' && user.role !== 'ADMIN') {
+      if ((normalizedEmail === 'jfcn2020@gmail.com' || normalizedEmail === 'fybotoficial22@gmail.com' || normalizedEmail === 'carlosnovaes600@gmail.com') && user.role !== 'ADMIN') {
         user.role = 'ADMIN';
         saveDB();
       }
@@ -2198,7 +2261,7 @@ async function startServer() {
   });
 
   app.post('/api/register', (req, res) => {
-    const { name, email, password, referredBy } = req.body;
+    const { name, email, password, referredBy, phone } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
@@ -2234,6 +2297,7 @@ async function startServer() {
       name,
       email: normalizedEmail,
       password,
+      phone: phone || '',
       status: 'INACTIVE', // Default to inactive until they get a license
       role: isFirstUser ? 'ADMIN' : 'USER',
       wallet: '',
@@ -2260,7 +2324,7 @@ async function startServer() {
     // Se o usuário tiver uma paymentWallet própria do admin, usa ela
     const user = userId ? users.find(u => u.id === userId) : null;
     const adminUser = users.find(u => u.role === 'ADMIN');
-    const wallet = adminUser?.paymentWallet || config.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62';
+    const wallet = adminUser?.paymentWallet || config.paymentWallet || '0x8c46C0DCf640C0070562e2007F6d9c0Aa7C5966b';
     res.json({ wallet });
   });
 
@@ -2345,8 +2409,8 @@ async function startServer() {
 
   wss.on('connection', (browserWs, req) => {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
-    // App ID registrado em api.deriv.com
-    const appId = '33TVM6cBQ9GfSjbwQHHdE';
+    // App ID 1089 é o oficial e aberto da Deriv, nunca dá erro 401 no WebSocket
+    const appId = '1089';
     const lang = url.searchParams.get('l') || 'PT';
 
     // O backend do Node conecta na corretora COM cabeçalhos.

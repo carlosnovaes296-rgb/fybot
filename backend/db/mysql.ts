@@ -40,11 +40,11 @@ export async function updateUser(id: string, updates: any) {
     // We use REPLACE INTO or INSERT ... ON DUPLICATE KEY UPDATE.
     // For simplicity, since the memory object has everything, we can just insert it.
     await pool.query(
-        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, referralCode, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, createdAt) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO users (id, name, email, password, wallet, paymentWallet, status, role, referredBy, referralCode, derivToken, derivTokenDemo, derivTokenReal, activeAccountType, phone, createdAt) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE 
-         name=VALUES(name), password=VALUES(password), wallet=VALUES(wallet), paymentWallet=VALUES(paymentWallet), status=VALUES(status), role=VALUES(role), referralCode=VALUES(referralCode), referredBy=VALUES(referredBy), derivToken=VALUES(derivToken), derivTokenDemo=VALUES(derivTokenDemo), derivTokenReal=VALUES(derivTokenReal), activeAccountType=VALUES(activeAccountType)`,
-        [updates.id, updates.name, updates.email, updates.password, updates.wallet || '', updates.paymentWallet || '', updates.status || 'PENDING', updates.role || 'USER', updates.referredBy || '', updates.referralCode || '', updates.derivToken || '', updates.derivTokenDemo || '', updates.derivTokenReal || '', updates.activeAccountType || 'DEMO', new Date(updates.createdAt || Date.now())]
+         name=VALUES(name), password=VALUES(password), wallet=VALUES(wallet), paymentWallet=VALUES(paymentWallet), status=VALUES(status), role=VALUES(role), referralCode=VALUES(referralCode), referredBy=VALUES(referredBy), derivToken=VALUES(derivToken), derivTokenDemo=VALUES(derivTokenDemo), derivTokenReal=VALUES(derivTokenReal), activeAccountType=VALUES(activeAccountType), phone=VALUES(phone)`,
+        [updates.id, updates.name, updates.email, updates.password, updates.wallet || '', updates.paymentWallet || '', updates.status || 'PENDING', updates.role || 'USER', updates.referredBy || '', updates.referralCode || '', updates.derivToken || '', updates.derivTokenDemo || '', updates.derivTokenReal || '', updates.activeAccountType || 'DEMO', updates.phone || '', new Date(updates.createdAt || Date.now())]
     );
 }
 export async function deleteUser(id: string) {

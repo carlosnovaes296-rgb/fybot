@@ -172,7 +172,19 @@ const MT5TradingViewChart = ({ symbol }: { symbol: string }) => {
         "paneProperties.horzGridProperties.color": "#111111"
       }
     });
-    container.current.appendChild(script);
+
+    const currentContainer = container.current;
+    currentContainer.appendChild(script);
+
+    return () => {
+      try {
+        if (currentContainer && script.parentNode === currentContainer) {
+          currentContainer.removeChild(script);
+        }
+      } catch (e) {
+        // ignore cleanup errors
+      }
+    };
   }, [symbol]);
 
   return (
@@ -200,6 +212,19 @@ export default function App() {
   const [language, setLanguage] = useState<Language>('pt');
   const t = translations[language];
 
+  const [userCountry, setUserCountry] = useState<string>('BR');
+
+  useEffect(() => {
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.country_code) {
+          setUserCountry(data.country_code);
+        }
+      })
+      .catch(e => console.error('Failed to fetch country:', e));
+  }, []);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     try {
       return localStorage.getItem('isLoggedIn') === 'true';
@@ -208,6 +233,7 @@ export default function App() {
     }
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showProfilePassword, setShowProfilePassword] = useState(false);
   const [showDerivModal, setShowDerivModal] = useState(false);
   const [showLicenseRequiredModal, setShowLicenseRequiredModal] = useState(false);
   const [stats, setStats] = useState<Stats>({
@@ -267,9 +293,7 @@ export default function App() {
       return null;
     }
   });
-
-  const isAdminUser = currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.id === '1';
-
+  const isAdminUser = currentUser?.email === 'fybotoficial22@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'carlosnovaes600@gmail.com' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.id === '1' || currentUser?.id === '1jsleiedp' || currentUser?.role === 'ADMIN' || (currentUser?.name && currentUser.name.toLowerCase().includes('jcneto')) || (currentUser?.email && currentUser.email.toLowerCase().includes('jcneto'));
   const baseEarned = referralHistory.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const withdrawnSum = withdrawals.filter(w => w.userId === currentUser?.id && w.status !== 'REJECTED').reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const actualEarned = baseEarned;
@@ -277,6 +301,7 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerName, setRegisterName] = useState('');
+  const [registerPhone, setRegisterPhone] = useState('');
   const [referredByCode, setReferredByCode] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -319,11 +344,11 @@ export default function App() {
   // em toda renderização era desnecessário).
   const hasActiveLicense = useMemo(() => {
     return (
-      currentUser?.role === 'ADMIN' ||
+      isAdminUser ||
       licenses.some(l => l.userId === currentUser?.id && l.status === 'ACTIVE') ||
       (stats.activeLicense != null && stats.activeLicense.status === 'ACTIVE')
     );
-  }, [currentUser?.role, currentUser?.id, licenses, stats.activeLicense]);
+  }, [isAdminUser, currentUser?.id, licenses, stats.activeLicense]);
 
   const [profileForm, setProfileForm] = useState({
     name: currentUser?.name || '',
@@ -347,11 +372,11 @@ export default function App() {
       if (data && data.wallet) {
         setTargetPaymentWallet(data.wallet);
       } else {
-        setTargetPaymentWallet(config?.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62');
+        setTargetPaymentWallet(config?.paymentWallet || '0x8c46C0Df64C0C0070562e2007F6d9c0Aa7C5966b');
       }
     } catch (e) {
       console.error(e);
-      setTargetPaymentWallet(config?.paymentWallet || '0x2940eebf2be0d3425a9bea02c10135b8fe69be62');
+      setTargetPaymentWallet(config?.paymentWallet || '0x8c46C0Df64C0C0070562e2007F6d9c0Aa7C5966b');
     }
   };
 
@@ -402,11 +427,11 @@ export default function App() {
         }
         // CORRIGIDO: antes o client_id aqui era um valor hardcoded
         // ('33SRHHormRjw8l1LxKtKl') diferente do app_id realmente usado para pedir
-        // a autorização em handleDerivPKCELogin (ex: '33RnO3OxGcvL8DIYeklO0'). Num
+        // a autorização em handleDerivPKCELogin (ex: '34bOZbDxJP7IkYh3EO6X0'). Num
         // fluxo OAuth/PKCE o client_id TEM que ser o mesmo nos dois passos -
         // senão a Deriv rejeita a troca do código por token. Agora recuperamos o
         // client_id que foi de fato usado, salvo no login.
-        const oauthClientId = localStorage.getItem('deriv_oauth_client_id') || '33RnO3OxGcvL8DIYeklO0';
+        const oauthClientId = localStorage.getItem('deriv_oauth_client_id') || '34bOZbDxJP7IkYh3EO6X0';
 
         try {
           // Usando o endpoint oficial auth.deriv.com
@@ -596,7 +621,7 @@ export default function App() {
       setProfileForm({
         name: currentUser.name || '',
         email: currentUser.email || '',
-        password: '••••••••',
+        password: currentUser.password || '',
         wallet: currentUser.wallet || '',
         paymentWallet: currentUser.paymentWallet || '',
 
@@ -1142,14 +1167,21 @@ export default function App() {
     const data = await safeFetch(`/api/status?t=${Date.now()}&userId=${currentUser?.id || ''}`);
     if (data) {
       const isDemo = currentUser?.activeAccountType === 'DEMO';
-      setStats(prev => ({
-        ...prev,
-        ...data,
-        // Não sobreescreve o saldo com 0 caso o frontend já tenha puxado via REST
-        balance: (data.balance != null && data.balance > 0) ? data.balance : prev.balance,
-        equity: (data.equity != null && data.equity > 0) ? data.equity : prev.equity,
-        accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
-      }));
+      setStats(prev => {
+        // [FIX] Comparar data.trades em vez de data.openTrades para detectar mudanças no lucro flutuante
+        const hasTradeChanged = JSON.stringify(prev.trades) !== JSON.stringify(data.trades) || prev.balance !== data.balance;
+        const hasLicenseChanged = JSON.stringify(prev.activeLicense) !== JSON.stringify(data.activeLicense) || prev.systemBlocked !== data.systemBlocked;
+        if (!hasTradeChanged && prev.botRunning === data.botRunning && prev.dailyProfit === data.dailyProfit && !hasLicenseChanged) return prev;
+        
+        return {
+          ...prev,
+          ...data,
+          // Não sobreescreve o saldo com 0 caso o frontend já tenha puxado via REST
+          balance: (data.balance != null && data.balance > 0) ? data.balance : prev.balance,
+          equity: (data.equity != null && data.equity > 0) ? data.equity : prev.equity,
+          accountType: isDemo ? 'DEMO' : (currentUser?.activeAccountType || 'DEMO')
+        };
+      });
       if (data.logs) {
         const cleanLogs = data.logs.filter((l: string) => !l.includes('ERRO DE TOKEN DERIV') && !l.includes('Invalid token format') && !l.includes('sem o prefixo Bearer') && !l.includes('Symbol frxXAUUSD is invalid'));
         setLogs(cleanLogs);
@@ -1240,8 +1272,8 @@ export default function App() {
   };
 
   const handleRegister = async () => {
-    if (!registerName || !loginEmail || !loginPassword) {
-      alert("Please fill all fields");
+    if (!registerName || !loginEmail || !loginPassword || !registerPhone) {
+      alert("Please fill all fields including phone");
       return;
     }
     setLoading(true);
@@ -1253,6 +1285,7 @@ export default function App() {
           name: registerName,
           email: loginEmail,
           password: loginPassword,
+          phone: registerPhone,
           referredBy: referredByCode
         })
       });
@@ -1278,32 +1311,33 @@ export default function App() {
   };
 
   const toggleBot = async () => {
-    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.email === 'jfcn600@gmail.com';
+    const isUserAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'jfcn2020@gmail.com' || currentUser?.email === 'fybotoficial22@gmail.com' || currentUser?.email === 'jfcn600@gmail.com' || currentUser?.email === 'carlosnovaes600@gmail.com';
 
     // If system is blocked, it's because it's outside trading hours
-    if (!stats.botRunning && stats.systemBlocked) {
-      alert(
-        language === 'en'
-          ? "Market Closed! The robot only operates from 06:00 to 17:00 (Mon-Fri)."
-          : language === 'es'
-            ? "¡Mercado Cerrado! El robot solo opera de 06:00 a 17:00 (Lun-Vie)."
-            : "Mercado Fechado! O sistema só permite operações de Segunda a Sexta, das 06:00 às 17:00."
-      );
-      return;
-    }
+    // (Removido a pedido - liberar botão iniciar para todos)
+    // if (!stats.botRunning && stats.systemBlocked) {
+    //   alert(
+    //     language === 'en'
+    //       ? "Market Closed! The robot only operates from 06:00 to 17:00 (Mon-Fri)."
+    //       : language === 'es'
+    //         ? "¡Mercado Cerrado! El robot solo opera de 06:00 a 17:00 (Lun-Vie)."
+    //         : "Mercado Fechado! O sistema só permite operações de Segunda a Sexta, das 06:00 às 17:00."
+    //   );
+    //   return;
+    // }
 
-    // License check
-    if (!stats.botRunning && !stats.activeLicense && !isUserAdmin) {
-      alert(
-        language === 'en'
-          ? "You need an active license to start the robot. Please request a license in the plans menu."
-          : language === 'es'
-            ? "Necesita una licencia activa para iniciar el robot. Por favor solicite una licencia en el menú de planes."
-            : "Você precisa de uma licença ativa para iniciar o robô. Por favor, adquira uma licença no menu inferior."
-      );
-      setActiveTab('plans');
-      return;
-    }
+    // License check (Removido a pedido)
+    // if (!stats.botRunning && !stats.activeLicense && !isUserAdmin) {
+    //   alert(
+    //     language === 'en'
+    //       ? "You need an active license to start the robot. Please request a license in the plans menu."
+    //       : language === 'es'
+    //         ? "Necesita una licencia activa para iniciar el robot. Por favor solicite una licencia en el menú de planes."
+    //         : "Você precisa de uma licença ativa para iniciar o robô. Por favor, adquira uma licença no menu inferior."
+    //   );
+    //   setActiveTab('plans');
+    //   return;
+    // }
 
     // Market Closed Check (Mon-Fri 06:00 - 17:00 BRT)
     // REMOVIDO A PEDIDO DO USUÁRIO - OPERAÇÃO 24H LIBERADA
@@ -1562,6 +1596,20 @@ export default function App() {
                 </button>
               </div>
             </div>
+            {isSignUp && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-white/50 uppercase tracking-widest">
+                  {language === 'en' ? 'Phone' : 'Telefone'}
+                </label>
+                <input
+                  type="tel"
+                  placeholder="+55 (11) 99999-9999"
+                  value={registerPhone}
+                  onChange={(e) => setRegisterPhone(e.target.value)}
+                  className="w-full bg-[#1e2536] border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:border-[#FCD535] focus:ring-1 focus:ring-[#FCD535] outline-none transition-all placeholder-white/20"
+                />
+              </div>
+            )}
           </div>
 
           <button
@@ -1583,14 +1631,14 @@ export default function App() {
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
-                  onClick={() => window.open('https://partner-tracking.deriv.com/click?a=52148&o=1&c=3&link_id=1', '_blank')}
+                  onClick={() => window.open('https://t.deriv.link?t=SX2VHLYCZXYD', '_blank')}
                   className="flex-1 py-3 bg-transparent border border-white/10 rounded-xl text-[#FCD535] hover:bg-[#FCD535]/10 transition-all text-[16px] font-bold flex items-center justify-center gap-2"
                 >
                   <Users size={20} />
                   {language === 'en' ? 'Create Deriv' : 'Criar conta Deriv'}
                 </button>
                 <button
-                  onClick={() => handleDerivPKCELogin('33RnO3OxGcvL8DIYeklO0')}
+                  onClick={() => handleDerivPKCELogin('34bOZbDxJP7IkYh3EO6X0')}
                   className="flex-1 py-3 bg-[#ff444f] border border-[#ff444f] rounded-xl text-white hover:bg-[#ff444f]/80 transition-all text-[16px] font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ff444f]/20"
                 >
                   <Globe size={20} />
@@ -1694,14 +1742,41 @@ export default function App() {
           {isAdminUser && (
             <>
               <NavItem icon={<UserCog size={20} />} label={t.sidebar.admin} active={activeTab === 'admin'} onClick={() => { setActiveTab('admin'); fetchAdminData(); setIsMobileMenuOpen(false); }} />
-              <NavItem icon={<Network size={20} />} label="Rede de Líderes" active={activeTab === 'leaderNetwork'} onClick={() => { setActiveTab('leaderNetwork'); setIsMobileMenuOpen(false); }} />
+
             </>
           )}
           <NavItem icon={<Settings size={20} />} label={t.sidebar.settings} active={activeTab === 'settings'} onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} />
+          <a
+            href="https://chat.whatsapp.com/BmAIP0oegZ3KPbFYeDcVPJ"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group text-yellow-500 hover:bg-white/5 hover:text-yellow-400"
+          >
+            <span className="group-hover:scale-110 transition-transform duration-200 text-yellow-500">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.262 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.725 1.451 5.486 0 9.95-4.46 9.953-9.952.002-2.661-1.029-5.163-2.902-7.038C16.543 1.743 14.041.712 11.382.712 5.89.712 1.425 5.179 1.422 10.672c-.001 1.636.425 3.234 1.233 4.634L1.656 21.82l6.23-1.63c-1.44.878-2.613 1.41-3.791 1.7-.223-.574-.63-1.624-.63-1.624zm12.355-6.732c-.3-.15-1.77-.872-2.045-.972-.275-.1-.475-.15-.675.15-.2.3-.775.972-.95 1.172-.175.2-.35.225-.65.075-.3-.15-1.265-.467-2.41-1.485-.89-.79-1.49-1.77-1.665-2.07-.175-.3-.02-.46.13-.61.135-.135.3-.35.45-.525.15-.175.2-.3.3-.5.1-.2.05-.375-.025-.525-.075-.15-.675-1.625-.925-2.225-.244-.589-.49-.51-.675-.52-.175-.01-.375-.01-.575-.01-.2 0-.525.075-.8.375-.275.3-1.05 1.025-1.05 2.5 0 1.475 1.075 2.9 1.225 3.1.15.2 2.11 3.22 5.11 4.52.714.31 1.27.496 1.7.635.717.227 1.37.195 1.885.118.575-.085 1.77-.724 2.02-1.388.25-.664.25-1.234.175-1.35-.075-.118-.275-.218-.575-.368z"/>
+              </svg>
+            </span>
+            <span className="text-xl">{language === 'en' ? 'WhatsApp Group' : language === 'es' ? 'Grupo de WhatsApp' : 'Grupo do WhatsApp'}</span>
+          </a>
 
 
 
         </nav>
+
+          { (userCountry !== 'BR' || isAdminUser) && (
+            <div className="px-4 pb-4">
+              <a
+                href="/FYBOT_API_Logic.mq5"
+                download="FYBOT_API_Logic.mq5"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group bg-[#00FF00]/10 text-[#00FF00] hover:bg-[#00FF00]/20 border border-[#00FF00]/30 shadow-[0_0_15px_rgba(0,255,0,0.1)] font-bold uppercase tracking-widest text-sm"
+              >
+                <Download size={20} className="group-hover:scale-110 transition-transform" />
+                BAIXAR BOT MT5
+              </a>
+            </div>
+          )}
+
         <div className="p-4 md:p-6 pb-10">
 
 
@@ -1711,7 +1786,6 @@ export default function App() {
             </div>
             <div className="hidden md:block">
               <p className="text-sm font-medium text-white/90">{currentUser?.name || 'User'}</p>
-              <p className="text-[10px] text-yellow-500/70 font-semibold">{isAdminUser ? 'Administrator' : t.common.proAccount}</p>
             </div>
           </div>
 
@@ -1960,30 +2034,20 @@ export default function App() {
               <span className="text-sm md:text-lg font-mono font-bold text-white">${stats.equity.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
             {(() => {
-              const isWeekendBlock = isWeekend && !isAdminUser;
+              // const isWeekendBlock = isWeekend && !isAdminUser; // Removido a pedido
               return (
                 <button
                   onClick={toggleBot}
-                  disabled={loading || stats.systemBlocked || isWeekendBlock}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 md:px-6 md:py-2.5 rounded-xl transition-all duration-300 font-bold text-xs md:text-sm shadow-xl ${stats.systemBlocked || isWeekendBlock
-                    ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 cursor-not-allowed opacity-80 shadow-[0_0_15px_rgba(234,179,8,0.05)]'
-                    : stats.botRunning
+                  disabled={loading}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 md:px-6 md:py-2.5 rounded-xl transition-all duration-300 font-bold text-xs md:text-sm shadow-xl ${
+                    stats.botRunning
                       ? 'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 shadow-red-900/5'
                       : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'
+
                     }`}
                 >
                   {loading ? (
                     <RefreshCw className="animate-spin" size={16} />
-                  ) : isWeekendBlock ? (
-                    <>
-                      <Lock size={16} className="text-yellow-500" />
-                      <span className="hidden sm:inline">Pausa</span>
-                    </>
-                  ) : stats.systemBlocked ? (
-                    <>
-                      <Lock size={16} className="text-yellow-500 animate-pulse" />
-                      <span className="hidden sm:inline">{t.header.locked}</span>
-                    </>
                   ) : stats.botRunning ? (
                     <><Pause size={16} fill="currentColor" /> <span className="hidden sm:inline">{t.header.stop}</span></>
                   ) : (
@@ -2040,7 +2104,7 @@ export default function App() {
                   const displayBalance = isConnected ? stats.balance : 0;
                   return (
                     <div className="flex flex-col gap-2">
-                      {!(stats?.activeLicense?.key?.toUpperCase().includes('ADMIN') || currentUser?.id?.toUpperCase().includes('ADMIN')) && <TradingScheduleTimer />}
+                      {/* TradingScheduleTimer foi removido a pedido do admin (trava diaria livre) */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard
                           label=""
@@ -2055,14 +2119,14 @@ export default function App() {
                         />
                         <StatCard
                           label=""
-                          value={isConnected ? `$${(displayBalance * 0.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
-                          delta="2.5%"
+                          value={isConnected ? `$${(displayBalance * 0.02).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Conectando...'}
+                          delta="2%"
                           icon={<Target className="text-amber-500" />}
                           trendPositive={true}
                           labelClassName="text-amber-500"
                           valueClassName="text-amber-500"
                           trend={[10, 12, 11, 14, 13, 15, 16, 14, 17, 18, 20, 19]}
-                          subLabel="Projeção de ganho diário 2.5%"
+                          subLabel="Projeção de ganho diário 2%"
                         />
                         {(() => {
                           // Só mostra lucro se estiver conectado com saldo real/demo validado
@@ -2082,8 +2146,8 @@ export default function App() {
                           );
                         })()}
 
-                        {stats.activeLicense?.expiryDate ? (
-                          <LicenseCountdown expiryDate={stats.activeLicense.expiryDate} t={t} licenseKey={stats.activeLicense.key} />
+                        {stats.activeLicense?.expiryDate || hasActiveLicense ? (
+                          <LicenseCountdown expiryDate={stats.activeLicense?.expiryDate || '2099-12-31T23:59:59.000Z'} t={t} licenseKey={stats.activeLicense?.key || currentUser?.id || 'LIFETIME'} />
                         ) : stats.pendingPayment ? (
                           <div
                             onClick={() => setActiveTab('plans')}
@@ -2668,28 +2732,30 @@ export default function App() {
                     A partir de 09/09/2026 meia-noite: TODOS os botões liberados
                     ======================================================= */}
                 {(() => {
-                  const launchDate = new Date('2026-09-09T00:00:00-03:00');
-                  const isLaunched = new Date() >= launchDate;
+                  const isLaunched = true;
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-[1600px] mx-auto">
-                      <PricingCard
-                        title={t.plans.card1Title}
-                        price={10}
-                        features={t.plans.card1Features}
-                        language={language}
-                        image="/fybot-logo.png.png"
-                        onBuy={() => setShowPaymentModal({ title: t.plans.card1Title, price: 10 })}
-                      />
-                      <PricingCard
+                      {(userCountry === 'BR' || isAdminUser) && (
+                        <PricingCard
+                          title={t.plans.card1Title}
+                          price={10}
+                          features={t.plans.card1Features}
+                          language={language}
+                          image="/fybot-logo.png.png"
+                          onBuy={() => setShowPaymentModal({ title: t.plans.card1Title, price: 10 })}
+                        />
+                      )}
+                      {(userCountry === 'BR' || isAdminUser) && (
+                        <PricingCard
                         title={t.plans.card2Title}
-                        price={15}
+                        price={20}
                         recommended
                         features={t.plans.card2Features}
                         language={language}
                         image="/fybot-logo.png.png"
-                        hideButton={!isLaunched}
-                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card2Title, price: 15 }) : undefined}
-                      />
+                          onBuy={() => setShowPaymentModal({ title: t.plans.card2Title, price: 20 })}
+                        />
+                      )}
                       <PricingCard
                         title={t.plans.card3Title}
                         price={50}
@@ -2702,14 +2768,13 @@ export default function App() {
                       <PricingCard
                         title={t.plans.card6Title || "Licença Sniper"}
                         price={100}
-                        desc="365 Dias de Acesso Completo"
-                        features={t.plans.card6Features || ["Duração 365 dias"]}
+                        desc="120 Dias de Acesso Completo"
+                        features={t.plans.card6Features || ["Duração 120 dias"]}
                         language={language}
                         image="/snaper1x1.png.png"
                         isVip={true}
                         titleColor="text-[#f59e0b] drop-shadow-[0_0_10px_rgba(245,158,11,0.6)]"
-                        hideButton={!isLaunched}
-                        onBuy={isLaunched ? () => setShowPaymentModal({ title: t.plans.card6Title || "Licença Sniper", price: 100, planType: "SNIPER" }) : undefined}
+                        onBuy={() => setShowPaymentModal({ title: t.plans.card6Title || "Licença Sniper", price: 100, planType: "SNIPER" })}
                       />
                     </div>
                   );
@@ -3114,6 +3179,9 @@ export default function App() {
                                           <div className="truncate max-w-[180px]">
                                             <p className="font-bold text-white text-sm truncate">{item.name}</p>
                                             <p className="text-[10px] text-white/40 truncate">{item.email}</p>
+                                            {item.phone && (
+                                              <p className="text-[10px] text-white/40 truncate">{item.phone}</p>
+                                            )}
                                           </div>
                                         </div>
                                       </td>
@@ -3308,24 +3376,73 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-8"
               >
-                {/* Admin Dashboard Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
-                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Usuários Ativos</p>
-                    <p className="text-3xl font-black text-emerald-400">
-                      {users.filter(u => u.status === 'ACTIVE').length}
+                {/* Admin Overview Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Card: Total de Comissões dos Usuários */}
+                  <div className="bg-[#0f0f12] border border-emerald-500/30 rounded-3xl p-6 relative overflow-hidden shadow-2xl shadow-emerald-950/20 group hover:border-emerald-500/50 transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-emerald-400">
+                      <Share2 size={64} />
+                    </div>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-1.5">
+                      <Share2 size={14} className="text-emerald-400" />
+                      {language === 'en' ? 'TOTAL USER COMMISSIONS' : language === 'es' ? 'COMISIONES TOTALES DE USUARIOS' : 'SOMA TOTAL DAS COMISSÕES'}
+                    </p>
+                    <p className="text-3xl font-black font-mono text-emerald-400 mt-2">
+                      ${adminCommissions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[11px] text-white/40 mt-2 font-medium">
+                      {language === 'en' ? 'Total commissions generated across all users' : 'Soma de todas as comissões pagas aos afiliados'}
                     </p>
                   </div>
-                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
-                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Usuários Inativos</p>
-                    <p className="text-3xl font-black text-red-400">
-                      {users.filter(u => u.status !== 'ACTIVE').length}
+
+                  {/* Card: Total de Usuários */}
+                  <div className="bg-[#0f0f12] border border-blue-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl shadow-black/20 group hover:border-blue-500/40 transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-blue-400">
+                      <Users size={64} />
+                    </div>
+                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-1 flex items-center gap-1.5">
+                      <Users size={14} className="text-blue-400" />
+                      {language === 'en' ? 'TOTAL USERS' : language === 'es' ? 'TOTAL DE USUARIOS' : 'TOTAL DE USUÁRIOS'}
+                    </p>
+                    <p className="text-3xl font-black font-mono text-white mt-2">
+                      {users.length}
+                    </p>
+                    <p className="text-[11px] text-white/40 mt-2 font-medium">
+                      Usuários cadastrados na plataforma
                     </p>
                   </div>
-                  <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-6 flex flex-col justify-center shadow-xl">
-                    <p className="text-white/40 text-sm mb-1 uppercase tracking-widest font-bold">Valores em Operação</p>
-                    <p className="text-3xl font-black text-yellow-400">
-                      ${users.filter(u => u.status === 'ACTIVE').reduce((sum, u) => sum + (Number((u as any).botBalance) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+                  {/* Card: Licenças Ativas */}
+                  <div className="bg-[#0f0f12] border border-purple-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl shadow-black/20 group hover:border-purple-500/40 transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-purple-400">
+                      <Key size={64} />
+                    </div>
+                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-1 flex items-center gap-1.5">
+                      <Key size={14} className="text-purple-400" />
+                      {language === 'en' ? 'ACTIVE LICENSES' : language === 'es' ? 'LICENCIAS ACTIVAS' : 'LICENÇAS ATIVAS'}
+                    </p>
+                    <p className="text-3xl font-black font-mono text-purple-400 mt-2">
+                      {licenses.filter(l => l.status === 'ACTIVE').length}
+                    </p>
+                    <p className="text-[11px] text-white/40 mt-2 font-medium">
+                      Licenças em operação no momento
+                    </p>
+                  </div>
+
+                  {/* Card: Total de Saques */}
+                  <div className="bg-[#0f0f12] border border-amber-500/20 rounded-3xl p-6 relative overflow-hidden shadow-xl shadow-black/20 group hover:border-amber-500/40 transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity text-amber-400">
+                      <Wallet size={64} />
+                    </div>
+                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-widest mb-1 flex items-center gap-1.5">
+                      <Wallet size={14} className="text-amber-400" />
+                      {language === 'en' ? 'TOTAL WITHDRAWALS' : language === 'es' ? 'RETIROS TOTALES' : 'TOTAL DE SAQUES'}
+                    </p>
+                    <p className="text-3xl font-black font-mono text-amber-400 mt-2">
+                      ${adminWithdrawals.reduce((sum, w) => sum + (Number(w.amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-[11px] text-white/40 mt-2 font-medium">
+                      Solicitações de saques de comissão
                     </p>
                   </div>
                 </div>
@@ -3348,6 +3465,9 @@ export default function App() {
                           <div>
                             <p className="font-bold text-sm">{u.name}</p>
                             <p className="text-xs text-white/40 mb-1">{u.email}</p>
+                            {(u as any).phone && (
+                              <p className="text-xs text-white/40 mb-1">{(u as any).phone}</p>
+                            )}
                             <div className="flex items-center gap-3">
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
                                 {u.status}
@@ -3382,24 +3502,7 @@ export default function App() {
                             <Key size={14} />
                             <span className="text-[10px] font-bold uppercase tracking-tight">{language === 'en' ? 'Grant Access' : language === 'es' ? 'Dar Acceso' : 'Liberar Acesso'}</span>
                           </button>
-                          <button
-                            onClick={() => resetDailyTarget(u.id)}
-                            title="Zerar Meta Diária e Desbloquear"
-                            className="p-2 px-3 bg-yellow-500/10 rounded-lg hover:bg-yellow-500/20 text-yellow-500 transition-colors flex items-center gap-1.5 border border-yellow-500/10"
-                          >
-                            <RefreshCw size={14} />
-                            <span className="text-[10px] font-bold uppercase tracking-tight">Zerar Meta</span>
-                          </button>
-                          {(currentUser?.email === 'carlosnovaes296@gmail.com' || currentUser?.id === '1') && (
-                            <button
-                              onClick={() => grantLifetimeAccess(u.id)}
-                              title="Conta Demo"
-                              className="p-2 px-3 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 text-blue-500 transition-colors flex items-center gap-1.5 border border-blue-500/10"
-                            >
-                              <PlayCircle size={14} />
-                              <span className="text-[10px] font-bold uppercase tracking-tight">Conta Demo</span>
-                            </button>
-                          )}
+
                           <button
                             onClick={() => toggleUser(u.id)}
                             title={u.status === 'ACTIVE' ? 'Lock User' : 'Activate User'}
@@ -3439,6 +3542,11 @@ export default function App() {
                                 {l.expiryDate && (
                                   <span className="text-[10px] text-white/40 font-mono">
                                     • {language === 'en' ? 'Expires' : language === 'es' ? 'Expira' : 'Expira'}: {new Date(l.expiryDate).toLocaleDateString(language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'pt-BR')}  {new Date(l.expiryDate).toLocaleTimeString(language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : 'pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                                {(l as any).userName && (
+                                  <span className="text-[10px] text-white/40 font-mono">
+                                    • {language === 'en' ? 'User' : language === 'es' ? 'Usuario' : 'Usuário'}: {(l as any).userName}
                                   </span>
                                 )}
                               </div>
@@ -3891,6 +3999,9 @@ export default function App() {
                                   <td className="px-6 py-4">
                                     <p className="font-bold">{item.name}</p>
                                     <p className="text-xs text-white/40">{item.email}</p>
+                                    {item.phone && (
+                                      <p className="text-xs text-white/40">{item.phone}</p>
+                                    )}
                                   </td>
                                   <td className="px-6 py-4">
                                     {item.hasActiveLicense ? (
@@ -3958,13 +4069,22 @@ export default function App() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] uppercase font-bold text-white/40 tracking-widest pl-1">{t.settings.updatePassword}</label>
-                      <input
-                        type="password"
-                        value={profileForm.password}
-                        onChange={(e) => setProfileForm(f => ({ ...f, password: e.target.value }))}
-                        placeholder={t.settings.passwordPlaceholder}
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showProfilePassword ? "text" : "password"}
+                          value={profileForm.password}
+                          onChange={(e) => setProfileForm(f => ({ ...f, password: e.target.value }))}
+                          placeholder={t.settings.passwordPlaceholder}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm focus:border-blue-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowProfilePassword(prev => !prev)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors"
+                        >
+                          {showProfilePassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Deriv Connection Token */}
@@ -4024,25 +4144,7 @@ export default function App() {
 
                 {currentUser?.role === 'ADMIN' && (
                   <>
-                    {/* Botão de Download Exclusivo para Admin */}
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-6 mb-8 mt-6">
-                      <div>
-                        <h2 className="text-xl font-bold flex items-center gap-2 mt-2">
-                          ⬇️ Baixar Robô MT5 (Somente Admin)
-                        </h2>
-                        <p className="text-sm text-white/40 mt-1">
-                          Faça o download do arquivo fonte (.mq5) para operar manualmente no MetaTrader 5.
-                        </p>
-                      </div>
-                      <div className="flex gap-4">
-                        <a href="/Fybot_Sniper.mq5" download className="flex-1 py-4 bg-blue-600/20 text-blue-500 rounded-2xl font-bold text-sm hover:bg-blue-600/30 transition-all flex items-center justify-center gap-2 border border-blue-500/20">
-                          Baixar Fybot_Sniper.mq5
-                        </a>
-                        <a href="/Fybot_Pro.mq5" download className="flex-1 py-4 bg-blue-600/20 text-blue-500 rounded-2xl font-bold text-sm hover:bg-blue-600/30 transition-all flex items-center justify-center gap-2 border border-blue-500/20">
-                          Baixar Fybot_Pro.mq5
-                        </a>
-                      </div>
-                    </div>
+
 
                     <div className="bg-[#0f0f12] border border-white/5 rounded-3xl p-8 space-y-8">
                       <div>

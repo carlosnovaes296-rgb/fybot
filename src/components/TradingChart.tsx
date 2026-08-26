@@ -200,11 +200,11 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
       // 2. Take Profit (TP)
       let tpValue = trade.tp;
       if (!tpValue || tpValue <= 0) {
-        // fallback: add 3% of price for BUY, subtract for SELL
+        // fallback: add 0.2% of price for BUY, subtract for SELL
         if (isBuy) {
-          tpValue = price * 1.007; // approx +0.7%
+          tpValue = price * 1.002; // approx +0.2%
         } else {
-          tpValue = price * 0.993; // approx -0.7%
+          tpValue = price * 0.998; // approx -0.2%
         }
       }
       if (tpValue && tpValue > 0) {
@@ -225,9 +225,9 @@ export const TradingChart: React.FC<TradingChartProps> = ({ trades = [], symbol 
       let slValue = trade.sl;
       if (!slValue || slValue <= 0) {
         if (isBuy) {
-          slValue = price * 0.993; // approx -0.7%
+          slValue = price * 0.998; // approx -0.2%
         } else {
-          slValue = price * 1.007; // approx +0.7%
+          slValue = price * 1.002; // approx +0.2%
         }
       }
       if (slValue && slValue > 0) {

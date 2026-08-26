@@ -465,6 +465,9 @@ export class DerivConnectionManager {
               const managedTrade = openTrades[0]; // Apenas 1 trade gerenciado
 
               if (managedTrade.peakPrice === undefined) managedTrade.peakPrice = parseFloat(managedTrade.openPrice) || currentSpot;
+              if (managedTrade.peakProfit === undefined) managedTrade.peakProfit = profit;
+              if (profit > managedTrade.peakProfit) managedTrade.peakProfit = profit;
+              
               if (managedTrade.exhaustionTriggered === undefined) managedTrade.exhaustionTriggered = false;
               if (managedTrade.beSet === undefined) managedTrade.beSet = false;
 
@@ -520,16 +523,29 @@ export class DerivConnectionManager {
 
               const now = Date.now();
 
+              // --- 15% STOP LOSS (Trava ABSOLUTA de capital) ---
+              // Se a operação atingir 15% de desvalorização em relação ao lote (stake), fecha imediatamente.
+              if (profit <= -0.15 * managedTrade.lot) {
+                this.addUserLog(userId, `🚨 [STOP LOSS] Proteção ativada! Prejuízo atingiu o limite de 15% do valor da ordem.`);
+                closingSet.add(String(managedTrade.id));
+                this.closeTrade(userId, String(managedTrade.id));
+              }
+
+              // --- 40% FINANCIAL TRAILING STOP (Trailing de Lucro) ---
+              // Se o lucro máximo (peakProfit) atingir 40% da ordem, ativa o trailing financeiro.
+              // O fechamento ocorre se o lucro devolver 10% em relação ao valor da ordem a partir do pico.
+              if (managedTrade.peakProfit >= 0.40 * managedTrade.lot) {
+                const lockInThreshold = managedTrade.peakProfit - (0.10 * managedTrade.lot);
+                if (profit <= lockInThreshold) {
+                  this.addUserLog(userId, `🎯 [TRAILING FINANCEIRO] Lucro garantido! Pico foi $${managedTrade.peakProfit.toFixed(2)}, fechado em $${profit.toFixed(2)}.`);
+                  closingSet.add(String(managedTrade.id));
+                  this.closeTrade(userId, String(managedTrade.id));
+                }
+              }
+
               // CORRIGIDO (bug principal): a trava de Stop Loss de 15% do valor da ordem
-              // estava dentro do MESMO if/elseif/else do trailing stop e do breakeven,
-              // atrás do MESMO cooldown de 3s guardado em state.lastSmartCloseTime
-              // (compartilhado com toda proteção do usuário, inclusive de trades
-              // anteriores já fechados). Duas consequências:
-              //   1) Se uma operação anterior tivesse fechado há menos de 3s, a nova
-              //      ordem já nascia com a trava de 15% bloqueada por até 3s.
-              //   2) Por ser if/elseif/else, bastava isHit ou isBreakEvenHit oscilarem
-              //      por ruído de preço para "roubar" o ciclo e o SL de 15% nunca ser
-              //      avaliado naquele tick.
+              // foi movida para fora do if/elseif abaixo para ter avaliação instantânea.
+
               if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
                 if (isHit && avancoPts > buffer) {
                   state.lastSmartCloseTime = now;

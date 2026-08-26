@@ -4,6 +4,7 @@ const conn = new Client();
 
 const localFiles = [
   { local: 'c:\\\\Users\\\\sobit\\\\OneDrive\\\\Área de Trabalho\\\\Fybot pro\\\\server.ts', remote: '/root/fybot/server.ts' },
+  { local: 'c:\\\\Users\\\\sobit\\\\OneDrive\\\\Área de Trabalho\\\\Fybot pro\\\\backend\\\\db\\\\mysql.ts', remote: '/root/fybot/backend/db/mysql.ts' },
   { local: 'c:\\\\Users\\\\sobit\\\\OneDrive\\\\Área de Trabalho\\\\Fybot pro\\\\backend\\\\services\\\\DerivBotEngine.ts', remote: '/root/fybot/backend/services/DerivBotEngine.ts' },
   { local: 'c:\\\\Users\\\\sobit\\\\OneDrive\\\\Área de Trabalho\\\\Fybot pro\\\\backend\\\\services\\\\DerivConnectionManager.ts', remote: '/root/fybot/backend/services/DerivConnectionManager.ts' }
 ];

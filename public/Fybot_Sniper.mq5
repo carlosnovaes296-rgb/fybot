@@ -277,14 +277,21 @@ void ManageTrailingOne(ulong ticket)
            }
         }
 
-      // 2. Trailing Stop Absoluto (Segurar 95% do pico)
-      double trailingStopProfit = peakPrice * 0.95; // Retém 95% do pico
+      // 2. Trailing Stop Absoluto (Trailing Financeiro de Lucro)
+      double margin = 0.0;
+      OrderCalcMargin((ENUM_ORDER_TYPE)dir, _Symbol, PositionGetDouble(POSITION_VOLUME), entry, margin);
+      if(margin <= 0) margin = InpMaxSLDollars * 2; // Fallback caso não consiga calcular a margem
 
-      // Se o lucro atual cair 5% (abaixo ou igual a 95% do pico), fecha a mercado
-      if(posPnL <= trailingStopProfit && posPnL > 0)
+      // Se o lucro máximo (peakPrice) atingir 40% do valor da margem (ordem), ativa o trailing financeiro.
+      // O fechamento ocorre se o lucro devolver 10% da margem a partir do pico.
+      if(peakPrice >= 0.40 * margin)
         {
-         Print("🚨 [Trailing Stop] Queda de 5% detectada! Fechando a mercado para reter $", DoubleToString(posPnL, 2), " (Pico foi $", DoubleToString(peakPrice, 2), ")");
-         trade.PositionClose(ticket);
+         double lockInThreshold = peakPrice - (0.10 * margin);
+         if(posPnL <= lockInThreshold && posPnL > 0)
+           {
+            Print("🎯 [TRAILING FINANCEIRO] Lucro garantido! Pico foi $", DoubleToString(peakPrice, 2), ", fechado em $", DoubleToString(posPnL, 2));
+            trade.PositionClose(ticket);
+           }
         }
      }
   }

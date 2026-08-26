@@ -5,7 +5,7 @@ export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
 
     // App ID registrado em https://api.deriv.com/dashboard
-    private appId = process.env.DERIV_APP_ID || '33TVM6cBQ9GfSjbwQHHdE';
+    private appId = process.env.DERIV_APP_ID || '34bOZbDxJP7IkYh3EO6X0';
     private symbol = 'frxXAUUSD';
     private isConnected = false;
     private isAuthorized = false;
@@ -86,8 +86,8 @@ export class DerivBotEngineEMA {
         }
         this.currentToken = token;
 
-        console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=\${this.appId})...`);
-        let finalWsUrl = `wss://ws.derivws.com/websockets/v3?app_id=33TVM6cBQ9GfSjbwQHHdE&l=PT`;
+        console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=1089)...`);
+        let finalWsUrl = `wss://ws.derivws.com/websockets/v3?app_id=1089&l=PT`;
         let isMagic = false;
 
         if (this.currentToken) {

@@ -5,11 +5,13 @@ export class DerivBotEngineEMA {
     private ws: NodeWebSocket | null = null;
 
     // App ID registrado em https://api.deriv.com/dashboard
-    private appId = process.env.DERIV_APP_ID || '33TVM6cBQ9GfSjbwQHHdE';
+    private appId = process.env.DERIV_APP_ID || '34bOZbDxJP7IkYh3EO6X0';
     private symbol = 'frxXAUUSD';
     private isConnected = false;
     private isAuthorized = false;
     private currentToken = '';
+    private m15Candles: Candle[] = [];
+    private m30Candles: Candle[] = [];
     public riskProfile?: string = 'CONSERVATIVE';
     public isAdmin: boolean = false;
 
@@ -24,9 +26,23 @@ export class DerivBotEngineEMA {
     // [CORRIGIDO] pongTimeout precisa viver no escopo da instancia, nao dentro de connectWithToken,
     // senao cada nova conexao perde a referencia do timeout anterior e o watchdog nunca funciona.
     private pongTimeout: NodeJS.Timeout | null = null;
-    private readonly PONG_TIMEOUT_MS = 15000;
+    private readonly PING_INTERVAL_MS = 10000;
+    // CORRIGIDO (bug watchdog): PONG_TIMEOUT_MS estava em 15000 (15s), maior que o
+    // PING_INTERVAL_MS de 10s. Como o pongTimeout e recriado (clearTimeout + setTimeout)
+    // a CADA envio de ping, o timeout anterior (que só venceria aos 15s) nunca chegava a
+    // disparar: ele sempre era cancelado 5s antes pelo ciclo seguinte do setInterval,
+    // independente de o servidor estar respondendo ou não. Na prática o watchdog nunca
+    // detectava uma conexão realmente morta. Agora o timeout é menor que o intervalo entre
+    // pings, para que ele tenha chance de vencer antes do próximo ping resetá-lo.
+    private readonly PONG_TIMEOUT_MS = 8000;
 
-    private candlesM15: Candle[] = [];
+    // [NOVO/CORRIGIDO] Sem essa flag, chamar disconnect() não impedia o handler de 'close'
+    // (registrado em connectWithToken) de agendar uma reconexão automática 5s depois —
+    // ou seja, "desconectar" não desconectava de verdade. Agora o handler de 'close'
+    // verifica essa flag antes de tentar reconectar, e connectWithToken() a reseta
+    // sempre que uma nova conexão é iniciada de propósito.
+    private manualDisconnect: boolean = false;
+
     private ATR_PERIOD = 14;
 
     private lastTrend: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
@@ -37,14 +53,14 @@ export class DerivBotEngineEMA {
     public currentEma21: number = 0;
 
     public getMarketState() {
-        if (this.candlesM15.length < 3) return null;
+        if (this.m15Candles.length < 3) return null;
 
         // Retorna as 3 últimas velas fechadas para análise de exaustão
-        const len = this.candlesM15.length;
+        const len = this.m15Candles.length;
         // len - 1 = vela atual (aberta), len - 2 = última fechada
-        const lastClosedCandle = this.candlesM15[len - 2];
-        const prevCandle1 = this.candlesM15[len - 3];
-        const prevCandle2 = this.candlesM15[len - 4] || prevCandle1;
+        const lastClosedCandle = this.m15Candles[len - 2];
+        const prevCandle1 = this.m15Candles[len - 3];
+        const prevCandle2 = this.m15Candles[len - 4] || prevCandle1;
 
         return {
             ema8: this.currentEma8,
@@ -61,6 +77,10 @@ export class DerivBotEngineEMA {
     public onAuthorized?: (accountInfo: any) => void;
 
     public disconnect() {
+        // [CORRIGIDO] marca a desconexão como intencional ANTES do terminate(), para que
+        // o handler de 'close' original não agende uma reconexão automática por engano.
+        this.manualDisconnect = true;
+
         if (this.ws) {
             console.log('[DerivBotEngine] Forcando desconexao via comando do usuario...');
             const wsRef = this.ws;
@@ -85,6 +105,9 @@ export class DerivBotEngineEMA {
             this.disconnect();
         }
         this.currentToken = token;
+        // [CORRIGIDO] toda nova tentativa de conexão intencional (manual ou automática
+        // via connectWithToken) limpa a flag de desconexão manual.
+        this.manualDisconnect = false;
 
         console.log(`[DerivBotEngine] Conectando ao feed da Deriv (app_id=${this.appId})...`);
         // Deriv WebSocket API requires app_id to be a valid numeric integer (e.g., 1089).
@@ -137,7 +160,7 @@ export class DerivBotEngineEMA {
                             token: this.currentToken.replace(/^Bearer\s+/i, '')
                         };
                         console.log(`[DerivBotEngine] Solicitando OTP em: ${otpUrl} com body:`, otpBody);
-                        
+
                         const resOtp = await fetch(otpUrl, {
                             method: 'POST',
                             headers: { ...baseHeaders, 'Authorization': authHeader },
@@ -191,13 +214,14 @@ export class DerivBotEngineEMA {
         }
 
         this.ws.on('open', () => {
-            console.log("[DerivBotEngine] Conectado. Autorizando com token da conta...");
+            console.log(`[DerivBotEngine] Feed conectado. Autorizando conta...`);
+            if (this.onLog) this.onLog(`📊 Feed conectado. Autorizando conta...`);
+
+            this.isConnected = true;
+
             this.enginePingInterval = setInterval(() => {
                 if (this.ws && this.ws.readyState === this.ws.OPEN) {
                     this.ws.send(JSON.stringify({ ping: 1 }));
-                    // [CORRIGIDO] agora o watchdog realmente arma um timeout: se o 'pong'
-                    // (msg_type 'ping' de resposta) nao chegar a tempo, forcamos o terminate()
-                    // do socket para acionar a reconexao automatica no handler de 'close'.
                     if (this.pongTimeout) clearTimeout(this.pongTimeout);
                     this.pongTimeout = setTimeout(() => {
                         console.warn('[DerivBotEngine] Pong nao recebido a tempo. Encerrando socket para reconectar...');
@@ -205,14 +229,8 @@ export class DerivBotEngineEMA {
                         this.ws?.terminate();
                     }, this.PONG_TIMEOUT_MS);
                 }
-            }, 10000);
+            }, this.PING_INTERVAL_MS);
 
-            // [CORRIGIDO] isConnected passa a refletir apenas que o socket abriu.
-            // isAuthorized so vira true quando a Deriv confirmar o 'authorize' na mensagem,
-            // e requestCandleHistory() so e chamado apos essa confirmacao (ver 'message' abaixo).
-            this.isConnected = true;
-
-            if (this.onLog) this.onLog('📊 Feed conectado. Autorizando conta...');
             if (this.ws && this.ws.readyState === this.ws.OPEN) {
                 this.ws.send(JSON.stringify({ authorize: this.currentToken.replace(/^Bearer\s+/i, '') }));
             }
@@ -223,7 +241,6 @@ export class DerivBotEngineEMA {
                 const response = JSON.parse(data);
 
                 if (response.msg_type === 'ping') {
-                    // Resposta (pong) do servidor ao nosso ping
                     if (this.pongTimeout) {
                         clearTimeout(this.pongTimeout);
                         this.pongTimeout = null;
@@ -235,9 +252,6 @@ export class DerivBotEngineEMA {
                     console.error('[DerivBotEngine] Erro da Deriv:', response.error);
                     if (this.onLog) this.onLog(`[SYS] Erro Deriv: ${response.error.message || JSON.stringify(response.error)}`);
                     if (response.msg_type === 'authorize') {
-                        // [CORRIGIDO] antes disso o socket ficava pendurado (isConnected=true,
-                        // isAuthorized=false, sem tentativa de reconexao). Agora forcamos o
-                        // terminate() para cair no fluxo padrao de reconexao em 5s.
                         this.isAuthorized = false;
                         console.error('[DerivBotEngine] Falha na autorizacao. Encerrando socket para nova tentativa...');
                         this.ws?.terminate();
@@ -250,8 +264,6 @@ export class DerivBotEngineEMA {
                     console.log(`[DerivBotEngine] Autorizado com sucesso. Conta: ${response.authorize?.loginid}`);
                     if (this.onLog) this.onLog(`✅ Conta autorizada: ${response.authorize?.loginid}`);
                     if (this.onAuthorized) this.onAuthorized(response.authorize);
-                    // [CORRIGIDO] o historico de velas so e pedido depois da autorizacao confirmada,
-                    // e nao mais otimisticamente no 'open'.
                     this.requestCandleHistory();
                     return;
                 }
@@ -260,13 +272,16 @@ export class DerivBotEngineEMA {
                     const mappedCandles = response.candles.map((c: any) => ({
                         epoch: c.epoch, open: c.open, high: c.high, low: c.low, close: c.close
                     }));
-                    if (response.req_id === 300) {
-                        this.candlesM15 = mappedCandles;
-                        console.log(`[DerivBotEngine] Carregado historico M15: ${this.candlesM15.length} velas`);
-                        if (this.candlesM15.length > 50 && this.onLog) {
+                    if (response.req_id === 15) {
+                        this.m15Candles = mappedCandles;
+                        console.log(`[DerivBotEngine] Carregado historico M15: ${this.m15Candles.length} velas`);
+                        if (this.m15Candles.length > 50 && this.onLog) {
                             this.onLog(`[SYS] Histórico M15 carregado! Analisando mercado imediatamente...`);
                             this.analyzeMarket();
                         }
+                    } else if (response.req_id === 30) {
+                        this.m30Candles = mappedCandles;
+                        console.log(`[DerivBotEngine] Carregado historico M30: ${this.m30Candles.length} velas`);
                     }
                 }
 
@@ -280,11 +295,12 @@ export class DerivBotEngineEMA {
                         close: Number(ohlc.close)
                     };
 
-                    const ohlcGran = Number(ohlc.granularity);
-                    if (ohlcGran === 900) {
-                        this.updateCandleSeries(this.candlesM15, candle);
-                        this.analyzeMarket(); // Analisa em todo tick para entradas rápidas
+                    if (response.req_id === 15) {
+                        this.updateCandleSeries(this.m15Candles, candle);
+                    } else if (response.req_id === 30) {
+                        this.updateCandleSeries(this.m30Candles, candle);
                     }
+                    this.analyzeMarket();
                 }
             } catch (err) {
                 console.error('[DerivBotEngine] Erro ao parsear mensagem:', err);
@@ -299,13 +315,20 @@ export class DerivBotEngineEMA {
                 clearTimeout(this.pongTimeout);
                 this.pongTimeout = null;
             }
-            console.log('[DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...');
-            if (this.onLog) this.onLog(`⚠️ Conexao com feed perdida. Reconectando em 5s...`);
             this.isConnected = false;
             this.isAuthorized = false;
             this.ws = null;
+
+            if (this.manualDisconnect) {
+                console.log('[DerivBotEngine] Desconexao manual — reconexao automatica cancelada.');
+                if (this.onLog) this.onLog('⏸️ Conexao encerrada pelo usuario.');
+                return;
+            }
+
+            console.log('[DerivBotEngine] Conexao com feed fechada. Tentando reconectar em 5s...');
+            if (this.onLog) this.onLog(`⚠️ Conexao com feed perdida. Reconectando em 5s...`);
             setTimeout(() => {
-                if (this.currentToken) this.connectWithToken(this.currentToken);
+                if (this.currentToken && !this.manualDisconnect) this.connectWithToken(this.currentToken);
             }, 5000);
         });
 
@@ -327,19 +350,29 @@ export class DerivBotEngineEMA {
     }
 
     private requestCandleHistory() {
+        // Assina o feed de M15 (900s)
         this.ws?.send(JSON.stringify({
             ticks_history: this.symbol,
             end: 'latest',
-            count: 350,
+            count: 200,
             style: 'candles',
             granularity: 900,
             subscribe: 1,
-            req_id: 300
+            req_id: 15
+        }));
+
+        // Assina o feed de M30 (1800s)
+        this.ws?.send(JSON.stringify({
+            ticks_history: this.symbol,
+            end: 'latest',
+            count: 200,
+            style: 'candles',
+            granularity: 1800,
+            subscribe: 1,
+            req_id: 30
         }));
 
         setTimeout(() => {
-            // [CORRIGIDO] estava assinando ticks de 'R_100' (Indice de Volatilidade),
-            // sem relacao com o ativo operado. Corrigido para o simbolo real do robo.
             if (this.ws?.readyState === 1) {
                 this.ws?.send(JSON.stringify({
                     ticks: this.symbol,
@@ -370,66 +403,71 @@ export class DerivBotEngineEMA {
     private analyzeMarket() {
         if (!this.isAuthorized) return;
 
-        this.onLog?.(`🔍 Analisando mercado (M15) agora...`);
-
-        if (this.candlesM15.length < 50) {
-            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência M15`);
+        if (this.m15Candles.length < 50 || this.m30Candles.length < 50) {
+            this.onLog?.(`[Aguardando] Faltam velas no histórico para calcular tendência (M15/M30)`);
             return;
         }
 
-        const closedCandlesM15 = this.candlesM15.slice(0, -1);
+        const closedCandlesM15 = this.m15Candles.slice(0, -1);
         const closesM15 = closedCandlesM15.map(c => c.close);
         const ema8M15 = Indicators.ema(closesM15, 8)[closesM15.length - 1];
         const ema21M15 = Indicators.ema(closesM15, 21)[closesM15.length - 1];
         this.currentEma8 = ema8M15;
         this.currentEma21 = ema21M15;
 
-        const lastClosedM15 = closedCandlesM15[closedCandlesM15.length - 1];
-        
-        // Usa o preço real da vela atual (aberta) para disparar entradas no exato momento
-        const currentUnclosedCandle = this.candlesM15[this.candlesM15.length - 1];
-        const currentPrice = currentUnclosedCandle.close;
-
         let trendM15: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
         if (ema8M15 > ema21M15) trendM15 = 'TREND_UP';
         else if (ema8M15 < ema21M15) trendM15 = 'TREND_DOWN';
+
+        // --- Calcula M30 ---
+        const closedCandlesM30 = this.m30Candles.slice(0, -1);
+        const closesM30 = closedCandlesM30.map(c => c.close);
+        const ema8M30 = Indicators.ema(closesM30, 8)[closesM30.length - 1];
+        const ema21M30 = Indicators.ema(closesM30, 21)[closesM30.length - 1];
+        
+        let trendM30: 'TREND_UP' | 'TREND_DOWN' | 'LATERAL' = 'LATERAL';
+        if (ema8M30 > ema21M30) trendM30 = 'TREND_UP';
+        else if (ema8M30 < ema21M30) trendM30 = 'TREND_DOWN';
 
         if (trendM15 !== this.lastTrend) {
             this.lastTrend = trendM15;
             if (this.onRegimeChange) this.onRegimeChange(trendM15);
         }
 
+        // Usa o preço real da vela atual (aberta) do M15 para disparar entradas no exato momento
+        const currentUnclosedCandle = this.m15Candles[this.m15Candles.length - 1];
+        const currentPrice = currentUnclosedCandle.close;
+
         const now = Date.now();
         const shouldLog = now - this.lastMonitorLogTime > 60000;
-        
+
         // --- Filtro de Horário Operacional ---
         const d = new Date();
         const localTimeMs = d.getTime() + (this.UTC_OFFSET_HOURS * 3600000);
         const localDate = new Date(localTimeMs);
         const currentDay = localDate.getUTCDay(); // 0=Domingo, 1=Segunda ... 5=Sexta, 6=Sábado
         const currentHour = localDate.getUTCHours();
-        
+
         const isTimeValid = (currentHour >= this.TRADING_START_HOUR || currentHour <= this.TRADING_END_HOUR) && (currentDay >= 1 && currentDay <= 5);
-        
-        // --- Filtro de Mercado Lateral (Boca de Jacaré) ---
-        const emaDist = Math.abs(ema8M15 - ema21M15);
-        const isLateral = emaDist < 0.50;
+
+        // --- Filtro de Mercado Lateral Removido ---
+        // A trava de "Boca de Jacaré" foi removida a pedido do usuário.
+        // O filtro natural agora é o alinhamento das tendências de M15 e M30.
 
         if (shouldLog) { // Loga a cada 60s
-            let statusLog = `M15: ${trendM15} | Preço: ${currentPrice.toFixed(2)} | EMA8: ${ema8M15.toFixed(2)} | EMA21: ${ema21M15.toFixed(2)}`;
-            if (!isTimeValid) statusLog = `⏳ Fora do Horário (Atual: ${currentHour}h) | ` + statusLog;
-            else if (isLateral) statusLog = `🚧 Mercado Lateral (Abertura: $${emaDist.toFixed(2)}) | ` + statusLog;
-            
-            this.onLog?.(`🧠 [Fybot Sniper API] ${statusLog}`);
+            let statusLog = `M15: ${trendM15} | M30: ${trendM30} | Preço: ${currentPrice.toFixed(2)}`;
+            if (!isTimeValid) statusLog = `⏰ Fora do horário operacional | ` + statusLog;
+
+            this.onLog?.(`🤖 [Fybot Sniper API] ${statusLog}`);
             this.lastMonitorLogTime = now;
         }
 
-        if (!isTimeValid || isLateral) {
+        if (!isTimeValid) {
             return;
         }
 
         // --- Lógica Fybot Sniper API: Pullback na EMA 8 ---
-        const MAX_PROXIMITY_USD = 7.00; // Equivalente a InpEma8ProximityPoints = 700.0 no XAUUSD (Modo Meio-Termo)
+        const MAX_PROXIMITY_USD = 2.00; // [AJUSTADO] Um meio termo perfeito para pegar na veia da média
         const distAbs = Math.abs(currentPrice - ema8M15);
         const isNearEma8 = distAbs <= MAX_PROXIMITY_USD;
 
@@ -441,15 +479,16 @@ export class DerivBotEngineEMA {
         // SL Protetivo Inicial (0.15%). O TP é 0 (livre) para o Trailing Stop gerenciar.
         const percDistSL = currentPrice * 0.0015; // 0.15%
 
-        if (trendM15 === 'TREND_UP' && isNearEma8 && currentPrice >= ema8M15) {
+        // [NOVO] Alinhamento M15 e M30 obrigatório
+        if (trendM15 === 'TREND_UP' && trendM30 === 'TREND_UP' && isNearEma8) {
             signal = 'BUY';
-            reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
+            reason = `[Fybot Sniper API] Compra | Pullback na EMA 8 M15. Tendência (M15 e M30) alinhadas para ALTA. Distância: $${distAbs.toFixed(2)}`;
             engineTp = 0; // Alvo livre
             engineSl = currentPrice - percDistSL;
         }
-        else if (trendM15 === 'TREND_DOWN' && isNearEma8 && currentPrice <= ema8M15) {
+        else if (trendM15 === 'TREND_DOWN' && trendM30 === 'TREND_DOWN' && isNearEma8) {
             signal = 'SELL';
-            reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 detectado. Distância: $${distAbs.toFixed(2)}`;
+            reason = `[Fybot Sniper API] Venda | Pullback na EMA 8 M15. Tendência (M15 e M30) alinhadas para BAIXA. Distância: $${distAbs.toFixed(2)}`;
             engineTp = 0; // Alvo livre
             engineSl = currentPrice + percDistSL;
         }
