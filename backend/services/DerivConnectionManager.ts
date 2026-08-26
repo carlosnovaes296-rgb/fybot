@@ -106,7 +106,7 @@ export class DerivConnectionManager {
     const tokenStart = tokenToUse.substring(0, 8);
     this.addUserLog(userId, `🔄 Iniciando conexão [Modo ${user.activeAccountType}] usando Token PAT: ${tokenStart}...`);
 
-    const appIdString = "33TVM6cBQ9GfSjbwQHHdE";
+    const appIdString = "34bOZbDxJP7IkYh3EO6X0";
     let wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appIdString}&l=PT`;
     let needsAuthCommand = true;
     let accountIdToUse: string | undefined = undefined;
