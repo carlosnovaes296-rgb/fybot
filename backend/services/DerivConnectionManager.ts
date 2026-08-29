@@ -502,24 +502,33 @@ export class DerivConnectionManager {
               // 3. Define a folga do Trailing Stop (Apenas sobre o Lucro)
               const avancoPts = managedTrade.type === 'BUY' ? (managedTrade.peakPrice - managedTrade.openPrice) : (managedTrade.openPrice - managedTrade.peakPrice);
 
+              // Configurações do Trailing Stop Clássico (Conversão: 100 pontos no MT5 = $1.00 dólar na API)
+              const beArm = 3.00;      // 300 pontos: Ativa Breakeven
+              const beOffset = 0.20;   // 20 pontos: Distância do Breakeven da entrada
+              const trailDist = 3.00;  // 300 pontos: Distância máxima do trailing
+              const trailStep = 0.20;  // 20 pontos: Passo para mover o stop
+              
               // Inicialmente, o robô não coloca nenhuma trava curta. Ele deixa a ordem livre para balançar no negativo.
               let buffer = 999999; 
 
-              // Assim que a ordem engatar uma SUPER tendência (15.00 pontos de avanço), ligamos o Trailing Stop!
-              if (avancoPts >= 15.00) {
-                // A distância de fechamento será 35% do lucro máximo (com um respiro enorme de 8.00 pontos para não ser violinado)
-                buffer = Math.max(8.00, avancoPts * 0.35);
+              // Lógica de Trailing Stop Clássico
+              if (avancoPts >= trailDist) {
+                // O trailing stop só se move em blocos de 'trailStep' (0.20) para simular o "passo" e não sufocar.
+                // Ex: Se andou 1.25, floor( (1.25 - 1.00) / 0.20 ) = floor(1.25) = 1. Se andou 1.05 = 0.
+                const extraSteps = Math.floor((avancoPts - trailDist) / trailStep);
+                buffer = trailDist - (extraSteps * trailStep);
               }
 
-              // 4. Piso de Breakeven (Só protege no zero a zero quando andar pelo menos 5.00 pontos a favor)
-              if (avancoPts >= 5.00 && !managedTrade.beSet) {
+              // 4. Piso de Breakeven Clássico
+              if (avancoPts >= beArm && !managedTrade.beSet) {
                 managedTrade.beSet = true;
-                this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro protegido. O Stop Loss foi movido para o preço de entrada.`);
+                this.addUserLog(userId, `🛡️ [BREAKEVEN] Lucro atingiu $${beArm.toFixed(2)}. Stop Loss protegido na entrada (+$${beOffset.toFixed(2)}).`);
               }
 
               const newLevel = managedTrade.type === 'BUY' ? (managedTrade.peakPrice - buffer) : (managedTrade.peakPrice + buffer);
               const isHit = managedTrade.type === 'BUY' ? (currentSpot <= newLevel) : (currentSpot >= newLevel);
-              const isBreakEvenHit = managedTrade.beSet && (managedTrade.type === 'BUY' ? (currentSpot <= managedTrade.openPrice + 0.10) : (currentSpot >= managedTrade.openPrice - 0.10));
+              const beLevel = managedTrade.type === 'BUY' ? (managedTrade.openPrice + beOffset) : (managedTrade.openPrice - beOffset);
+              const isBreakEvenHit = managedTrade.beSet && (managedTrade.type === 'BUY' ? (currentSpot <= beLevel) : (currentSpot >= beLevel));
 
               const now = Date.now();
 
@@ -531,30 +540,18 @@ export class DerivConnectionManager {
                 this.closeTrade(userId, String(managedTrade.id));
               }
 
-              // --- 40% FINANCIAL TRAILING STOP (Trailing de Lucro) ---
-              // Se o lucro máximo (peakProfit) atingir 40% da ordem, ativa o trailing financeiro.
-              // O fechamento ocorre se o lucro devolver 10% em relação ao valor da ordem a partir do pico.
-              if (managedTrade.peakProfit >= 0.40 * managedTrade.lot) {
-                const lockInThreshold = managedTrade.peakProfit - (0.10 * managedTrade.lot);
-                if (profit <= lockInThreshold) {
-                  this.addUserLog(userId, `🎯 [TRAILING FINANCEIRO] Lucro garantido! Pico foi $${managedTrade.peakProfit.toFixed(2)}, fechado em $${profit.toFixed(2)}.`);
-                  closingSet.add(String(managedTrade.id));
-                  this.closeTrade(userId, String(managedTrade.id));
-                }
-              }
-
-              // CORRIGIDO (bug principal): a trava de Stop Loss de 15% do valor da ordem
-              // foi movida para fora do if/elseif abaixo para ter avaliação instantânea.
+              // O Trailing Stop Financeiro antigo foi removido, pois agora temos o Trailing Stop Clássico atuando sobre o preço!
 
               if (!state.lastSmartCloseTime || now - state.lastSmartCloseTime > 3000) {
-                if (isHit && avancoPts > buffer) {
+                if (isHit && avancoPts >= trailDist) {
                   state.lastSmartCloseTime = now;
-                  this.addUserLog(userId, `🏆 [TRAILING STOP] Fechando operação a favor do lucro. Pico: $${managedTrade.peakPrice.toFixed(2)}`);
+                  this.addUserLog(userId, `📈 [TRAILING STOP] Preço recuou $${trailDist.toFixed(2)} a partir do pico. Operação fechada a favor do lucro!`);
                   closingSet.add(String(managedTrade.id));
                   this.closeTrade(userId, String(managedTrade.id));
-                } else if (isBreakEvenHit) {
+                } else if (isBreakEvenHit && avancoPts < trailDist) {
+                  // Só executa o fechamento por Breakeven se ainda não chegou no nível de acionar o Trailing Stop real
                   state.lastSmartCloseTime = now;
-                  this.addUserLog(userId, `🛡️ [SAÍDA BREAKEVEN] A operação recuou até a entrada e foi fechada no zero a zero.`);
+                  this.addUserLog(userId, `🛡️ [SAÍDA BREAKEVEN] A operação recuou até a proteção de Breakeven. Fechada com segurança.`);
                   closingSet.add(String(managedTrade.id));
                   this.closeTrade(userId, String(managedTrade.id));
                 }

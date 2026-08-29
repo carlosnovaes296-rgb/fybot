@@ -2228,16 +2228,7 @@ export default function App() {
 
                 </div>
 
-                {/* TradingView Advanced Chart */}
-                <div className="w-full bg-[#000000] border border-white/5 rounded-3xl p-1 mb-8 overflow-hidden h-[450px] lg:h-[550px] shadow-2xl shadow-green-500/10">
-                  <div className="px-6 py-3 border-b border-[#111111] flex items-center gap-2">
-                    <TrendingUp size={18} className="text-[#00FF00]" />
-                    <span className="text-sm font-bold text-white tracking-widest uppercase">XAUUSD (Ouro) - M15 - ESTILO MT5</span>
-                  </div>
-                  <div style={{ width: '100%', height: 'calc(100% - 45px)' }}>
-                     <TradingChart trades={stats.trades || []} symbol={stats.activeSymbol?.toUpperCase() || 'XAUUSD'} />
-                  </div>
-                </div>
+
 
                 {/* Bottom Section: Execution Table & Live Console */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">

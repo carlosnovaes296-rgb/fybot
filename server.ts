@@ -1872,19 +1872,19 @@ async function startServer() {
         }
 
         const expiryDate = new Date(baseDate);
-        let days = 30;
-        let type = (payment.planType || 'PRO').toUpperCase();
-        if (type.includes('BÁSICA') || type.includes('BASIC')) days = 30;
-        else if (type === 'PRO' || type.includes('PRO')) days = 60;
-        if (type.includes('INSTITUCIONAL') || type.includes('PARTNER')) days = 90;
-        if (type.includes('BOT PRO') || type.includes('ENTERPRISE') || type.includes('180')) days = 180;
-        if (type.includes('LIFETIME') || type.includes('VITALÍCIO') || type.includes('VITALICIO')) days = 36500;
-
-        // Se for por valor manual sem planType
-        if (payment.amount >= 100 && days === 30) { days = 180; type = 'BOT PRO'; }
-        else if (payment.amount >= 50 && days === 30) { days = 90; type = 'INSTITUCIONAL PRO'; }
-        else if (payment.amount >= 20 && days === 30) { days = 60; type = 'PRO'; }
-        else if (payment.amount >= 10 && days === 30) { days = 30; type = 'BASIC'; }
+        let days = 20;
+        let type = (payment.planType || '').toUpperCase();
+        if (type.includes('BÁSICA') || type.includes('BASIC')) { days = 20; }
+        else if (type === 'PRO' || type.includes('PRO')) { days = 45; }
+        else if (type.includes('INSTITUCIONAL') || type.includes('PARTNER')) { days = 90; }
+        else if (type.includes('BOT PRO') || type.includes('ENTERPRISE') || type.includes('180')) { days = 180; }
+        else if (type.includes('LIFETIME') || type.includes('VITALÍCIO') || type.includes('VITALICIO')) { days = 36500; }
+        else {
+          if (payment.amount >= 100) { days = 180; type = 'BOT PRO'; }
+          else if (payment.amount >= 50) { days = 90; type = 'INSTITUCIONAL PRO'; }
+          else if (payment.amount >= 20) { days = 45; type = 'PRO'; }
+          else { days = 20; type = 'BÁSICA'; }
+        }
 
         expiryDate.setDate(expiryDate.getDate() + days);
 

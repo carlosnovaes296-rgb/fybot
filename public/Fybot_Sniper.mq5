@@ -1,11 +1,37 @@
 //+------------------------------------------------------------------+
 //|                                                Fybot_Sniper.mq5 |
 //|                                           1x1 Scalper Dinâmico   |
-//|                                  (Versão corrigida - v2.02)      |
+//|                                  (Versão corrigida - v2.05)      |
+//|                                                                    |
+//| CORREÇÕES NESTA VERSÃO (em relação à v2.02 com validação):       |
+//| 1) Validação de licença em OnInit() era "fail-open": só          |
+//|    bloqueava em 404/400/403 e tratava QUALQUER outro código      |
+//|    (500, 401, 429, etc.) como licença válida -> corrigido para   |
+//|    fail-closed (só 200 é aceito como válido).                    |
+//|    ATENÇÃO: essa validação usa o MESMO endpoint (InpServerUrl)   |
+//|    do webhook de telemetria (SyncWithServer). Confirme com o     |
+//|    backend se essa rota realmente valida a licença ou só recebe  |
+//|    dados - senão a checagem pode sempre "passar" na prática.     |
+//| 2) ManageTrailingOne() não validava a distância mínima de stop   |
+//|    da corretora (SYMBOL_TRADE_STOPS_LEVEL) -> PositionModify     |
+//|    podia falhar silenciosamente perto do preço. Adicionado.      |
+//| 3) IsExhaustion() estava implementada mas nunca era chamada ->   |
+//|    agora fecha a posição lucrativa cedo ao detectar exaustão.    |
+//| 4) IsAccumulationZone() estava implementada mas nunca era        |
+//|    chamada -> agora bloqueia novas entradas em lateralização.    |
+//| 5) Loop de trailing usava índice crescente; agora decrescente    |
+//|    (defensivo, já que o item 3 pode fechar posições no loop).    |
+//| 6) Variável não usada exhaustionTriggered removida.              |
+//| 7) lastM5CandleTime renomeada para lastM15CandleTime (o EA       |
+//|    sempre operou em M15).                                        |
+//|                                                                    |
+//| v2.05: adicionada checagem do CORPO da resposta de validação de  |
+//| licença (campo "valid"), como segunda trava além do código HTTP, |
+//| já que o endpoint usado pode não ser uma rota de validação real. |
 //+------------------------------------------------------------------+
 #property copyright "Fybot Sniper"
 #property link      "https://fybot.life"
-#property version   "2.02"
+#property version   "2.05"
 
 #include <Trade\Trade.mqh>
 
@@ -21,36 +47,48 @@ input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do S
 input group "=== Configurações da Estratégia ==="
 input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
 input double             InpRiskPct = 1.0;           // Volume da Banca (%) - Se Dinâmico
-input double   InpMaxSLDollars = 20.0;       // Stop Loss Máximo por Ordem ($)
+input double   InpMaxSLDollars = 10.0;       // Stop Loss Máximo por Ordem ($)
 input double   InpDailyTargetPct = 10.0;     // Meta Diária de Lucro (%)
+input double   InpSLPercent = 30.0;          // Stop Loss (% do Preço)
+input double   InpTPPercent = 10.0;          // Take Profit (% do Preço)
 input ulong    InpMagicNumber = 777;         // Magic Number
 input int      InpSlippage = 10;             // Slippage Máximo
 
+input group "=== Gestão de Risco (Stop Loss ATR) ==="
+input bool     InpUseAtrStop = true;         // Usar Stop Loss baseado em ATR?
+input int      InpAtrPeriod = 14;            // Período do ATR
+input double   InpAtrMultiplier = 2.0;       // Multiplicador do ATR (Ex: 2.0x a volatilidade)
+
+input group "=== Filtro de Tendência Macro ==="
+input bool     InpUseEma200 = false;         // Usar Filtro EMA 200 (Tendência Longa)
+
 input group "=== Gestão de Risco (Trailing/Exaustão) ==="
-input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para Breakeven
-input double   InpBreakEvenOffsetPoints = 10.0;    // Distância do Breakeven (pontos)
-input double   InpTrailMultiplier = 1.5;           // Multiplicador do Trailing
-input int      InpTrailLookback = 5;               // Velas para Volatilidade do Trailing
-input double   InpExhaustionVolumeDropPct = 30.0;  // Queda de Volume (%) para Exaustão
-input double   InpExhaustionWickRatio = 0.5;       // Proporção do Pavio para Exaustão
-input int      InpConsolidationLookback = 5;       // Velas para detectar Consolidação
+input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para ativar Breakeven (Antes: 50)
+input double   InpBreakEvenOffsetPoints = 20.0;    // Distância do Breakeven da entrada (pontos)
+input double   InpTrailingStopPoints = 50.0;       // Distância do Trailing Stop (pontos) (Antes: 100)
+input double   InpTrailingStepPoints = 5.0;        // Passo do Trailing Stop (pontos)
+input double   InpExhaustionVolumeDropPct = 5.0;   // Queda de Volume (%) para Exaustão
+input double   InpExhaustionWickRatio = 1.0;       // Proporção do Pavio para Exaustão
+input int      InpConsolidationLookback = 3;       // Velas para detectar Consolidação
 input double   InpConsolidationRangeRatio = 1.2;   // Razão de consolidação (range)
-input double   InpConsolidationEmaGapRatio = 0.5;  // Gap máximo entre EMAs na consolidação
+input double   InpConsolidationEmaGapRatio = 1.0;  // Gap máximo entre EMAs na consolidação
 
 CTrade         trade;
 double         initialBalance = 0;
 double         currentLotSize = 0.01;
-datetime       lastM5CandleTime = 0;
+datetime       lastM15CandleTime = 0;
 datetime       midnightTime = 0;
 int            currentDay = -1; // usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
 double         peakPrice = 0;
-bool           exhaustionTriggered = false;
+datetime       lastLogTime = 0; // Added for log control
 
 // Handles de Indicadores
 int            handleEma21;
 int            handleEma8;
+int            handleEma200;
+int            handleAtr;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -62,6 +100,50 @@ int OnInit()
       Print("❌ ERRO: Chave de Licença não informada! O robô não pode ser iniciado.");
       return(INIT_FAILED);
      }
+
+   // --- Validação da Licença no Servidor ---
+   // FIX: agora é fail-closed - só o código HTTP 200 é aceito como válido.
+   // Antes, qualquer código fora de {404,400,403,-1} (ex.: 500, 401, 429)
+   // era tratado como licença válida, o que é perigoso para um gate de licença.
+   Print("🔄 Validando licença no servidor...");
+   string json_auth = "{\"license\":\"" + InpLicenseKey + "\"}";
+   char post_auth[], result_auth[];
+   string result_headers_auth;
+   string headers_auth = "Content-Type: application/json\r\n";
+   StringToCharArray(json_auth, post_auth, 0, WHOLE_ARRAY, CP_UTF8);
+   ArrayResize(post_auth, ArraySize(post_auth) - 1);
+
+   int res_auth = WebRequest("POST", InpServerUrl, headers_auth, 5000, post_auth, result_auth, result_headers_auth);
+
+   if(res_auth == -1)
+     {
+      Print("⚠️ AVISO: Falha de comunicação com o servidor de licenças. Verifique se a URL está na lista Permitida (Ferramentas > Opções > Expert Advisors). Erro: ", GetLastError());
+      return(INIT_FAILED);
+     }
+   else if(res_auth != 200)
+     {
+      Print("❌ ERRO: Licença Inválida ou Expirada! O robô será bloqueado. (Code: ", res_auth, ")");
+      return(INIT_FAILED);
+     }
+
+   // FIX: segunda trava, checando o CORPO da resposta, não só o status HTTP.
+   // Se o endpoint sempre responde 200 (por ser um webhook genérico de telemetria
+   // e não uma rota de validação de verdade), o código HTTP sozinho nunca vai
+   // bloquear ninguém. Se o servidor devolver um campo "valid" no JSON, ele é
+   // respeitado aqui. Se o corpo não tiver esse campo (endpoint ainda não
+   // devolve isso), o EA cai no comportamento antigo (aceita no 200) para não
+   // quebrar quem já está rodando - mas o ideal é o backend passar a responder
+   // com "valid":true/false explicitamente (ver passo 3 da explicação).
+   string bodyAuth = CharArrayToString(result_auth, 0, WHOLE_ARRAY, CP_UTF8);
+   StringToLower(bodyAuth);
+   if(StringFind(bodyAuth, "\"valid\"") >= 0 && StringFind(bodyAuth, "\"valid\":true") < 0 && StringFind(bodyAuth, "\"valid\": true") < 0)
+     {
+      Print("❌ ERRO: Servidor respondeu 200, mas o corpo indica licença inválida: ", bodyAuth);
+      return(INIT_FAILED);
+     }
+
+   Print("✅ Licença Validada com Sucesso!");
+   // ----------------------------------------
 
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpSlippage);
@@ -77,8 +159,10 @@ int OnInit()
    // IGUALANDO LÓGICA COM A API: EMA 21 e EMA 8 no M15
    handleEma21 = iMA(_Symbol, PERIOD_M15, 21, 0, MODE_EMA, PRICE_CLOSE);
    handleEma8 = iMA(_Symbol, PERIOD_M15, 8, 0, MODE_EMA, PRICE_CLOSE);
+   handleEma200 = iMA(_Symbol, PERIOD_M15, 200, 0, MODE_EMA, PRICE_CLOSE);
+   handleAtr = iATR(_Symbol, PERIOD_M15, InpAtrPeriod);
 
-   if(handleEma21 == INVALID_HANDLE || handleEma8 == INVALID_HANDLE)
+   if(handleEma21 == INVALID_HANDLE || handleEma8 == INVALID_HANDLE || handleEma200 == INVALID_HANDLE || handleAtr == INVALID_HANDLE)
      {
       Print("Erro ao carregar indicadores.");
       return(INIT_FAILED);
@@ -241,6 +325,10 @@ bool IsAccumulationZone()
    return (precoParado && emasConvergentes);
   }
 
+//+------------------------------------------------------------------+
+//| Gerencia breakeven, trailing clássico em pontos e saída por      |
+//| exaustão de uma posição.                                         |
+//+------------------------------------------------------------------+
 void ManageTrailingOne(ulong ticket)
   {
    if(!PositionSelectByTicket(ticket)) return;
@@ -248,51 +336,76 @@ void ManageTrailingOne(ulong ticket)
    long   dir       = PositionGetInteger(POSITION_TYPE);
    double entry     = PositionGetDouble(POSITION_PRICE_OPEN);
    double currentSL = PositionGetDouble(POSITION_SL);
+   double currentTP = PositionGetDouble(POSITION_TP);
 
-   double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+   double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+   double currentPrice = (dir == POSITION_TYPE_BUY) ? bid : ask;
 
-   // Atualiza o pico de lucro em dólares
-   if(posPnL > peakPrice) peakPrice = posPnL;
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 
-   // 1. Gatilho de Breakeven no $1.00 de Lucro
-   if(peakPrice >= 1.00)
+   // FIX: distância mínima de stop exigida pela corretora - antes não era
+   // verificada, então o PositionModify podia falhar silenciosamente perto do preço.
+   double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * point;
+   double spread = (ask - bid);
+   if(minStopDist < spread * 2) minStopDist = spread * 2;
+
+   // Distância atual da entrada em pontos
+   double profitPoints = (dir == POSITION_TYPE_BUY) ? (currentPrice - entry) / point : (entry - currentPrice) / point;
+
+   // 1. Gatilho de Breakeven Clássico
+   if(InpBreakevenArmPoints > 0 && profitPoints >= InpBreakevenArmPoints)
      {
-      double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
-      double spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID));
-      if (minStopDist < spread * 2) minStopDist = spread * 2;
+      double bePrice = (dir == POSITION_TYPE_BUY) ? entry + (InpBreakEvenOffsetPoints * point) : entry - (InpBreakEvenOffsetPoints * point);
 
-      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      double currentPrice = (dir == POSITION_TYPE_BUY) ? bid : ask;
-      double distToEntry = (dir == POSITION_TYPE_BUY) ? (currentPrice - entry) : (entry - currentPrice);
+      bool canMoveToBE = (dir == POSITION_TYPE_BUY) ? (currentSL < bePrice) : (currentSL > bePrice || currentSL == 0);
 
-      bool canMoveToBE = (dir == POSITION_TYPE_BUY) ? (currentSL < entry) : (currentSL > entry || currentSL == 0);
-
-      // Mover SL para o 0x0
-      if(canMoveToBE && distToEntry >= minStopDist)
+      if(canMoveToBE && MathAbs(currentPrice - bePrice) >= minStopDist)
         {
-         if(trade.PositionModify(ticket, entry, PositionGetDouble(POSITION_TP)))
+         if(trade.PositionModify(ticket, bePrice, currentTP))
            {
-            Print("🛡️ Breakeven Ativado! Lucro bateu $", DoubleToString(peakPrice, 2), " - SL movido para o 0x0.");
+            Print("🛡️ Breakeven Ativado! Preço de proteção: ", DoubleToString(bePrice, _Digits));
+            currentSL = bePrice; // Atualiza variável local para o trailing stop a seguir usar
            }
         }
+     }
 
-      // 2. Trailing Stop Absoluto (Trailing Financeiro de Lucro)
-      double margin = 0.0;
-      OrderCalcMargin((ENUM_ORDER_TYPE)dir, _Symbol, PositionGetDouble(POSITION_VOLUME), entry, margin);
-      if(margin <= 0) margin = InpMaxSLDollars * 2; // Fallback caso não consiga calcular a margem
+   // 2. Trailing Stop Clássico em Pontos
+   if(InpTrailingStopPoints > 0)
+     {
+      double trailStopLevel = (dir == POSITION_TYPE_BUY) ? currentPrice - (InpTrailingStopPoints * point) : currentPrice + (InpTrailingStopPoints * point);
 
-      // Se o lucro máximo (peakPrice) atingir 40% do valor da margem (ordem), ativa o trailing financeiro.
-      // O fechamento ocorre se o lucro devolver 10% da margem a partir do pico.
-      if(peakPrice >= 0.40 * margin)
+      // Verifica se precisa mover (respeitando o Step)
+      bool canMoveTrailing = false;
+      if(dir == POSITION_TYPE_BUY)
         {
-         double lockInThreshold = peakPrice - (0.10 * margin);
-         if(posPnL <= lockInThreshold && posPnL > 0)
+         if(currentSL == 0 || trailStopLevel > currentSL + (InpTrailingStepPoints * point)) canMoveTrailing = true;
+        }
+      else
+        {
+         if(currentSL == 0 || trailStopLevel < currentSL - (InpTrailingStepPoints * point)) canMoveTrailing = true;
+        }
+
+      // Apenas move o SL se estivermos num lucro maior que a distancia do trailing
+      // e se a nova distância respeitar o mínimo exigido pela corretora
+      if(canMoveTrailing && profitPoints >= InpTrailingStopPoints && MathAbs(currentPrice - trailStopLevel) >= minStopDist)
+        {
+         if(trade.PositionModify(ticket, trailStopLevel, currentTP))
            {
-            Print("🎯 [TRAILING FINANCEIRO] Lucro garantido! Pico foi $", DoubleToString(peakPrice, 2), ", fechado em $", DoubleToString(posPnL, 2));
-            trade.PositionClose(ticket);
+            Print("📈 Trailing Stop movido para: ", DoubleToString(trailStopLevel, _Digits));
+            currentSL = trailStopLevel;
            }
         }
+     }
+
+   // 3. FIX: IsExhaustion() estava implementada mas nunca era chamada.
+   // Se a posição está no lucro e aparecem sinais de exaustão de tendência
+   // (queda de volume ou vela de rejeição), realiza o lucro antecipadamente.
+   double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+   if(posPnL > 0 && IsExhaustion(dir))
+     {
+      Print("🔚 [Exaustão] Sinal de exaustão detectado com lucro de $", DoubleToString(posPnL, 2), " - encerrando posição.");
+      trade.PositionClose(ticket);
      }
   }
 
@@ -333,10 +446,12 @@ void OnTick()
         }
      }
 
-   // Roda o trailing/breakeven em toda ordem aberta deste EA
+   // Roda o trailing/breakeven/exaustão em toda ordem aberta deste EA
+   // FIX: loop agora é decrescente para não pular posições que sejam
+   // fechadas dentro de ManageTrailingOne (ex.: fechamento por exaustão).
    if(openOrders > 0)
      {
-      for(int i = 0; i < PositionsTotal(); i++)
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
         {
          ulong ticket = PositionGetTicket(i);
          if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
@@ -387,35 +502,75 @@ void OnTick()
 
       // Verifica se é uma nova vela de M15
       datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
-      if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
+      if(currentM15Time == lastM15CandleTime) return; // Já avaliou essa vela
 
       double ema21[1];
       double ema8[1];
+      double ema200[1];
 
       if(CopyBuffer(handleEma21, 0, 0, 1, ema21) <= 0) return;
       if(CopyBuffer(handleEma8, 0, 0, 1, ema8) <= 0) return;
+      if(CopyBuffer(handleEma200, 0, 0, 1, ema200) <= 0) return;
+      
+      bool macroBuyAllowed = true;
+      bool macroSellAllowed = true;
+      if(InpUseEma200)
+        {
+         macroBuyAllowed = (currentAsk > ema200[0]);
+         macroSellAllowed = (currentBid < ema200[0]);
+        }
 
       string trend = "LATERAL";
-      if(currentAsk > ema8[0] && ema8[0] > ema21[0]) trend = "TREND_UP";
-      else if(currentBid < ema8[0] && ema8[0] < ema21[0]) trend = "TREND_DOWN";
+      if(currentAsk > ema8[0] && ema8[0] > ema21[0] && macroBuyAllowed) trend = "TREND_UP";
+      else if(currentBid < ema8[0] && ema8[0] < ema21[0] && macroSellAllowed) trend = "TREND_DOWN";
 
-      Print("🧠 [Sniper V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
+      // FIX: IsAccumulationZone() estava implementada mas nunca era chamada.
+      // Agora é usada para evitar falsos rompimentos durante lateralização.
+      bool emConsolidacao = IsAccumulationZone();
 
-      // FIX: marca a vela como avaliada AQUI, independente do resultado,
-      // para nao reavaliar/spammar a cada tick durante a mesma vela M15.
-      lastM5CandleTime = currentM15Time;
+      datetime currentM1Time = iTime(_Symbol, PERIOD_M1, 0);
+
+      if(currentM1Time != lastLogTime)
+        {
+         Print("🧠 [Sniper V2] M15 Tendência: ", trend,
+               " | EMA8: ", DoubleToString(ema8[0], 5),
+               " | EMA21: ", DoubleToString(ema21[0], 5),
+               " | Consolidação: ", (emConsolidacao ? "SIM (entradas bloqueadas)" : "não"));
+         lastLogTime = currentM1Time;
+        }
+
+      if(emConsolidacao) return; // aguarda o mercado sair da lateralização
+
+      // A marcação da vela será feita apenas se abrir a ordem com sucesso.
 
       // Reseta variaveis globais antes de abrir nova ordem
       peakPrice = 0;
-      exhaustionTriggered = false;
 
-      double internalSLPct = 0.06; // Stop Loss Fixo inicial em 0.06%
-      double internalTPPct = 0.06; // Take Profit Fixo em 0.06%
+      double internalSLPct = InpSLPercent; // Stop Loss Fixo inicial em %
+      double internalTPPct = InpTPPercent; // Take Profit Fixo em %
 
-      double slDist = currentAsk * (internalSLPct / 100.0);
+      double slDist = 0;
+      double tpDist = 0;
+      
+      if(InpUseAtrStop)
+        {
+         double atrBuffer[1];
+         if(CopyBuffer(handleAtr, 0, 0, 1, atrBuffer) > 0)
+           {
+            slDist = atrBuffer[0] * InpAtrMultiplier;
+            // Se InpSLPercent = 0.15 e InpTPPercent = 0.30, a proporção é 2.0x
+            double tpRatio = internalTPPct / (internalSLPct > 0 ? internalSLPct : 0.15);
+            tpDist = slDist * tpRatio;
+           }
+        }
+        
+      if(slDist == 0) // Fallback ou ATR desativado
+        {
+         slDist = currentAsk * (internalSLPct / 100.0);
+         tpDist = currentAsk * (internalTPPct / 100.0);
+        }
+
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
-
-      double tpDist = currentAsk * (internalTPPct / 100.0);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
 
       // FIX: lote agora respeita InpLotMode (fixo 0.01 ou dinamico por risco %)
@@ -429,6 +584,7 @@ void OnTick()
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
             Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(buyTP, 5));
+            lastM15CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {
@@ -442,6 +598,7 @@ void OnTick()
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
             Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(sellTP, 5));
+            lastM15CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {
@@ -461,6 +618,7 @@ void OnDeinit(const int reason)
    // FIX: libera os handles dos indicadores (evita vazamento de recursos)
    if(handleEma21 != INVALID_HANDLE) IndicatorRelease(handleEma21);
    if(handleEma8  != INVALID_HANDLE) IndicatorRelease(handleEma8);
+   if(handleEma200!= INVALID_HANDLE) IndicatorRelease(handleEma200);
   }
 
 //+------------------------------------------------------------------+

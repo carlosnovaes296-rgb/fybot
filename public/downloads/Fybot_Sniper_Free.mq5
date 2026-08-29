@@ -1,26 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                                Fybot_Sniper.mq5 |
+//|                                           Fybot_Sniper_Free.mq5  |
 //|                                           1x1 Scalper Dinâmico   |
-//|                                  (Versão corrigida - v2.03)      |
-//|                                                                    |
-//| CORREÇÕES NESTA VERSÃO (em relação à v2.02):                     |
-//| 1) InpBreakevenArmPoints/InpBreakEvenOffsetPoints eram ignorados |
-//|    (breakeven estava fixo em $1.00 sem offset) -> corrigido.     |
-//| 2) InpTrailMultiplier/InpTrailLookback eram ignorados            |
-//|    (trailing fixo em 95% do pico) -> agora usa volatilidade      |
-//|    recente (média de range das últimas N velas) x multiplicador. |
-//| 3) IsExhaustion() e IsAccumulationZone() estavam implementadas   |
-//|    mas nunca eram chamadas -> agora são usadas (exaustão fecha   |
-//|    posição lucrativa cedo; consolidação bloqueia novas entradas).|
-//| 4) Loop de trailing usava índice crescente enquanto podia fechar |
-//|    posições dentro do próprio loop (risco de pular posições)     |
-//|    -> corrigido para índice decrescente.                         |
-//| 5) Variável lastM5CandleTime renomeada para lastM15CandleTime    |
-//|    (o código sempre operou em M15; nome antigo confundia).       |
+//|                     (Versão Sem Licença / Uso Livre - v2.04)     |
 //+------------------------------------------------------------------+
 #property copyright "Fybot Sniper"
 #property link      "https://fybot.life"
-#property version   "2.03"
+#property version   "2.04"
 
 #include <Trade\Trade.mqh>
 
@@ -29,9 +14,6 @@ enum ENUM_LOT_MODE
    LOT_FIXED = 0,    // Lote Fixo Travado (0.01)
    LOT_DYNAMIC = 1   // Lote Dinâmico (Risco % da Banca)
   };
-input group "=== Licenciamento ==="
-input string   InpLicenseKey = "";                                // Token / E-mail da Licença Fybot
-input string   InpServerUrl  = "https://fybot.life/api/mt5-webhook"; // URL do Servidor
 
 input group "=== Configurações da Estratégia ==="
 input ENUM_LOT_MODE      InpLotMode = LOT_DYNAMIC;   // Gerenciamento de Lote
@@ -47,31 +29,34 @@ input group "=== Gestão de Risco (Stop Loss ATR) ==="
 input bool     InpUseAtrStop = true;         // Usar Stop Loss baseado em ATR?
 input int      InpAtrPeriod = 14;            // Período do ATR
 input double   InpAtrMultiplier = 2.0;       // Multiplicador do ATR (Ex: 2.0x a volatilidade)
+input bool     InpManageManualOrders = true; // Gerenciar SL/TP de ordens manuais?
+input bool     InpProtectManualOrders = true; // Aplicar violinada/trailing/exaustão em ordens manuais?
 
 input group "=== Filtro de Tendência Macro ==="
 input bool     InpUseEma200 = false;         // Usar Filtro EMA 200 (Tendência Longa)
 
 input group "=== Gestão de Risco (Trailing/Exaustão) ==="
-input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para Breakeven
-input double   InpBreakEvenOffsetPoints = 20.0;    // Distância do Breakeven (pontos)
-input double   InpTrailMultiplier = 1.5;           // Multiplicador do Trailing
-input int      InpTrailLookback = 5;               // Velas para Volatilidade do Trailing
+input double   InpBreakevenArmPoints = 50.0;       // Lucro (pontos) para ativar Breakeven (Antes: 50)
+input double   InpBreakEvenOffsetPoints = 20.0;    // Distância do Breakeven da entrada (pontos)
+input double   InpTrailingStopPoints = 50.0;       // Distância do Trailing Stop (pontos) (Antes: 100)
+input double   InpTrailingStepPoints = 5.0;        // Passo do Trailing Stop (pontos)
 input double   InpExhaustionVolumeDropPct = 5.0;   // Queda de Volume (%) para Exaustão
 input double   InpExhaustionWickRatio = 1.0;       // Proporção do Pavio para Exaustão
+input bool     InpUseExhaustionExit = true;        // Fechar posição ao detectar Exaustão?
 input int      InpConsolidationLookback = 3;       // Velas para detectar Consolidação
 input double   InpConsolidationRangeRatio = 1.2;   // Razão de consolidação (range)
 input double   InpConsolidationEmaGapRatio = 1.0;  // Gap máximo entre EMAs na consolidação
+input bool     InpUseConsolidationFilter = true;   // Bloquear entradas em zona de acumulação?
 
 CTrade         trade;
 double         initialBalance = 0;
 double         currentLotSize = 0.01;
-datetime       lastM15CandleTime = 0;
+datetime       lastM5CandleTime = 0;
 datetime       midnightTime = 0;
 int            currentDay = -1; // usado para detectar virada de dia
 datetime       cooldownEndTime = 0; // Bloqueio temporário após Stop Loss
 
-double         peakPrice = 0;
-datetime       lastLogTime = 0; // Added for log control
+datetime       lastLogTime = 0; // Controle de log
 
 // Handles de Indicadores
 int            handleEma21;
@@ -84,20 +69,12 @@ int            handleAtr;
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   if(InpLicenseKey == "")
-     {
-      Print("❌ ERRO: Chave de Licença não informada! O robô não pode ser iniciado.");
-      return(INIT_FAILED);
-     }
-
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(InpSlippage);
 
    initialBalance = AccountInfoDouble(ACCOUNT_BALANCE);
 
-   EventSetTimer(5); // Inicia o timer para sincronizar com o site a cada 5 segundos
-
-   Print("✅ Fybot Sniper [1x1 Dinâmico] Iniciado com Sucesso!");
+   Print("✅ Fybot Sniper Free [1x1 Dinâmico] Iniciado com Sucesso!");
 
    UpdateMidnightTime();
 
@@ -138,7 +115,7 @@ void UpdateMidnightTime()
   }
 
 //+------------------------------------------------------------------+
-//| Calcula o Lucro Fechado do Dia (FIX: agora filtra por símbolo)   |
+//| Calcula o Lucro Fechado do Dia (filtra por símbolo)              |
 //+------------------------------------------------------------------+
 double GetDailyProfit()
   {
@@ -165,7 +142,7 @@ double GetDailyProfit()
   }
 
 //+------------------------------------------------------------------+
-//| FIX: Cálculo de lote dinâmico baseado em % de risco da banca     |
+//| Cálculo de lote dinâmico baseado em % de risco da banca          |
 //| Se LOT_FIXED, mantém 0.01. Se LOT_DYNAMIC, calcula pelo risco.   |
 //+------------------------------------------------------------------+
 double CalculateLotSize(double slDistance)
@@ -204,7 +181,8 @@ double CalculateLotSize(double slDistance)
   }
 
 //+------------------------------------------------------------------+
-//| Funções do Trailing Avançado                                     |
+//| Detecta exaustão do movimento (queda de volume ou vela de       |
+//| rejeição) na última vela M15 fechada, a favor da direção dir.   |
 //+------------------------------------------------------------------+
 bool IsExhaustion(long dir)
   {
@@ -243,6 +221,10 @@ double AverageCandleRange(int lookback)
    return (lookback > 0) ? (sum / lookback) : 0;
   }
 
+//+------------------------------------------------------------------+
+//| Detecta zona de acumulação/consolidação (preço parado + EMAs    |
+//| convergentes) para bloquear novas entradas em mercado lateral.  |
+//+------------------------------------------------------------------+
 bool IsAccumulationZone()
   {
    int lookback = InpConsolidationLookback;
@@ -271,10 +253,7 @@ bool IsAccumulationZone()
   }
 
 //+------------------------------------------------------------------+
-//| Gerencia breakeven, trailing e saída por exaustão de uma posição |
-//| (CORRIGIDO: agora usa de fato InpBreakevenArmPoints,             |
-//| InpBreakEvenOffsetPoints, InpTrailMultiplier, InpTrailLookback   |
-//| e a função IsExhaustion(), que antes eram ignorados.)            |
+//| Gestão de Trailing/Breakeven/Exaustão de uma posição             |
 //+------------------------------------------------------------------+
 void ManageTrailingOne(ulong ticket)
   {
@@ -285,63 +264,142 @@ void ManageTrailingOne(ulong ticket)
    double currentSL = PositionGetDouble(POSITION_SL);
    double currentTP = PositionGetDouble(POSITION_TP);
 
-   double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-   if(posPnL > peakPrice) peakPrice = posPnL;
-
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double currentPrice = (dir == POSITION_TYPE_BUY) ? bid : ask;
 
-   double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
-   double spread = (ask - bid);
-   if(minStopDist < spread * 2) minStopDist = spread * 2;
+   double point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
 
-   double profitPoints = ((dir == POSITION_TYPE_BUY) ? (currentPrice - entry) : (entry - currentPrice)) / _Point;
+   // Distância atual da entrada em pontos
+   double profitPoints = (dir == POSITION_TYPE_BUY) ? (currentPrice - entry) / point : (entry - currentPrice) / point;
 
-   // 1. Breakeven baseado em pontos (InpBreakevenArmPoints / InpBreakEvenOffsetPoints)
-   bool canMoveToBE = (dir == POSITION_TYPE_BUY) ? (currentSL < entry) : (currentSL > entry || currentSL == 0);
-   if(profitPoints >= InpBreakevenArmPoints && canMoveToBE)
+   // 1. Gatilho de Breakeven Clássico
+   if(InpBreakevenArmPoints > 0 && profitPoints >= InpBreakevenArmPoints)
      {
-      double beOffset = InpBreakEvenOffsetPoints * _Point;
-      double newSL = (dir == POSITION_TYPE_BUY) ? (entry + beOffset) : (entry - beOffset);
+      double bePrice = (dir == POSITION_TYPE_BUY) ? entry + (InpBreakEvenOffsetPoints * point) : entry - (InpBreakEvenOffsetPoints * point);
 
-      if(MathAbs(currentPrice - newSL) >= minStopDist)
+      bool canMoveToBE = (dir == POSITION_TYPE_BUY) ? (currentSL < bePrice) : (currentSL > bePrice || currentSL == 0);
+
+      if(canMoveToBE)
         {
-         if(trade.PositionModify(ticket, newSL, currentTP))
+         if(trade.PositionModify(ticket, bePrice, currentTP))
            {
-            currentSL = newSL;
-            Print("🛡️ Breakeven ativado! Lucro atingiu ", DoubleToString(profitPoints, 1),
-                  " pontos - SL movido para ", DoubleToString(newSL, _Digits));
+            Print("🛡️ Breakeven Ativado! Preço de proteção: ", DoubleToString(bePrice, _Digits));
+            currentSL = bePrice; // Atualiza variável local para o trailing stop a seguir usar
            }
         }
      }
 
-   // 2. Trailing Stop dinâmico (InpTrailMultiplier / InpTrailLookback), só depois do breakeven armado
-   double avgRange = AverageCandleRange(InpTrailLookback);
-   if(avgRange > 0 && profitPoints >= InpBreakevenArmPoints)
+   // 2. Trailing Stop Clássico em Pontos
+   if(InpTrailingStopPoints > 0)
      {
-      double trailDist = avgRange * InpTrailMultiplier;
-      double newSL = (dir == POSITION_TYPE_BUY) ? (currentPrice - trailDist) : (currentPrice + trailDist);
+      double trailStopLevel = (dir == POSITION_TYPE_BUY) ? currentPrice - (InpTrailingStopPoints * point) : currentPrice + (InpTrailingStopPoints * point);
 
-      bool melhoraSL = (dir == POSITION_TYPE_BUY) ? (newSL > currentSL) : (newSL < currentSL || currentSL == 0);
-      bool distanciaOk = MathAbs(currentPrice - newSL) >= minStopDist;
-
-      if(melhoraSL && distanciaOk)
+      // Verifica se precisa mover (respeitando o Step)
+      bool canMoveTrailing = false;
+      if(dir == POSITION_TYPE_BUY)
         {
-         if(trade.PositionModify(ticket, newSL, currentTP))
+         if(currentSL == 0 || trailStopLevel > currentSL + (InpTrailingStepPoints * point)) canMoveTrailing = true;
+        }
+      else
+        {
+         if(currentSL == 0 || trailStopLevel < currentSL - (InpTrailingStepPoints * point)) canMoveTrailing = true;
+        }
+
+      // Apenas move o SL se estivermos num lucro maior que a distancia do trailing
+      if(canMoveTrailing && profitPoints >= InpTrailingStopPoints)
+        {
+         if(trade.PositionModify(ticket, trailStopLevel, currentTP))
            {
-            currentSL = newSL;
-            Print("📈 Trailing Stop atualizado para ", DoubleToString(newSL, _Digits),
-                  " (range médio: ", DoubleToString(avgRange, _Digits), ")");
+            Print("📈 Trailing Stop movido para: ", DoubleToString(trailStopLevel, _Digits));
            }
         }
      }
 
-   // 3. Saída antecipada por exaustão de tendência (só se já estiver no lucro)
-   if(posPnL > 0 && IsExhaustion(dir))
+   // 3. Saída por Exaustão de Estrutura
+   if(InpUseExhaustionExit && profitPoints >= InpBreakevenArmPoints && IsExhaustion(dir))
      {
-      Print("🔚 [Exaustão] Sinal de exaustão detectado com lucro de $", DoubleToString(posPnL, 2), " - encerrando posição.");
+      Print("🏁 Exaustão detectada na vela M15 anterior. Encerrando posição para proteger lucro.");
       trade.PositionClose(ticket);
+     }
+  }
+
+//+------------------------------------------------------------------+
+//| Diz se uma posição (pelo magic number) deve ser gerida pelo EA  |
+//| (violinada, trailing, breakeven, exaustão). Sempre verdadeiro   |
+//| para o magic do próprio EA; para ordens manuais (magic 0) só se |
+//| InpManageManualOrders e InpProtectManualOrders estiverem ativos.|
+//+------------------------------------------------------------------+
+bool IsManagedMagic(long magic)
+  {
+   if(magic == (long)InpMagicNumber) return true;
+   if(magic == 0 && InpManageManualOrders && InpProtectManualOrders) return true;
+   return false;
+  }
+
+//+------------------------------------------------------------------+
+//| Adiciona SL/TP automático em ordens abertas manualmente          |
+//+------------------------------------------------------------------+
+void ManageManualOrders()
+  {
+   if(!InpManageManualOrders) return;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      // MAGIC == 0 significa ordem aberta manualmente
+      if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == 0)
+        {
+         double currentSL = PositionGetDouble(POSITION_SL);
+         double currentTP = PositionGetDouble(POSITION_TP);
+
+         // Se nao tiver SL nem TP
+         if(currentSL == 0 && currentTP == 0)
+           {
+            double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            long type = PositionGetInteger(POSITION_TYPE);
+
+            double slDist = 0;
+            double tpDist = 0;
+
+            if(InpUseAtrStop && handleAtr != INVALID_HANDLE)
+              {
+               double atrBuffer[1];
+               if(CopyBuffer(handleAtr, 0, 0, 1, atrBuffer) > 0)
+                 {
+                  slDist = atrBuffer[0] * InpAtrMultiplier;
+                  double tpRatio = InpTPPercent / (InpSLPercent > 0 ? InpSLPercent : 0.15);
+                  tpDist = slDist * tpRatio;
+                 }
+              }
+
+            if(slDist == 0)
+              {
+               slDist = openPrice * (InpSLPercent / 100.0);
+               tpDist = openPrice * (InpTPPercent / 100.0);
+              }
+
+            double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+            double spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * _Point;
+            if (spread == 0) spread = (SymbolInfoDouble(_Symbol, SYMBOL_ASK) - SymbolInfoDouble(_Symbol, SYMBOL_BID));
+            if(minStopDist < spread * 2) minStopDist = spread * 2;
+
+            if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
+            if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
+
+            double newSL = (type == POSITION_TYPE_BUY) ? openPrice - slDist : openPrice + slDist;
+            double newTP = (type == POSITION_TYPE_BUY) ? openPrice + tpDist : openPrice - tpDist;
+
+            if(trade.PositionModify(ticket, newSL, newTP))
+              {
+               Print("🛡️ SL/TP automático adicionado na ordem manual ticket: ", ticket);
+              }
+            else
+              {
+               Print("❌ Falha ao definir SL/TP automático na ordem manual ticket: ", ticket, " | Erro: ", GetLastError());
+              }
+           }
+        }
      }
   }
 
@@ -350,6 +408,8 @@ void ManageTrailingOne(ulong ticket)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+   ManageManualOrders();
+
    double dailyProfit = GetDailyProfit();
    double dailyTarget = initialBalance * (InpDailyTargetPct / 100.0);
 
@@ -362,38 +422,39 @@ void OnTick()
    double minStopDist = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
    if (minStopDist < spread * 2) minStopDist = spread * 2;
 
-   // Verifica Violinada (SL em Dólares) e calcula o estado atual
-   // FIX: protecao agora vale para os dois modos de lote, nao so LOT_FIXED
+   // Verifica Violinada (SL em Dólares) - aplica ao EA e, se habilitado, a ordens manuais
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
       ulong ticket = PositionGetTicket(i);
-      if(PositionGetString(POSITION_SYMBOL) == _Symbol && PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      if(!IsManagedMagic(magic)) continue;
+
+      double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+
+      if(InpMaxSLDollars > 0 && posPnL <= -InpMaxSLDollars)
         {
-         double posPnL = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-
-         if(InpMaxSLDollars > 0 && posPnL <= -InpMaxSLDollars)
-           {
-            Print("🚨 [VIOLINADA] Ordem perdeu $", DoubleToString(-posPnL, 2), ". Fechando imediatamente!");
-            trade.PositionClose(ticket);
-            continue;
-           }
-
-         openOrders++;
+         Print("🚨 [VIOLINADA] Ordem (magic ", magic, ") perdeu $", DoubleToString(-posPnL, 2), ". Fechando imediatamente!");
+         trade.PositionClose(ticket);
+         continue;
         }
+
+      // O contador de ordens abertas do EA (usado para liberar novos sinais)
+      // continua contando só as ordens do próprio EA, não as manuais.
+      if(magic == (long)InpMagicNumber) openOrders++;
      }
 
-   // Roda o trailing/breakeven/exaustão em toda ordem aberta deste EA
-   // FIX: loop agora é decrescente para não pular posições que sejam
-   // fechadas dentro de ManageTrailingOne (ex.: fechamento por exaustão).
-   if(openOrders > 0)
+   // Roda o trailing/breakeven/exaustão em toda ordem gerida (EA e, se habilitado, manuais)
+   for(int i = 0; i < PositionsTotal(); i++)
      {
-      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      ulong ticket = PositionGetTicket(i);
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      if(IsManagedMagic(magic))
         {
-         ulong ticket = PositionGetTicket(i);
-         if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-           {
-            ManageTrailingOne(ticket);
-           }
+         ManageTrailingOne(ticket);
         }
      }
 
@@ -438,7 +499,7 @@ void OnTick()
 
       // Verifica se é uma nova vela de M15
       datetime currentM15Time = iTime(_Symbol, PERIOD_M15, 0);
-      if(currentM15Time == lastM15CandleTime) return; // Já avaliou essa vela
+      if(currentM15Time == lastM5CandleTime) return; // Já avaliou essa vela
 
       double ema21[1];
       double ema8[1];
@@ -447,7 +508,7 @@ void OnTick()
       if(CopyBuffer(handleEma21, 0, 0, 1, ema21) <= 0) return;
       if(CopyBuffer(handleEma8, 0, 0, 1, ema8) <= 0) return;
       if(CopyBuffer(handleEma200, 0, 0, 1, ema200) <= 0) return;
-      
+
       bool macroBuyAllowed = true;
       bool macroSellAllowed = true;
       if(InpUseEma200)
@@ -460,47 +521,39 @@ void OnTick()
       if(currentAsk > ema8[0] && ema8[0] > ema21[0] && macroBuyAllowed) trend = "TREND_UP";
       else if(currentBid < ema8[0] && ema8[0] < ema21[0] && macroSellAllowed) trend = "TREND_DOWN";
 
-      // FIX: filtro de consolidação agora é usado de fato (antes IsAccumulationZone()
-      // era implementada mas nunca chamada). Evita entrar em falsos rompimentos
-      // quando o mercado está lateralizado.
-      bool emConsolidacao = IsAccumulationZone();
+      if(InpUseConsolidationFilter && trend != "LATERAL" && IsAccumulationZone())
+        {
+         Print("⚠️ Zona de acumulação/consolidação detectada. Sinal ", trend, " ignorado nesta vela.");
+         trend = "LATERAL";
+        }
 
       datetime currentM1Time = iTime(_Symbol, PERIOD_M1, 0);
 
       if(currentM1Time != lastLogTime)
         {
-         Print("🧠 [Sniper V2] M15 Tendência: ", trend,
-               " | EMA8: ", DoubleToString(ema8[0], 5),
-               " | EMA21: ", DoubleToString(ema21[0], 5),
-               " | Consolidação: ", (emConsolidacao ? "SIM (entradas bloqueadas)" : "não"));
+         Print("🧠 [Sniper Free V2] M15 Tendência: ", trend, " | EMA8: ", DoubleToString(ema8[0], 5), " | EMA21: ", DoubleToString(ema21[0], 5));
          lastLogTime = currentM1Time;
         }
 
-      if(emConsolidacao) return; // aguarda o mercado sair da lateralização
-
-      // A marcação da vela será feita apenas se abrir a ordem com sucesso.
-
-      // Reseta variaveis globais antes de abrir nova ordem
-      peakPrice = 0;
+      if(trend == "LATERAL") return; // Nada a fazer nesta vela
 
       double internalSLPct = InpSLPercent; // Stop Loss Fixo inicial em %
       double internalTPPct = InpTPPercent; // Take Profit Fixo em %
 
       double slDist = 0;
       double tpDist = 0;
-      
+
       if(InpUseAtrStop)
         {
          double atrBuffer[1];
          if(CopyBuffer(handleAtr, 0, 0, 1, atrBuffer) > 0)
            {
             slDist = atrBuffer[0] * InpAtrMultiplier;
-            // Se InpSLPercent = 0.15 e InpTPPercent = 0.30, a proporção é 2.0x
             double tpRatio = internalTPPct / (internalSLPct > 0 ? internalSLPct : 0.15);
             tpDist = slDist * tpRatio;
            }
         }
-        
+
       if(slDist == 0) // Fallback ou ATR desativado
         {
          slDist = currentAsk * (internalSLPct / 100.0);
@@ -510,7 +563,6 @@ void OnTick()
       if(slDist <= minStopDist) slDist = minStopDist + (_Point * 20);
       if(tpDist <= minStopDist) tpDist = minStopDist + (_Point * 20);
 
-      // FIX: lote agora respeita InpLotMode (fixo 0.01 ou dinamico por risco %)
       currentLotSize = CalculateLotSize(slDist);
 
       // --- Lógica a Favor da Tendência (M15) ---
@@ -521,7 +573,7 @@ void OnTick()
          if(trade.Buy(currentLotSize, _Symbol, currentAsk, buySL, buyTP))
            {
             Print("🔥 Sinal Disparado: COMPRA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(buyTP, 5));
-            lastM15CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
+            lastM5CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {
@@ -535,7 +587,7 @@ void OnTick()
          if(trade.Sell(currentLotSize, _Symbol, currentBid, sellSL, sellTP))
            {
             Print("🔥 Sinal Disparado: VENDA (A Favor da Tendência)! Lote: ", currentLotSize, " | TP: ", DoubleToString(sellTP, 5));
-            lastM15CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
+            lastM5CandleTime = currentM15Time; // Marca como avaliado APENAS após abrir a ordem
            }
          else
            {
@@ -550,125 +602,9 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
-   EventKillTimer();
-
-   // FIX: libera os handles dos indicadores (evita vazamento de recursos)
    if(handleEma21 != INVALID_HANDLE) IndicatorRelease(handleEma21);
    if(handleEma8  != INVALID_HANDLE) IndicatorRelease(handleEma8);
    if(handleEma200!= INVALID_HANDLE) IndicatorRelease(handleEma200);
-  }
-
-//+------------------------------------------------------------------+
-//| Timer function (Sincronismo com a Nuvem)                         |
-//+------------------------------------------------------------------+
-void OnTimer()
-  {
-   SyncWithServer();
-  }
-
-//+------------------------------------------------------------------+
-//| Sincronização com o Dashboard via WebHook                        |
-//+------------------------------------------------------------------+
-void SyncWithServer()
-  {
-   if(InpServerUrl == "" || InpLicenseKey == "") return;
-
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   double equity  = AccountInfoDouble(ACCOUNT_EQUITY);
-
-   double daily_profit = GetDailyProfit();
-
-   int open_orders = 0;
-   string trades_json = "[";
-
-   for(int i=0; i<PositionsTotal(); i++)
-     {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-        {
-         if(open_orders > 0) trades_json += ",";
-
-         double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-         double volume = PositionGetDouble(POSITION_VOLUME);
-         double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
-         string symbol = PositionGetString(POSITION_SYMBOL);
-         long type_int = PositionGetInteger(POSITION_TYPE);
-         string type_str = (type_int == POSITION_TYPE_BUY) ? "buy" : "sell";
-
-         trades_json += "{";
-         trades_json += "\"id\":\"" + IntegerToString(ticket) + "\",";
-         trades_json += "\"type\":\"" + type_str + "\",";
-         trades_json += "\"lot\":" + DoubleToString(volume, 2) + ",";
-         trades_json += "\"symbol\":\"" + symbol + "\",";
-         trades_json += "\"open_price\":" + DoubleToString(open_price, 5) + ",";
-         trades_json += "\"profit\":" + DoubleToString(profit, 2);
-         trades_json += "}";
-         open_orders++;
-        }
-     }
-   trades_json += "]";
-
-   // Captura os ultimos 10 trades fechados hoje
-   HistorySelect(midnightTime, TimeCurrent());
-   int histTotal = HistoryDealsTotal();
-   string closed_json = "[";
-   int closed_count = 0;
-
-   for(int i = histTotal - 1; i >= 0 && closed_count < 10; i--)
-     {
-      ulong ticket = HistoryDealGetTicket(i);
-      if(HistoryDealGetInteger(ticket, DEAL_MAGIC) == InpMagicNumber)
-        {
-         long entryType = HistoryDealGetInteger(ticket, DEAL_ENTRY);
-         if(entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_INOUT)
-           {
-            if(closed_count > 0) closed_json += ",";
-
-            double profit = HistoryDealGetDouble(ticket, DEAL_PROFIT) + HistoryDealGetDouble(ticket, DEAL_SWAP) + HistoryDealGetDouble(ticket, DEAL_COMMISSION);
-            double volume = HistoryDealGetDouble(ticket, DEAL_VOLUME);
-            double price = HistoryDealGetDouble(ticket, DEAL_PRICE);
-            string symbol = HistoryDealGetString(ticket, DEAL_SYMBOL);
-            long pos_id = HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
-
-            long dealType = HistoryDealGetInteger(ticket, DEAL_TYPE);
-            string type_str = (dealType == DEAL_TYPE_BUY) ? "sell" : "buy";
-
-            closed_json += "{";
-            closed_json += "\"id\":\"" + IntegerToString(pos_id) + "\",";
-            closed_json += "\"type\":\"" + type_str + "\",";
-            closed_json += "\"lot\":" + DoubleToString(volume, 2) + ",";
-            closed_json += "\"symbol\":\"" + symbol + "\",";
-            closed_json += "\"open_price\":" + DoubleToString(price, 5) + ",";
-            closed_json += "\"profit\":" + DoubleToString(profit, 2);
-            closed_json += "}";
-            closed_count++;
-           }
-        }
-     }
-   closed_json += "]";
-
-   string json = "{";
-   json += "\"license\":\"" + InpLicenseKey + "\",";
-   json += "\"balance\":" + DoubleToString(balance, 2) + ",";
-   json += "\"equity\":" + DoubleToString(equity, 2) + ",";
-   json += "\"daily_profit\":" + DoubleToString(daily_profit, 2) + ",";
-   json += "\"open_orders\":" + IntegerToString(open_orders) + ",";
-   json += "\"trades\":" + trades_json + ",";
-   json += "\"closed_trades\":" + closed_json;
-   json += "}";
-
-   char post[], result[];
-   string result_headers;
-   string headers = "Content-Type: application/json\r\n";
-
-   StringToCharArray(json, post, 0, WHOLE_ARRAY, CP_UTF8);
-   ArrayResize(post, ArraySize(post) - 1); // Remove o \0 do final da string
-
-   int res = WebRequest("POST", InpServerUrl, headers, 5000, post, result, result_headers);
-   if(res == -1)
-     {
-      Print("⚠️ Falha ao sincronizar com o servidor. Erro: ", GetLastError(),
-            " - verifique se a URL está na lista de URLs permitidas (Ferramentas > Opções > Expert Advisors).");
-     }
+   if(handleAtr   != INVALID_HANDLE) IndicatorRelease(handleAtr);
   }
 //+------------------------------------------------------------------+
